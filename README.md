@@ -1,5 +1,7 @@
 # Hereader
 
+![dart](https://github.com/arnasbertulis/hereader/actions/workflows/ci-dart.yml/badge.svg)
+
 A configurable reading surface. Text is presented one word at a time in a fixed position, instead of as a page you scan with your eyes.
 
 **Status: in active development.** The reading engine is partially built. Nothing is usable end to end yet. See [Current state](#current-state) for what works today.
