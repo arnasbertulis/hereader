@@ -1,4 +1,4 @@
-# Readflow
+# Hereader
 
 A configurable reading surface. Text is presented one word at a time in a fixed position, instead of as a page you scan with your eyes.
 
