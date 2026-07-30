@@ -179,7 +179,7 @@ class ReadingProfile {
   /// Derive an editable copy of a built-in profile.
   ReadingProfile fork({required String id, String? name}) => copyWith(
         id: id,
-        name: name ?? '$name (copy)',
+        name: name ?? '${this.name} (copy)',
         isBuiltIn: false,
       );
 
