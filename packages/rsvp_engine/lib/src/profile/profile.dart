@@ -58,7 +58,7 @@ class PresentationConfig {
     this.anchorX = 0.5,
     this.anchorY = 0.5,
     this.fontFamily,
-    this.fontSizePt = 32,
+    this.fontSizePt = 44,
     this.letterSpacingEm = 0.0,
     this.chunkSize = 1,
     this.polarity = Polarity.darkOnLight,
