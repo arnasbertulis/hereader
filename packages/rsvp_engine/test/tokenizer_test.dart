@@ -108,4 +108,67 @@ void main() {
       expect(t.tokenize('   \n  '), isEmpty);
     });
   });
+
+  group('numeric suffixes', () {
+    test('folds a unit into the number before it', () {
+      final tokens = Tokenizer().tokenize('2005 m.');
+
+      expect(tokens.length, 1);
+      expect(tokens.single.text, '2005 m.');
+      expect(tokens.single.charOffset, 0);
+      expect(tokens.single.pauseAfter, PauseAfter.none);
+    });
+
+    test('letterCount spans the whole merged token', () {
+      final token = Tokenizer().tokenize('2005 m.').single;
+      // Four digits and one letter; the period is not alphanumeric.
+      expect(token.letterCount, 5);
+    });
+
+    test('handles a full Lithuanian date', () {
+      final tokens = Tokenizer().tokenize('1990 m. kovo 11 d.');
+
+      expect(tokens.map((t) => t.text).toList(),
+          ['1990 m.', 'kovo', '11 d.']);
+      expect(tokens.first.charOffset, 0);
+      expect(tokens.last.charOffset, 13);
+    });
+
+    test('is case insensitive', () {
+      expect(Tokenizer().tokenize('2005 M.').single.text, '2005 M.');
+    });
+
+    test('leaves a suffix alone when no number precedes it', () {
+      final tokens = Tokenizer().tokenize('m. sena knyga');
+      expect(tokens.first.text, 'm.');
+      expect(tokens.length, 3);
+    });
+
+    test('leaves an ordinary word after a number alone', () {
+      final tokens = Tokenizer().tokenize('2005 metai');
+      expect(tokens.map((t) => t.text).toList(), ['2005', 'metai']);
+    });
+
+    test('keeps a following paragraph break after merging', () {
+      final tokens = Tokenizer().tokenize('2005 m.\n\nKitas');
+      expect(tokens.first.text, '2005 m.');
+      expect(tokens.first.pauseAfter, PauseAfter.paragraph);
+    });
+
+    test('a real sentence still ends after a merged token', () {
+      final tokens = Tokenizer().tokenize('Buvo 2005 m. Viskas pasikeitė.');
+      expect(tokens[1].text, '2005 m.');
+      // Known limitation: a date ending a sentence loses its pause, the
+      // same ambiguity as "e.g." and for the same reason.
+      expect(tokens[1].pauseAfter, PauseAfter.none);
+    });
+
+    test('accepts a custom suffix set', () {
+      final tokens =
+          Tokenizer(numericSuffixes: {'kr.'}).tokenize('50 kr. ir 2005 m.');
+      expect(tokens.first.text, '50 kr.');
+      expect(tokens.last.text, '2005');
+      expect(tokens[2].text, 'm.');
+    });
+  });
 }

@@ -5,6 +5,11 @@ const _defaultAbbreviations = {
   'etc.', 'e.g.', 'i.e.', 'vs.', 'cf.', 'approx.',
 };
 
+const _defaultNumericSuffixes = {
+  'm.', 'd.', 'mėn.', 'sav.', 'val.', 'min.', 'sek.',
+  'psl.', 'nr.', 'proc.', 'kg', 'g', 'km', 'cm', 'mm', 'ha',
+};
+
 const _sentenceEnders = {'.', '!', '?', '\u2026'};
 const _clauseEnders = {',', ';', ':'};
 
@@ -18,12 +23,17 @@ PauseAfter _longer(PauseAfter a, PauseAfter b) => a.index >= b.index ? a : b;
 
 class Tokenizer {
   final Set<String> abbreviations;
+  final Set<String> numericSuffixes;
 
-  Tokenizer({Set<String>? abbreviations})
-      : abbreviations = abbreviations ?? _defaultAbbreviations;
+  Tokenizer({Set<String>? abbreviations, Set<String>? numericSuffixes})
+      : abbreviations = abbreviations ?? _defaultAbbreviations,
+        numericSuffixes = numericSuffixes ?? _defaultNumericSuffixes;
 
   PauseAfter _fromPunctuation(String text) {
-    if (abbreviations.contains(text.toLowerCase())) return PauseAfter.none;
+    final lower = text.toLowerCase();
+    final lastSegment = lower.split(RegExp(r'\s+')).last;
+    if (abbreviations.contains(lower)) return PauseAfter.none;
+    if (numericSuffixes.contains(lastSegment)) return PauseAfter.none;
 
     var end = text.length;
     while (end > 0 && !_alphanumeric.hasMatch(text[end - 1])) {
@@ -85,14 +95,31 @@ class Tokenizer {
         break;
       }
 
-      tokens.add(Token(
-        text: buffer.toString(),
-        charOffset: start,
-        pauseAfter: _longer(
-          _fromPunctuation(buffer.toString()),
-          _fromFollowingWhitespace(source, i),
-        ),
-      ));
+      final text = buffer.toString();
+      final endsInDigit =
+          tokens.isNotEmpty && RegExp(r'[\p{N}]$', unicode: true).hasMatch(tokens.last.text);
+
+      if (endsInDigit && numericSuffixes.contains(text.toLowerCase())) {
+        // Fold the unit into the number so "2005 m." shows as one token.
+        final merged = source.substring(tokens.last.charOffset, i);
+        tokens[tokens.length - 1] = Token(
+          text: merged,
+          charOffset: tokens.last.charOffset,
+          pauseAfter: _longer(
+            _fromPunctuation(merged),
+            _fromFollowingWhitespace(source, i),
+          ),
+        );
+      } else {
+        tokens.add(Token(
+          text: text,
+          charOffset: start,
+          pauseAfter: _longer(
+            _fromPunctuation(text),
+            _fromFollowingWhitespace(source, i),
+          ),
+        ));
+      }
     }
 
     return tokens;
