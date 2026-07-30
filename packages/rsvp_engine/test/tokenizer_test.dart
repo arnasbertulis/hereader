@@ -166,9 +166,9 @@ void main() {
     test('accepts a custom suffix set', () {
       final tokens =
           Tokenizer(numericSuffixes: {'kr.'}).tokenize('50 kr. ir 2005 m.');
-      expect(tokens.first.text, '50 kr.');
-      expect(tokens.last.text, '2005');
-      expect(tokens[2].text, 'm.');
+
+      expect(tokens.map((t) => t.text).toList(),
+          ['50 kr.', 'ir', '2005', 'm.']);
     });
   });
 }
