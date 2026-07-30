@@ -4,7 +4,7 @@
 
 A configurable reading surface. Text is presented one word at a time in a fixed position, instead of as a page you scan with your eyes.
 
-**Status: in active development.** The reading engine is complete and tested. Nothing is usable end to end yet, because there is no way to get a book into it. See [Current state](#current-state) for what works today.
+**Status: in active development.** The reading engine is complete and tested, and pasted text can be read in the app. There is no way to open a book yet. See [Current state](#current-state) for what works today.
 
 ---
 
@@ -54,11 +54,13 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 - [x] Playback state machine: play, pause, rewind-on-resume, reader-driven advance, seek by character offset
 - [x] Test suite covering all of the above, including effective words per minute over real prose and virtual-clock playback timing
 - [x] CI running analyzer and tests on every push
+- [x] Reading surface: word anchored per profile, punctuation gaps, keyboard control, reduce-motion support
+- [x] Paste-to-read screen with preset selection
 
 **Not started**
 
 - [ ] EPUB parsing and normalisation
-- [ ] Reader and library UI
+- [ ] Library screen, settings, and reading from a file
 - [ ] Local persistence
 - [ ] Backend: auth, sync event log, conflict resolution
 - [ ] Deployment
@@ -76,6 +78,8 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 **Profiles are plain data, including their colours.** Presentation settings live in the pure Dart engine rather than the Flutter app, so they serialise, round-trip and test without a widget harness. The cost is that colours are stored as ARGB integers and the app maps them at the boundary. Profiles cross the sync boundary later, which is what makes this worth the small ugliness.
 
 **Punctuation stays attached to its word.** Flashing a lone comma on screen makes no sense. It also means the tokenizer only inspects the *end* of a token, so interior periods and commas stop being a special case. `1,234.56`, `don't`, and `e.g.` all fall out of one rule rather than three.
+
+**Units stay attached to their number.** `2005 m.` and `11 d.` appear as one token rather than a number followed by a bare unit, which would be meaningless on screen and would read the period as a sentence end. Suffix sets are per-language rather than hardcoded.
 
 **Hyphenation is resolved during the walk, not by preprocessing.** Rewriting the source string to strip `-\n` would invalidate every character offset computed afterward.
 
@@ -110,7 +114,7 @@ dart test
 dart analyze
 ```
 
-The Flutter app builds and launches but contains no project code yet.
+The app currently opens on a paste screen: drop in any text, choose a profile, and read it. Book import comes next.
 
 ```bash
 cd app
@@ -122,7 +126,8 @@ flutter run -d windows   # or -d chrome
 ## Known limitations
 
 - The tokenizer reads `Chapter 3.` as a sentence end. Telling list numbering apart from sentence terminators needs context the current design does not carry.
-- The abbreviation list is English-only. Lithuanian and other languages need their own; `Tokenizer` takes the set as a constructor parameter for this reason.
+- The abbreviation list is English-only, while the numeric suffix list defaults to Lithuanian and metric units. Both are constructor parameters on `Tokenizer`, so a per-language set can be supplied, but nothing selects one automatically yet.
+- A date that genuinely ends a sentence, such as `įvyko 2005 m.`, loses its sentence pause, because the unit is treated as an abbreviation rather than a terminator. Same ambiguity as `e.g.`, and unsolvable without more context than the tokenizer carries.
 - No handling yet for sentence boundaries that are ambiguous across quotation marks.
 - Length-scaled pacing normalises against a fixed reference word length, so the configured words-per-minute is only accurate on average. Text whose mean word length differs sharply from English will read faster or slower than the setting says.
 - Chunk sizes above one token are rejected. Showing several words per advance requires pacing to decide over a group rather than a token, which the engine does not do yet.
