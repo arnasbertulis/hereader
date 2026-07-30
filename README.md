@@ -1,6 +1,6 @@
 # Hereader
 
-![dart](https://github.com/arnasbertulis/hereader/actions/workflows/ci-dart.yml/badge.svg)
+![CI](https://github.com/arnasbertulis/hereader/actions/workflows/ci-dart.yml/badge.svg)
 
 A configurable reading surface. Text is presented one word at a time in a fixed position, instead of as a page you scan with your eyes.
 
@@ -46,13 +46,13 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 
 - [x] Monorepo scaffold: two pure Dart packages plus the Flutter app
 - [x] `Token` model with source character offsets and pause classification
-- [x] Tokenizer: whitespace splitting, attached punctuation, clause and sentence and paragraph pauses, abbreviation handling, numeric separators, soft-hyphen line rejoining, Unicode-aware letter counting
-- [x] Unit test suite covering the above
+- [x] Tokenizer: whitespace splitting, attached punctuation, clause and sentence and paragraph pauses, abbreviation handling, numeric separators, line-break hyphen rejoining, Unicode-aware letter counting
+- [x] Pacing models: constant, length-scaled, and reader-elicited advance
+- [x] Unit test suite covering the above, plus a paragraph-level test asserting effective words per minute over real prose
 - [x] CI running analyzer and tests on every push
 
 **Not started**
 
-- [ ] Pacing models: constant, length-scaled, reader-elicited
 - [ ] Presentation profiles and presets
 - [ ] Playback state machine with rewind-on-pause
 - [ ] EPUB parsing and normalisation
@@ -67,6 +67,8 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 
 **Reading positions are character offsets, never word indices.** A word index shifts the moment the tokenizer changes, which would silently move every saved position in every book. Character offsets into the source block survive tokenizer changes, and locators carry a `parserVersion` so future changes can be migrated deliberately. Recorded in [`docs/adr/0002-locator-format.md`](docs/adr/0002-locator-format.md).
 
+**Pacing returns a decision, not a duration.** Reader-elicited advance has no duration; the word waits for input that may never arrive. Encoding that as a zero or sentinel `Duration` would make one value mean two things, so `decide` returns a sealed type with `Hold` and `AwaitAdvance` variants. Recorded in [`docs/adr/0003-pacing-decision-model.md`](docs/adr/0003-pacing-decision-model.md).
+
 **Punctuation stays attached to its word.** Flashing a lone comma on screen makes no sense. It also means the tokenizer only inspects the *end* of a token, so interior periods and commas stop being a special case. `1,234.56`, `don't`, and `e.g.` all fall out of one rule rather than three.
 
 **Hyphenation is resolved during the walk, not by preprocessing.** Rewriting the source string to strip `-\n` would invalidate every character offset computed afterward.
@@ -80,10 +82,11 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 ## Repository layout
 
 ```
-packages/rsvp_engine/     Pure Dart. Tokenizer, pacing, locators, playback.
-packages/epub_reader/     Pure Dart. EPUB container parsing and normalisation.
+packages/rsvp_engine/     Pure Dart. Tokenizer and pacing models.
+                          Locators and playback not yet built.
+packages/epub_reader/     Pure Dart. EPUB container parsing.    (not started)
 app/                      Flutter client. Android, Windows, web.
-server/                   API service. Auth, sync event log.       (not started)
+server/                   API service. Auth, sync event log.    (not started)
 docs/adr/                 Architecture decision records.
 docs/research/            Evidence notes behind the design.
 ```
@@ -97,7 +100,6 @@ Requires the Flutter SDK, which bundles Dart.
 ```bash
 git clone https://github.com/arnasbertulis/hereader.git
 cd hereader/packages/rsvp_engine
-dart pub get
 dart test
 dart analyze
 ```
@@ -116,6 +118,7 @@ flutter run -d windows   # or -d chrome
 - The tokenizer reads `Chapter 3.` as a sentence end. Telling list numbering apart from sentence terminators needs context the current design does not carry.
 - The abbreviation list is English-only. Lithuanian and other languages need their own; `Tokenizer` takes the set as a constructor parameter for this reason.
 - No handling yet for sentence boundaries that are ambiguous across quotation marks.
+- Length-scaled pacing normalises against a fixed reference word length, so the configured words-per-minute is only accurate on average. Text whose mean word length differs sharply from English will read faster or slower than the setting says.
 - iOS is untested. The codebase targets it, but building and signing requires macOS hardware.
 - Flutter web renders text to canvas rather than DOM, so screen reader support on the web target is weaker than a conventional website.
 - The supporting research is small-sample and predates modern displays. Rubin and Turano tested 23 people in 1994; Arditi tested 15 in 1999. These are the best available comparisons, not large trials.
@@ -125,7 +128,7 @@ flutter run -d windows   # or -d chrome
 
 ## Roadmap
 
-1. Pacing models and presentation profiles, including reader-elicited advance
+1. Presentation profiles and presets over the existing pacing models
 2. EPUB import and the reader surface
 3. Local library and progress persistence
 4. Backend auth and offline-first sync with conflict resolution
@@ -133,6 +136,7 @@ flutter run -d windows   # or -d chrome
 6. Public domain catalogue via OPDS feeds, with server-side ingestion
 7. Google sign-in as an additional identity source
 8. PDF support, which needs column detection, header and footer stripping, and reading-order reconstruction
+9. Continuous scrolling presentation, as a separate renderer rather than a toggle. Smooth scroll needs constant velocity, so honouring a per-token duration would make text surge and stall mid-sentence. Whether per-token pacing collapses into a single velocity, or that mode drops pacing entirely, is unresolved.
 
 ---
 
