@@ -4,7 +4,7 @@
 
 A configurable reading surface. Text is presented one word at a time in a fixed position, instead of as a page you scan with your eyes.
 
-**Status: in active development.** The reading engine is partially built. Nothing is usable end to end yet. See [Current state](#current-state) for what works today.
+**Status: in active development.** The reading engine is complete and tested. Nothing is usable end to end yet, because there is no way to get a book into it. See [Current state](#current-state) for what works today.
 
 ---
 
@@ -32,6 +32,8 @@ Letting the reader advance each word with a button press rather than watching a 
 
 Scaling each word's display duration to its length got readers with central field loss through sentences about 33% faster than a constant rate. Normally sighted older readers in the same study were fastest at a *constant* rate (Aquilante et al., 2001). The same feature has opposite effects in the two groups, which is why pacing is a setting rather than a constant.
 
+These two findings point in different directions and cannot both apply, since reader-elicited advance has no duration to scale. The app ships both as presets and lets the reader decide.
+
 **Two things the evidence says not to build.** Vertical text gave no benefit over horizontal RSVP for readers with left-of-scotoma retinal loci (Calabrèse et al., 2017). Increased line spacing does not improve reading speed in AMD patients, despite helping in normal peripheral vision (Chung et al., 2008).
 
 ### Not a medical device
@@ -48,13 +50,13 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 - [x] `Token` model with source character offsets and pause classification
 - [x] Tokenizer: whitespace splitting, attached punctuation, clause and sentence and paragraph pauses, abbreviation handling, numeric separators, line-break hyphen rejoining, Unicode-aware letter counting
 - [x] Pacing models: constant, length-scaled, and reader-elicited advance
-- [x] Unit test suite covering the above, plus a paragraph-level test asserting effective words per minute over real prose
+- [x] Reading profiles: pacing plus presentation settings, JSON round-tripping, forkable built-in presets
+- [x] Playback state machine: play, pause, rewind-on-resume, reader-driven advance, seek by character offset
+- [x] Test suite covering all of the above, including effective words per minute over real prose and virtual-clock playback timing
 - [x] CI running analyzer and tests on every push
 
 **Not started**
 
-- [ ] Presentation profiles and presets
-- [ ] Playback state machine with rewind-on-pause
 - [ ] EPUB parsing and normalisation
 - [ ] Reader and library UI
 - [ ] Local persistence
@@ -69,11 +71,15 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 
 **Pacing returns a decision, not a duration.** Reader-elicited advance has no duration; the word waits for input that may never arrive. Encoding that as a zero or sentinel `Duration` would make one value mean two things, so `decide` returns a sealed type with `Hold` and `AwaitAdvance` variants. Recorded in [`docs/adr/0003-pacing-decision-model.md`](docs/adr/0003-pacing-decision-model.md).
 
+**Waiting for the reader is not the same as being paused.** Under reader-elicited pacing the session sits in `awaitingAdvance`, a distinct state from `paused`. Collapsing the two would make the pause button meaningless in that mode and would fire the profile's rewind on every single word.
+
+**Profiles are plain data, including their colours.** Presentation settings live in the pure Dart engine rather than the Flutter app, so they serialise, round-trip and test without a widget harness. The cost is that colours are stored as ARGB integers and the app maps them at the boundary. Profiles cross the sync boundary later, which is what makes this worth the small ugliness.
+
 **Punctuation stays attached to its word.** Flashing a lone comma on screen makes no sense. It also means the tokenizer only inspects the *end* of a token, so interior periods and commas stop being a special case. `1,234.56`, `don't`, and `e.g.` all fall out of one rule rather than three.
 
 **Hyphenation is resolved during the walk, not by preprocessing.** Rewriting the source string to strip `-\n` would invalidate every character offset computed afterward.
 
-**The reading engine has no Flutter dependency.** `rsvp_engine` and `epub_reader` are plain Dart, so the entire core is testable in under a second without a widget harness.
+**The reading engine has no Flutter dependency.** `rsvp_engine` and `epub_reader` are plain Dart, so the entire core is testable in under a second without a widget harness. Playback timing is tested against a virtual clock, so a five-minute reading session runs in microseconds.
 
 **Books imported by the user never leave the device.** Parsing happens on-device. The server stores reading positions, preferences, and metadata only. This is a deliberate privacy and licensing decision.
 
@@ -82,8 +88,8 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 ## Repository layout
 
 ```
-packages/rsvp_engine/     Pure Dart. Tokenizer and pacing models.
-                          Locators and playback not yet built.
+packages/rsvp_engine/     Pure Dart. Tokenizer, pacing models,
+                          reading profiles, playback state machine.
 packages/epub_reader/     Pure Dart. EPUB container parsing.    (not started)
 app/                      Flutter client. Android, Windows, web.
 server/                   API service. Auth, sync event log.    (not started)
@@ -119,6 +125,9 @@ flutter run -d windows   # or -d chrome
 - The abbreviation list is English-only. Lithuanian and other languages need their own; `Tokenizer` takes the set as a constructor parameter for this reason.
 - No handling yet for sentence boundaries that are ambiguous across quotation marks.
 - Length-scaled pacing normalises against a fixed reference word length, so the configured words-per-minute is only accurate on average. Text whose mean word length differs sharply from English will read faster or slower than the setting says.
+- Chunk sizes above one token are rejected. Showing several words per advance requires pacing to decide over a group rather than a token, which the engine does not do yet.
+- Pausing mid-word restarts that word's full duration on resume rather than preserving the remainder. The difference is a few hundred milliseconds and was not judged worth the bookkeeping.
+- The optimal recognition point highlight is offered as a preference with no evidence behind it. None of the studies above tested it.
 - iOS is untested. The codebase targets it, but building and signing requires macOS hardware.
 - Flutter web renders text to canvas rather than DOM, so screen reader support on the web target is weaker than a conventional website.
 - The supporting research is small-sample and predates modern displays. Rubin and Turano tested 23 people in 1994; Arditi tested 15 in 1999. These are the best available comparisons, not large trials.
@@ -128,15 +137,14 @@ flutter run -d windows   # or -d chrome
 
 ## Roadmap
 
-1. Presentation profiles and presets over the existing pacing models
-2. EPUB import and the reader surface
-3. Local library and progress persistence
-4. Backend auth and offline-first sync with conflict resolution
-5. Bookmarks and highlights over the same sync event log
-6. Public domain catalogue via OPDS feeds, with server-side ingestion
-7. Google sign-in as an additional identity source
-8. PDF support, which needs column detection, header and footer stripping, and reading-order reconstruction
-9. Continuous scrolling presentation, as a separate renderer rather than a toggle. Smooth scroll needs constant velocity, so honouring a per-token duration would make text surge and stall mid-sentence. Whether per-token pacing collapses into a single velocity, or that mode drops pacing entirely, is unresolved.
+1. EPUB import, block normalisation, and the reader surface
+2. Local library and progress persistence
+3. Backend auth and offline-first sync with conflict resolution
+4. Bookmarks and highlights over the same sync event log
+5. Public domain catalogue via OPDS feeds, with server-side ingestion
+6. Google sign-in as an additional identity source
+7. PDF support, which needs column detection, header and footer stripping, and reading-order reconstruction
+8. Continuous scrolling presentation, as a separate renderer rather than a toggle. Smooth scroll needs constant velocity, so honouring a per-token duration would make text surge and stall mid-sentence. Whether per-token pacing collapses into a single velocity, or that mode drops pacing entirely, is unresolved.
 
 ---
 
