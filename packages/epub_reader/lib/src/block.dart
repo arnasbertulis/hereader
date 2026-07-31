@@ -48,7 +48,7 @@ class Block {
   });
 
   static String makeId(String href, int index) =>
-      '${_fnv1a('$href#$index').toRadixString(16)}';
+      _fnv1a('$href#$index').toRadixString(16);
 
   @override
   String toString() => 'Block($kind $id "${_preview(text)}")';
