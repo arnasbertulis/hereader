@@ -1,17 +1,15 @@
 name: epub_reader
-description: A starting point for Dart libraries or applications.
-version: 1.0.0
-# repository: https://github.com/my_org/my_repo
+description: EPUB container parsing and block normalization for hereader.
+version: 0.1.0
+publish_to: none
 
 environment:
   sdk: ^3.12.0
 
-# Add regular dependencies here.
 dependencies:
   archive: ^4.0.9
   html: ^0.15.6
   xml: ^7.0.1
-  # path: ^1.9.0
 
 dev_dependencies:
   lints: ^6.0.0

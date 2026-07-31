@@ -1,39 +1,67 @@
-<!--
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
+# epub_reader
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/tools/pub/writing-package-pages).
+EPUB parsing for hereader: turns a book file into normalized text blocks the
+RSVP engine can read.
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/tools/pub/create-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/to/develop-packages).
--->
+Pure Dart, no Flutter dependency.
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
+## Scope
 
-## Features
+An EPUB is a zip of XHTML documents. This package unpacks it, follows the
+spine, and reduces each document to plain readable text split into blocks.
 
-TODO: List what your package can do. Maybe include images, gifs, or videos.
-
-## Getting started
-
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
+It deliberately does not render, style, or preserve layout. Text that only
+makes sense as layout, such as tables and figures, is dropped rather than
+flattened into a stream of words.
 
 ## Usage
 
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder.
-
 ```dart
-const like = 'sample';
+import 'package:epub_reader/epub_reader.dart';
+
+final blocks = const HtmlNormalizer().normalize(
+  xhtmlSource,
+  href: 'OEBPS/chapter1.xhtml',
+);
+
+for (final block in blocks) {
+  print('${block.kind}: ${block.text}');
+}
 ```
 
-## Additional information
+## Blocks
 
-TODO: Tell users more about the package: where to find more information, how to
-contribute to the package, how to file issues, what response they can expect
-from the package authors, and more.
+A spine document becomes many blocks rather than one chapter, so a lost
+reading position costs a paragraph rather than a chapter.
+
+`Block.id` derives from the spine href and the block's position within that
+document, never from its content. Two identical paragraphs would collide under
+a content hash, and correcting a typo would move the reader's saved position.
+
+`Block.text` is normalized: whitespace collapsed to single spaces, inline
+markup flattened, entities decoded. Character offsets in a stored locator
+index into this text, never into the source markup, which is why changing
+normalization means bumping `kParserVersion`. See
+[ADR 0002](../../docs/adr/0002-locator-format.md).
+
+## What is dropped
+
+Scripts, styles, tables, images, figures, MathML, and EPUB 3 navigation
+documents. Blocks shorter than two characters go too, which clears page
+numbers and paragraphs used as spacing.
+
+## Testing
+
+```bash
+dart test
+```
+
+The normalizer is pure, so it tests against XHTML string literals rather than
+fixture books. Container parsing, once built, will need real EPUBs.
+
+## Status
+
+Built: `Block`, `HtmlNormalizer`.
+
+Not yet built: zip container reading, OPF manifest and spine parsing, metadata
+extraction.
