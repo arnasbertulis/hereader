@@ -5,8 +5,19 @@ import 'block.dart';
 
 /// Elements that produce a block of their own.
 const _blockTags = {
-  'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-  'li', 'blockquote', 'figcaption', 'dd', 'dt', 'pre',
+  'p',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'li',
+  'blockquote',
+  'figcaption',
+  'dd',
+  'dt',
+  'pre',
 };
 
 /// Elements dropped whole, including their text.
@@ -15,8 +26,18 @@ const _blockTags = {
 /// time loses the structure that made it a table. Recorded as a limitation
 /// rather than solved.
 const _skipTags = {
-  'script', 'style', 'head', 'title', 'noscript',
-  'table', 'img', 'svg', 'math', 'figure', 'audio', 'video',
+  'script',
+  'style',
+  'head',
+  'title',
+  'noscript',
+  'table',
+  'img',
+  'svg',
+  'math',
+  'figure',
+  'audio',
+  'video',
 };
 
 final _whitespace = RegExp(r'\s+');
@@ -78,14 +99,16 @@ class HtmlNormalizer {
     if (text.length < minBlockLength) return;
 
     final index = out.length;
-    out.add(Block(
-      id: Block.makeId(href, index),
-      href: href,
-      index: index,
-      kind: _kindOf(tag),
-      headingLevel: _headingLevel(tag),
-      text: text,
-    ));
+    out.add(
+      Block(
+        id: Block.makeId(href, index),
+        href: href,
+        index: index,
+        kind: _kindOf(tag),
+        headingLevel: _headingLevel(tag),
+        text: text,
+      ),
+    );
   }
 
   /// Collapses all whitespace to single spaces. Line breaks inside a
@@ -114,12 +137,12 @@ class HtmlNormalizer {
   }
 
   bool _hasBlockChildren(dom.Element element) => element.children.any((c) {
-        final tag = c.localName?.toLowerCase();
-        if (tag == null) return false;
-        if (_blockTags.contains(tag)) return true;
-        if (_skipTags.contains(tag)) return false;
-        return _hasBlockChildren(c);
-      });
+    final tag = c.localName?.toLowerCase();
+    if (tag == null) return false;
+    if (_blockTags.contains(tag)) return true;
+    if (_skipTags.contains(tag)) return false;
+    return _hasBlockChildren(c);
+  });
 
   /// EPUB 3 marks tables of contents and page lists with epub:type. Reading
   /// a table of contents one word at a time is not useful.
@@ -127,22 +150,21 @@ class HtmlNormalizer {
     final tag = element.localName?.toLowerCase();
     if (tag == 'nav') return true;
 
-    final type = element.attributes['epub:type'] ??
-        element.attributes['type'] ??
-        '';
+    final type =
+        element.attributes['epub:type'] ?? element.attributes['type'] ?? '';
     return type.contains('toc') ||
         type.contains('landmarks') ||
         type.contains('page-list');
   }
 
   BlockKind _kindOf(String tag) => switch (tag) {
-        'h1' || 'h2' || 'h3' || 'h4' || 'h5' || 'h6' => BlockKind.heading,
-        'li' => BlockKind.listItem,
-        'blockquote' => BlockKind.quote,
-        'figcaption' => BlockKind.caption,
-        'pre' => BlockKind.verse,
-        _ => BlockKind.paragraph,
-      };
+    'h1' || 'h2' || 'h3' || 'h4' || 'h5' || 'h6' => BlockKind.heading,
+    'li' => BlockKind.listItem,
+    'blockquote' => BlockKind.quote,
+    'figcaption' => BlockKind.caption,
+    'pre' => BlockKind.verse,
+    _ => BlockKind.paragraph,
+  };
 
   int? _headingLevel(String tag) =>
       tag.length == 2 && tag.startsWith('h') ? int.tryParse(tag[1]) : null;

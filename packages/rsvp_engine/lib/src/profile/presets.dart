@@ -46,10 +46,7 @@ abstract final class Presets {
     id: 'builtin.cfl.timed',
     name: 'Central field loss (timed)',
     isBuiltIn: true,
-    pacing: PacingConfig(
-      kind: PacingModelKind.lengthScaled,
-      baseWpm: 120,
-    ),
+    pacing: PacingConfig(kind: PacingModelKind.lengthScaled, baseWpm: 120),
     presentation: PresentationConfig(
       fontSizePt: 48,
       polarity: Polarity.lightOnDark,
@@ -70,10 +67,7 @@ abstract final class Presets {
       clausePause: Duration(milliseconds: 140),
       sentencePause: Duration(milliseconds: 320),
     ),
-    presentation: PresentationConfig(
-      fontSizePt: 40,
-      letterSpacingEm: 0.12,
-    ),
+    presentation: PresentationConfig(fontSizePt: 40, letterSpacingEm: 0.12),
   );
 
   /// Low rate, gentle contrast, crossfade between words.

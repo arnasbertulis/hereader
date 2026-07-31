@@ -19,14 +19,19 @@ void main() {
     test('ignores word length', () {
       const c = PacingConfig(baseWpm: 300);
       final short = const ConstantPacing().decide(_tok('a'), c) as Hold;
-      final long = const ConstantPacing().decide(_tok('extraordinary'), c) as Hold;
+      final long =
+          const ConstantPacing().decide(_tok('extraordinary'), c) as Hold;
       expect(short.display, long.display);
     });
 
     test('applies sentence pause', () {
       const c = PacingConfig(baseWpm: 300);
-      final d = const ConstantPacing()
-          .decide(_tok('end.', pause: PauseAfter.sentence), c) as Hold;
+      final d =
+          const ConstantPacing().decide(
+                _tok('end.', pause: PauseAfter.sentence),
+                c,
+              )
+              as Hold;
       expect(d.pauseAfter, c.sentencePause);
       expect(d.total, d.display + c.sentencePause);
     });
@@ -34,10 +39,7 @@ void main() {
 
   group('LengthScaledPacing', () {
     test('matches constant at reference length', () {
-      const c = PacingConfig(
-        kind: PacingModelKind.lengthScaled,
-        baseWpm: 300,
-      );
+      const c = PacingConfig(kind: PacingModelKind.lengthScaled, baseWpm: 300);
       final d = const LengthScaledPacing().decide(_tok('hello'), c) as Hold;
       expect(d.display.inMilliseconds, 200);
     });
@@ -71,8 +73,12 @@ void main() {
         baseWpm: 300,
         maxDisplay: Duration(milliseconds: 400),
       );
-      final d = const LengthScaledPacing()
-          .decide(_tok('nebeprisikiškiakopūsteliaudamas'), c) as Hold;
+      final d =
+          const LengthScaledPacing().decide(
+                _tok('nebeprisikiškiakopūsteliaudamas'),
+                c,
+              )
+              as Hold;
       expect(d.display, const Duration(milliseconds: 400));
     });
   });
@@ -87,8 +93,10 @@ void main() {
 
     test('ignores punctuation pauses', () {
       expect(
-        const ElicitedPacing()
-            .decide(_tok('end.', pause: PauseAfter.sentence), const PacingConfig()),
+        const ElicitedPacing().decide(
+          _tok('end.', pause: PauseAfter.sentence),
+          const PacingConfig(),
+        ),
         isA<AwaitAdvance>(),
       );
     });
@@ -98,7 +106,9 @@ void main() {
     test('maps each kind to its implementation', () {
       expect(PacingModel.of(PacingModelKind.constant), isA<ConstantPacing>());
       expect(
-          PacingModel.of(PacingModelKind.lengthScaled), isA<LengthScaledPacing>());
+        PacingModel.of(PacingModelKind.lengthScaled),
+        isA<LengthScaledPacing>(),
+      );
       expect(PacingModel.of(PacingModelKind.elicited), isA<ElicitedPacing>());
     });
   });
@@ -108,5 +118,4 @@ void main() {
     final d = const LengthScaledPacing().decide(_tok('—'), c) as Hold;
     expect(d.display, c.minDisplay);
   });
-  
 }

@@ -57,16 +57,20 @@ class EpubParser {
   }
 
   String _findOpfPath(Archive archive) {
-    final container =
-        _parseXml(_readString(archive, _containerPath), _containerPath);
+    final container = _parseXml(
+      _readString(archive, _containerPath),
+      _containerPath,
+    );
 
-    final rootfile =
-        container.findAllElements('rootfile', namespaceUri: '*').firstOrNull;
+    final rootfile = container
+        .findAllElements('rootfile', namespaceUri: '*')
+        .firstOrNull;
     final path = rootfile?.getAttribute('full-path');
 
     if (path == null || path.isEmpty) {
       throw const EpubException(
-          'The container does not name a package document.');
+        'The container does not name a package document.',
+      );
     }
     return _decode(path);
   }
@@ -174,18 +178,21 @@ class EpubParser {
       final blocks = normalizer.normalize(source, href: href);
       if (blocks.isEmpty) continue;
 
-      documents.add(EpubDocument(
-        href: href,
-        blocks: blocks,
-        isLinear: ref.getAttribute('linear') != 'no',
-      ));
+      documents.add(
+        EpubDocument(
+          href: href,
+          blocks: blocks,
+          isLinear: ref.getAttribute('linear') != 'no',
+        ),
+      );
     }
 
     return documents;
   }
 
   String _readString(Archive archive, String path) {
-    final file = archive.files.where((f) => f.name == path).firstOrNull ??
+    final file =
+        archive.files.where((f) => f.name == path).firstOrNull ??
         // Some writers store paths with a leading slash or different case.
         archive.files
             .where((f) => f.name.toLowerCase() == path.toLowerCase())

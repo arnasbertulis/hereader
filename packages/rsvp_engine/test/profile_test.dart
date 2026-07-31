@@ -31,8 +31,7 @@ void main() {
     test('survives a real encode/decode cycle', () {
       const original = PacingConfig(kind: PacingModelKind.elicited);
       final decoded = jsonDecode(jsonEncode(original.toJson()));
-      final restored =
-          PacingConfig.fromJson(decoded as Map<String, dynamic>);
+      final restored = PacingConfig.fromJson(decoded as Map<String, dynamic>);
       expect(restored.kind, PacingModelKind.elicited);
     });
 
@@ -84,11 +83,17 @@ void main() {
     });
 
     test('rejects chunkSize above 1', () {
-      expect(() => PresentationConfig(chunkSize: 3), throwsA(isA<AssertionError>()));
+      expect(
+        () => PresentationConfig(chunkSize: 3),
+        throwsA(isA<AssertionError>()),
+      );
     });
 
     test('rejects an anchor outside the surface', () {
-      expect(() => PresentationConfig(anchorX: 1.4), throwsA(isA<AssertionError>()));
+      expect(
+        () => PresentationConfig(anchorX: 1.4),
+        throwsA(isA<AssertionError>()),
+      );
     });
   });
 
@@ -155,7 +160,11 @@ void main() {
         final restored = ReadingProfile.fromJson(
           jsonDecode(jsonEncode(p.toJson())) as Map<String, dynamic>,
         );
-        expect(restored.toJson(), equals(p.toJson()), reason: 'broke on ${p.id}');
+        expect(
+          restored.toJson(),
+          equals(p.toJson()),
+          reason: 'broke on ${p.id}',
+        );
       }
     });
 

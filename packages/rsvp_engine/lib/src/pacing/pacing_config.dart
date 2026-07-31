@@ -30,31 +30,41 @@ class PacingConfig {
        assert(lengthScaleStrength >= 0 && lengthScaleStrength <= 1);
 
   Map<String, dynamic> toJson() => {
-        'kind': kind.name,
-        'baseWpm': baseWpm,
-        'referenceLetterCount': referenceLetterCount,
-        'lengthScaleStrength': lengthScaleStrength,
-        'clausePauseMs': clausePause.inMilliseconds,
-        'sentencePauseMs': sentencePause.inMilliseconds,
-        'paragraphPauseMs': paragraphPause.inMilliseconds,
-        'minDisplayMs': minDisplay.inMilliseconds,
-        'maxDisplayMs': maxDisplay.inMilliseconds,
-      };
+    'kind': kind.name,
+    'baseWpm': baseWpm,
+    'referenceLetterCount': referenceLetterCount,
+    'lengthScaleStrength': lengthScaleStrength,
+    'clausePauseMs': clausePause.inMilliseconds,
+    'sentencePauseMs': sentencePause.inMilliseconds,
+    'paragraphPauseMs': paragraphPause.inMilliseconds,
+    'minDisplayMs': minDisplay.inMilliseconds,
+    'maxDisplayMs': maxDisplay.inMilliseconds,
+  };
 
   factory PacingConfig.fromJson(Map<String, dynamic> json) => PacingConfig(
-        kind: PacingModelKind.values.firstWhere(
-          (k) => k.name == json['kind'],
-          orElse: () => PacingModelKind.constant,
-        ),
-        baseWpm: (json['baseWpm'] as num?)?.toDouble() ?? 250,
-        referenceLetterCount:
-            (json['referenceLetterCount'] as num?)?.toDouble() ?? 5.0,
-        lengthScaleStrength:
-            (json['lengthScaleStrength'] as num?)?.toDouble() ?? 1.0,
-        clausePause: Duration(milliseconds: (json['clausePauseMs'] as num?)?.toInt() ?? 90),
-        sentencePause: Duration(milliseconds: (json['sentencePauseMs'] as num?)?.toInt() ?? 220),
-        paragraphPause: Duration(milliseconds: (json['paragraphPauseMs'] as num?)?.toInt() ?? 400),
-        minDisplay: Duration(milliseconds: (json['minDisplayMs'] as num?)?.toInt() ?? 40),
-        maxDisplay: Duration(milliseconds: (json['maxDisplayMs'] as num?)?.toInt() ?? 1200),
-      );
+    kind: PacingModelKind.values.firstWhere(
+      (k) => k.name == json['kind'],
+      orElse: () => PacingModelKind.constant,
+    ),
+    baseWpm: (json['baseWpm'] as num?)?.toDouble() ?? 250,
+    referenceLetterCount:
+        (json['referenceLetterCount'] as num?)?.toDouble() ?? 5.0,
+    lengthScaleStrength:
+        (json['lengthScaleStrength'] as num?)?.toDouble() ?? 1.0,
+    clausePause: Duration(
+      milliseconds: (json['clausePauseMs'] as num?)?.toInt() ?? 90,
+    ),
+    sentencePause: Duration(
+      milliseconds: (json['sentencePauseMs'] as num?)?.toInt() ?? 220,
+    ),
+    paragraphPause: Duration(
+      milliseconds: (json['paragraphPauseMs'] as num?)?.toInt() ?? 400,
+    ),
+    minDisplay: Duration(
+      milliseconds: (json['minDisplayMs'] as num?)?.toInt() ?? 40,
+    ),
+    maxDisplay: Duration(
+      milliseconds: (json['maxDisplayMs'] as num?)?.toInt() ?? 1200,
+    ),
+  );
 }

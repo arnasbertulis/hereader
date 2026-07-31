@@ -66,8 +66,8 @@ class PlaybackSession {
     required this.tokens,
     required ReadingProfile profile,
     int startIndex = 0,
-  })  : _profile = profile,
-        _model = PacingModel.of(profile.pacing.kind) {
+  }) : _profile = profile,
+       _model = PacingModel.of(profile.pacing.kind) {
     _index = startIndex.clamp(0, tokens.isEmpty ? 0 : tokens.length - 1);
     if (tokens.isEmpty) _state = PlaybackState.finished;
   }
@@ -77,8 +77,9 @@ class PlaybackSession {
   PlaybackState get state => _state;
   int get index => _index;
 
-  Token? get currentToken =>
-      _state == PlaybackState.finished || tokens.isEmpty ? null : tokens[_index];
+  Token? get currentToken => _state == PlaybackState.finished || tokens.isEmpty
+      ? null
+      : tokens[_index];
 
   /// Character offset of the current token within its source block. Combine
   /// with bookId, blockId and parserVersion to form a stored locator.
@@ -252,11 +253,15 @@ class PlaybackSession {
 
   void _emit() {
     if (_updates.isClosed) return;
-    _updates.add(PlaybackUpdate(
-      state: _state,
-      index: _index,
-      token: _state == PlaybackState.finished || _inGap ? null : tokens[_index],
-      inGap: _inGap,
-    ));
+    _updates.add(
+      PlaybackUpdate(
+        state: _state,
+        index: _index,
+        token: _state == PlaybackState.finished || _inGap
+            ? null
+            : tokens[_index],
+        inGap: _inGap,
+      ),
+    );
   }
 }

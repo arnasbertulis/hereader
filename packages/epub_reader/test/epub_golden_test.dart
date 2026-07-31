@@ -20,8 +20,11 @@ void main() {
     late EpubBook book;
 
     setUpAll(() {
-      expect(file.existsSync(), isTrue,
-          reason: 'fixture missing; see test/fixtures/README.md');
+      expect(
+        file.existsSync(),
+        isTrue,
+        reason: 'fixture missing; see test/fixtures/README.md',
+      );
       book = const EpubParser().parse(file.readAsBytesSync());
     });
 
@@ -47,8 +50,10 @@ void main() {
     });
 
     test('produces the expected amount of text', () {
-      final chars =
-          book.readingOrder.fold<int>(0, (sum, b) => sum + b.text.length);
+      final chars = book.readingOrder.fold<int>(
+        0,
+        (sum, b) => sum + b.text.length,
+      );
       expect(chars, 157920);
     });
 
@@ -74,11 +79,15 @@ void main() {
     });
 
     test('no block still contains markup', () {
-      final withTags =
-          book.readingOrder.where((b) => b.text.contains('<')).toList();
+      final withTags = book.readingOrder
+          .where((b) => b.text.contains('<'))
+          .toList();
 
-      expect(withTags, isEmpty,
-          reason: 'a stray tag would be flashed at the reader as a word');
+      expect(
+        withTags,
+        isEmpty,
+        reason: 'a stray tag would be flashed at the reader as a word',
+      );
     });
 
     test('block ids are unique across the whole book', () {

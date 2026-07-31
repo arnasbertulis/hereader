@@ -8,10 +8,10 @@ abstract class PacingModel {
   PacingDecision decide(Token token, PacingConfig config);
 
   factory PacingModel.of(PacingModelKind kind) => switch (kind) {
-        PacingModelKind.constant => const ConstantPacing(),
-        PacingModelKind.lengthScaled => const LengthScaledPacing(),
-        PacingModelKind.elicited => const ElicitedPacing(),
-      };
+    PacingModelKind.constant => const ConstantPacing(),
+    PacingModelKind.lengthScaled => const LengthScaledPacing(),
+    PacingModelKind.elicited => const ElicitedPacing(),
+  };
 }
 
 Duration _baseDuration(PacingConfig c) =>
@@ -21,19 +21,20 @@ Duration _clamp(Duration d, PacingConfig c) =>
     d < c.minDisplay ? c.minDisplay : (d > c.maxDisplay ? c.maxDisplay : d);
 
 Duration _pauseFor(Token t, PacingConfig c) => switch (t.pauseAfter) {
-      PauseAfter.none => Duration.zero,
-      PauseAfter.clause => c.clausePause,
-      PauseAfter.sentence => c.sentencePause,
-      PauseAfter.paragraph => c.paragraphPause,
-    };
+  PauseAfter.none => Duration.zero,
+  PauseAfter.clause => c.clausePause,
+  PauseAfter.sentence => c.sentencePause,
+  PauseAfter.paragraph => c.paragraphPause,
+};
 
 class ConstantPacing extends PacingModel {
   const ConstantPacing();
 
   @override
-  PacingDecision decide(Token token, PacingConfig config) =>
-      Hold(_clamp(_baseDuration(config), config),
-          pauseAfter: _pauseFor(token, config));
+  PacingDecision decide(Token token, PacingConfig config) => Hold(
+    _clamp(_baseDuration(config), config),
+    pauseAfter: _pauseFor(token, config),
+  );
 }
 
 class LengthScaledPacing extends PacingModel {

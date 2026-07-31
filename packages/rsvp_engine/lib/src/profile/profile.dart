@@ -65,12 +65,14 @@ class PresentationConfig {
     this.tintArgb,
     this.orpHighlight = false,
     this.transitionMs = 0,
-  })  : assert(anchorX >= 0 && anchorX <= 1),
-        assert(anchorY >= 0 && anchorY <= 1),
-        assert(fontSizePt > 0),
-        assert(chunkSize == 1,
-            'chunkSize > 1 needs group-aware pacing, which is not built'),
-        assert(transitionMs >= 0);
+  }) : assert(anchorX >= 0 && anchorX <= 1),
+       assert(anchorY >= 0 && anchorY <= 1),
+       assert(fontSizePt > 0),
+       assert(
+         chunkSize == 1,
+         'chunkSize > 1 needs group-aware pacing, which is not built',
+       ),
+       assert(transitionMs >= 0);
 
   PresentationConfig copyWith({
     PresentationMode? mode,
@@ -84,47 +86,52 @@ class PresentationConfig {
     int? tintArgb,
     bool? orpHighlight,
     int? transitionMs,
-  }) =>
-      PresentationConfig(
-        mode: mode ?? this.mode,
-        anchorX: anchorX ?? this.anchorX,
-        anchorY: anchorY ?? this.anchorY,
-        fontFamily: fontFamily ?? this.fontFamily,
-        fontSizePt: fontSizePt ?? this.fontSizePt,
-        letterSpacingEm: letterSpacingEm ?? this.letterSpacingEm,
-        chunkSize: chunkSize ?? this.chunkSize,
-        polarity: polarity ?? this.polarity,
-        tintArgb: tintArgb ?? this.tintArgb,
-        orpHighlight: orpHighlight ?? this.orpHighlight,
-        transitionMs: transitionMs ?? this.transitionMs,
-      );
+  }) => PresentationConfig(
+    mode: mode ?? this.mode,
+    anchorX: anchorX ?? this.anchorX,
+    anchorY: anchorY ?? this.anchorY,
+    fontFamily: fontFamily ?? this.fontFamily,
+    fontSizePt: fontSizePt ?? this.fontSizePt,
+    letterSpacingEm: letterSpacingEm ?? this.letterSpacingEm,
+    chunkSize: chunkSize ?? this.chunkSize,
+    polarity: polarity ?? this.polarity,
+    tintArgb: tintArgb ?? this.tintArgb,
+    orpHighlight: orpHighlight ?? this.orpHighlight,
+    transitionMs: transitionMs ?? this.transitionMs,
+  );
 
   Map<String, dynamic> toJson() => {
-        'mode': mode.name,
-        'anchorX': anchorX,
-        'anchorY': anchorY,
-        if (fontFamily != null) 'fontFamily': fontFamily,
-        'fontSizePt': fontSizePt,
-        'letterSpacingEm': letterSpacingEm,
-        'chunkSize': chunkSize,
-        'polarity': polarity.name,
-        if (tintArgb != null) 'tintArgb': tintArgb,
-        'orpHighlight': orpHighlight,
-        'transitionMs': transitionMs,
-      };
+    'mode': mode.name,
+    'anchorX': anchorX,
+    'anchorY': anchorY,
+    if (fontFamily != null) 'fontFamily': fontFamily,
+    'fontSizePt': fontSizePt,
+    'letterSpacingEm': letterSpacingEm,
+    'chunkSize': chunkSize,
+    'polarity': polarity.name,
+    if (tintArgb != null) 'tintArgb': tintArgb,
+    'orpHighlight': orpHighlight,
+    'transitionMs': transitionMs,
+  };
 
   factory PresentationConfig.fromJson(Map<String, dynamic> json) =>
       PresentationConfig(
         mode: _enumByName(
-            PresentationMode.values, json['mode'], PresentationMode.fixedSingle),
+          PresentationMode.values,
+          json['mode'],
+          PresentationMode.fixedSingle,
+        ),
         anchorX: (json['anchorX'] as num?)?.toDouble() ?? 0.5,
         anchorY: (json['anchorY'] as num?)?.toDouble() ?? 0.5,
         fontFamily: json['fontFamily'] as String?,
         fontSizePt: (json['fontSizePt'] as num?)?.toDouble() ?? 32,
         letterSpacingEm: (json['letterSpacingEm'] as num?)?.toDouble() ?? 0.0,
         chunkSize: (json['chunkSize'] as num?)?.toInt() ?? 1,
-        polarity:
-            _enumByName(Polarity.values, json['polarity'], Polarity.darkOnLight),
+        polarity: _enumByName(
+          Polarity.values,
+          json['polarity'],
+          Polarity.darkOnLight,
+        ),
         tintArgb: (json['tintArgb'] as num?)?.toInt(),
         orpHighlight: json['orpHighlight'] as bool? ?? false,
         transitionMs: (json['transitionMs'] as num?)?.toInt() ?? 0,
@@ -156,8 +163,8 @@ class ReadingProfile {
     this.presentation = const PresentationConfig(),
     this.rewindWords = 2,
     this.isBuiltIn = false,
-  })  : assert(id != ''),
-        assert(rewindWords >= 0);
+  }) : assert(id != ''),
+       assert(rewindWords >= 0);
 
   ReadingProfile copyWith({
     String? id,
@@ -166,45 +173,42 @@ class ReadingProfile {
     PresentationConfig? presentation,
     int? rewindWords,
     bool? isBuiltIn,
-  }) =>
-      ReadingProfile(
-        id: id ?? this.id,
-        name: name ?? this.name,
-        pacing: pacing ?? this.pacing,
-        presentation: presentation ?? this.presentation,
-        rewindWords: rewindWords ?? this.rewindWords,
-        isBuiltIn: isBuiltIn ?? this.isBuiltIn,
-      );
+  }) => ReadingProfile(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    pacing: pacing ?? this.pacing,
+    presentation: presentation ?? this.presentation,
+    rewindWords: rewindWords ?? this.rewindWords,
+    isBuiltIn: isBuiltIn ?? this.isBuiltIn,
+  );
 
   /// Derive an editable copy of a built-in profile.
-  ReadingProfile fork({required String id, String? name}) => copyWith(
-        id: id,
-        name: name ?? '${this.name} (copy)',
-        isBuiltIn: false,
-      );
+  ReadingProfile fork({required String id, String? name}) =>
+      copyWith(id: id, name: name ?? '${this.name} (copy)', isBuiltIn: false);
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'pacing': pacing.toJson(),
-        'presentation': presentation.toJson(),
-        'rewindWords': rewindWords,
-        'isBuiltIn': isBuiltIn,
-      };
+    'id': id,
+    'name': name,
+    'pacing': pacing.toJson(),
+    'presentation': presentation.toJson(),
+    'rewindWords': rewindWords,
+    'isBuiltIn': isBuiltIn,
+  };
 
   factory ReadingProfile.fromJson(Map<String, dynamic> json) => ReadingProfile(
-        id: json['id'] as String,
-        name: json['name'] as String? ?? 'Unnamed',
-        pacing: json['pacing'] == null
-            ? const PacingConfig()
-            : PacingConfig.fromJson(json['pacing'] as Map<String, dynamic>),
-        presentation: json['presentation'] == null
-            ? const PresentationConfig()
-            : PresentationConfig.fromJson(
-                json['presentation'] as Map<String, dynamic>),
-        rewindWords: (json['rewindWords'] as num?)?.toInt() ?? 2,
-        isBuiltIn: json['isBuiltIn'] as bool? ?? false,
-      );
+    id: json['id'] as String,
+    name: json['name'] as String? ?? 'Unnamed',
+    pacing: json['pacing'] == null
+        ? const PacingConfig()
+        : PacingConfig.fromJson(json['pacing'] as Map<String, dynamic>),
+    presentation: json['presentation'] == null
+        ? const PresentationConfig()
+        : PresentationConfig.fromJson(
+            json['presentation'] as Map<String, dynamic>,
+          ),
+    rewindWords: (json['rewindWords'] as num?)?.toInt() ?? 2,
+    isBuiltIn: json['isBuiltIn'] as bool? ?? false,
+  );
 }
 
 /// Resolve an enum by name, falling back rather than throwing.

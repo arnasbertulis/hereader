@@ -36,8 +36,11 @@ void main() {
   final tokens = Tokenizer().tokenize(_paragraph);
 
   setUp(() {
-    expect(tokens.length, greaterThan(40),
-        reason: 'fixture should be long enough for rates to be meaningful');
+    expect(
+      tokens.length,
+      greaterThan(40),
+      reason: 'fixture should be long enough for rates to be meaningful',
+    );
   });
 
   group('constant pacing over a real paragraph', () {
@@ -52,9 +55,12 @@ void main() {
       final r = _run(tokens, config);
       final overhead =
           (r.total.inMicroseconds - r.display.inMicroseconds) /
-              r.display.inMicroseconds;
-      expect(overhead, lessThan(0.25),
-          reason: 'punctuation pauses should cost under 25% of reading time');
+          r.display.inMicroseconds;
+      expect(
+        overhead,
+        lessThan(0.25),
+        reason: 'punctuation pauses should cost under 25% of reading time',
+      );
     });
   });
 
@@ -68,16 +74,23 @@ void main() {
       final r = _run(tokens, config);
       final meanLetters =
           tokens.map((t) => t.letterCount).reduce((a, b) => a + b) /
-              tokens.length;
+          tokens.length;
       final expected = 300 * config.referenceLetterCount / meanLetters;
-      expect(_wpm(tokens.length, r.display), closeTo(expected, expected * 0.02));
+      expect(
+        _wpm(tokens.length, r.display),
+        closeTo(expected, expected * 0.02),
+      );
     });
 
     test('stays within 20% of baseWpm on ordinary English prose', () {
       final r = _run(tokens, config);
-      expect(_wpm(tokens.length, r.display), closeTo(300, 60),
-          reason: 'reference length of 5 should suit typical English; '
-              'a large miss means referenceLetterCount needs revisiting');
+      expect(
+        _wpm(tokens.length, r.display),
+        closeTo(300, 60),
+        reason:
+            'reference length of 5 should suit typical English; '
+            'a large miss means referenceLetterCount needs revisiting',
+      );
     });
   });
 }

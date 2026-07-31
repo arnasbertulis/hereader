@@ -4,28 +4,23 @@ import 'package:rsvp_engine/rsvp_engine.dart';
 
 /// "one two three four five." at 300 wpm is 200ms per token.
 List<Token> _tokens() => const [
-      Token(text: 'one', charOffset: 0),
-      Token(text: 'two', charOffset: 4),
-      Token(text: 'three', charOffset: 8),
-      Token(text: 'four', charOffset: 14),
-      Token(text: 'five.', charOffset: 19, pauseAfter: PauseAfter.sentence),
-    ];
+  Token(text: 'one', charOffset: 0),
+  Token(text: 'two', charOffset: 4),
+  Token(text: 'three', charOffset: 8),
+  Token(text: 'four', charOffset: 14),
+  Token(text: 'five.', charOffset: 19, pauseAfter: PauseAfter.sentence),
+];
 
 ReadingProfile _profile({
   PacingModelKind kind = PacingModelKind.constant,
   int rewindWords = 2,
   Duration sentencePause = const Duration(milliseconds: 220),
-}) =>
-    ReadingProfile(
-      id: 'test',
-      name: 'Test',
-      rewindWords: rewindWords,
-      pacing: PacingConfig(
-        kind: kind,
-        baseWpm: 300,
-        sentencePause: sentencePause,
-      ),
-    );
+}) => ReadingProfile(
+  id: 'test',
+  name: 'Test',
+  rewindWords: rewindWords,
+  pacing: PacingConfig(kind: kind, baseWpm: 300, sentencePause: sentencePause),
+);
 
 void main() {
   group('constant pacing', () {

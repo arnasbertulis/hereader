@@ -36,8 +36,7 @@ void main(List<String> args) {
     print('[${block.kind.name}] $text');
   }
 
-  final chars =
-      book.readingOrder.fold<int>(0, (sum, b) => sum + b.text.length);
+  final chars = book.readingOrder.fold<int>(0, (sum, b) => sum + b.text.length);
   print('');
   print('Total characters: $chars');
 }

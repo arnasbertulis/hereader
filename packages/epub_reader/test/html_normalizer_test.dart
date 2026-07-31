@@ -4,18 +4,21 @@ import 'package:epub_reader/epub_reader.dart';
 const _href = 'OEBPS/chapter1.xhtml';
 
 List<Block> _blocks(String body, {String href = _href}) =>
-    const HtmlNormalizer().normalize('<html><body>$body</body></html>',
-        href: href);
+    const HtmlNormalizer().normalize(
+      '<html><body>$body</body></html>',
+      href: href,
+    );
 
 List<String> _texts(String body) => _blocks(body).map((b) => b.text).toList();
 
 void main() {
   group('basic extraction', () {
     test('paragraphs become blocks in document order', () {
-      expect(
-        _texts('<p>First.</p><p>Second.</p><p>Third.</p>'),
-        ['First.', 'Second.', 'Third.'],
-      );
+      expect(_texts('<p>First.</p><p>Second.</p><p>Third.</p>'), [
+        'First.',
+        'Second.',
+        'Third.',
+      ]);
     });
 
     test('an empty document yields nothing', () {
@@ -53,10 +56,7 @@ void main() {
 
   group('whitespace normalization', () {
     test('collapses newlines and runs of spaces', () {
-      expect(
-        _texts('<p>One\n   two\t\tthree</p>'),
-        ['One two three'],
-      );
+      expect(_texts('<p>One\n   two\t\tthree</p>'), ['One two three']);
     });
 
     test('treats a line break as a space', () {
@@ -68,22 +68,21 @@ void main() {
     });
 
     test('flattens inline markup into one string', () {
-      expect(
-        _texts('<p>A <em>strong</em> and <b>bold</b> claim.</p>'),
-        ['A strong and bold claim.'],
-      );
+      expect(_texts('<p>A <em>strong</em> and <b>bold</b> claim.</p>'), [
+        'A strong and bold claim.',
+      ]);
     });
 
     test('decodes entities', () {
-      expect(_texts('<p>Smith &amp; Sons &mdash; est. 1890</p>'),
-          ['Smith & Sons — est. 1890']);
+      expect(_texts('<p>Smith &amp; Sons &mdash; est. 1890</p>'), [
+        'Smith & Sons — est. 1890',
+      ]);
     });
 
     test('preserves Lithuanian diacritics', () {
-      expect(
-        _texts('<p>Nebeprisikiškiakopūsteliaujantiesiems ąčęėįšųūž</p>'),
-        ['Nebeprisikiškiakopūsteliaujantiesiems ąčęėįšųūž'],
-      );
+      expect(_texts('<p>Nebeprisikiškiakopūsteliaujantiesiems ąčęėįšųūž</p>'), [
+        'Nebeprisikiškiakopūsteliaujantiesiems ąčęėįšųūž',
+      ]);
     });
 
     test('drops empty and whitespace-only blocks', () {
@@ -97,25 +96,26 @@ void main() {
         '<blockquote><p>Quoted line.</p><p>Second line.</p></blockquote>',
       );
 
-      expect(blocks.map((b) => b.text).toList(),
-          ['Quoted line.', 'Second line.']);
+      expect(blocks.map((b) => b.text).toList(), [
+        'Quoted line.',
+        'Second line.',
+      ]);
       // The wrapper is not emitted, so its kind is lost. Reading a quotation
       // one word at a time does not convey the quoting anyway.
       expect(blocks.every((b) => b.kind == BlockKind.paragraph), isTrue);
     });
 
     test('a blockquote of inline text stays one quote block', () {
-      final block = _blocks('<blockquote>Bare quoted text.</blockquote>').single;
+      final block = _blocks(
+        '<blockquote>Bare quoted text.</blockquote>',
+      ).single;
 
       expect(block.kind, BlockKind.quote);
       expect(block.text, 'Bare quoted text.');
     });
 
     test('a wrapper div does not duplicate its paragraphs', () {
-      expect(
-        _texts('<div><div><p>Deep.</p></div></div>'),
-        ['Deep.'],
-      );
+      expect(_texts('<div><div><p>Deep.</p></div></div>'), ['Deep.']);
     });
 
     test('a div holding only inline text becomes a paragraph', () {
@@ -128,8 +128,7 @@ void main() {
 
     test('a list item containing a paragraph loses the list kind', () {
       // Known behaviour: the walk descends to the innermost block.
-      final block =
-          _blocks('<ul><li><p>Wrapped item</p></li></ul>').single;
+      final block = _blocks('<ul><li><p>Wrapped item</p></li></ul>').single;
 
       expect(block.kind, BlockKind.paragraph);
     });
@@ -144,30 +143,29 @@ void main() {
     });
 
     test('drops tables entirely', () {
-      expect(
-        _texts('<p>Before.</p><table><tr><td>Cell</td></tr></table>'),
-        ['Before.'],
-      );
+      expect(_texts('<p>Before.</p><table><tr><td>Cell</td></tr></table>'), [
+        'Before.',
+      ]);
     });
 
     test('drops images without losing surrounding text', () {
-      expect(
-        _texts('<p>Look <img src="x.png" alt="ignored"/> here.</p>'),
-        ['Look here.'],
-      );
+      expect(_texts('<p>Look <img src="x.png" alt="ignored"/> here.</p>'), [
+        'Look here.',
+      ]);
     });
 
     test('drops a nav element', () {
-      expect(
-        _texts('<nav><p>Table of contents</p></nav><p>Chapter one.</p>'),
-        ['Chapter one.'],
-      );
+      expect(_texts('<nav><p>Table of contents</p></nav><p>Chapter one.</p>'), [
+        'Chapter one.',
+      ]);
     });
 
     test('drops a section marked as a table of contents', () {
       expect(
-        _texts('<section epub:type="toc"><p>Contents</p></section>'
-            '<p>Real text.</p>'),
+        _texts(
+          '<section epub:type="toc"><p>Contents</p></section>'
+          '<p>Real text.</p>',
+        ),
         ['Real text.'],
       );
     });
@@ -177,8 +175,10 @@ void main() {
       // reached despite being a block tag. Change _skipTags if captions
       // should survive.
       expect(
-        _texts('<figure><img src="a.png"/><figcaption>A caption</figcaption>'
-            '</figure><p>Body.</p>'),
+        _texts(
+          '<figure><img src="a.png"/><figcaption>A caption</figcaption>'
+          '</figure><p>Body.</p>',
+        ),
         ['Body.'],
       );
     });
@@ -217,9 +217,9 @@ void main() {
     });
 
     test('are unique across a document', () {
-      final ids = _blocks(List.filled(50, '<p>Line of text.</p>').join())
-          .map((b) => b.id)
-          .toList();
+      final ids = _blocks(
+        List.filled(50, '<p>Line of text.</p>').join(),
+      ).map((b) => b.id).toList();
 
       expect(ids.toSet().length, ids.length);
     });

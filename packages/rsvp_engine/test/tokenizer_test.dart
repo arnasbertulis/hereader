@@ -5,7 +5,8 @@ void main() {
   final t = Tokenizer();
 
   List<String> words(String s) => t.tokenize(s).map((x) => x.text).toList();
-  List<PauseAfter> pauses(String s) => t.tokenize(s).map((x) => x.pauseAfter).toList();
+  List<PauseAfter> pauses(String s) =>
+      t.tokenize(s).map((x) => x.pauseAfter).toList();
 
   group('splitting', () {
     test('splits on whitespace', () {
@@ -37,8 +38,11 @@ void main() {
     });
 
     test('semicolon and colon are clause breaks', () {
-      expect(pauses('one; two: three'),
-          [PauseAfter.clause, PauseAfter.clause, PauseAfter.none]);
+      expect(pauses('one; two: three'), [
+        PauseAfter.clause,
+        PauseAfter.clause,
+        PauseAfter.none,
+      ]);
     });
 
     test('period ends a sentence', () {
@@ -74,8 +78,12 @@ void main() {
     });
 
     test('a decimal point does not end a sentence', () {
-      expect(pauses('pi is 3.14 roughly'),
-          [PauseAfter.none, PauseAfter.none, PauseAfter.none, PauseAfter.none]);
+      expect(pauses('pi is 3.14 roughly'), [
+        PauseAfter.none,
+        PauseAfter.none,
+        PauseAfter.none,
+        PauseAfter.none,
+      ]);
     });
   });
 
@@ -128,8 +136,7 @@ void main() {
     test('handles a full Lithuanian date', () {
       final tokens = Tokenizer().tokenize('1990 m. kovo 11 d.');
 
-      expect(tokens.map((t) => t.text).toList(),
-          ['1990 m.', 'kovo', '11 d.']);
+      expect(tokens.map((t) => t.text).toList(), ['1990 m.', 'kovo', '11 d.']);
       expect(tokens.first.charOffset, 0);
       expect(tokens.last.charOffset, 13);
     });
@@ -164,11 +171,16 @@ void main() {
     });
 
     test('accepts a custom suffix set', () {
-      final tokens =
-          Tokenizer(numericSuffixes: {'kr.'}).tokenize('50 kr. ir 2005 m.');
+      final tokens = Tokenizer(
+        numericSuffixes: {'kr.'},
+      ).tokenize('50 kr. ir 2005 m.');
 
-      expect(tokens.map((t) => t.text).toList(),
-          ['50 kr.', 'ir', '2005', 'm.']);
+      expect(tokens.map((t) => t.text).toList(), [
+        '50 kr.',
+        'ir',
+        '2005',
+        'm.',
+      ]);
     });
   });
 }

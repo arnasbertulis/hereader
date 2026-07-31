@@ -62,9 +62,9 @@ class EpubBook {
 
   /// Every block in reading order, skipping non-linear documents.
   List<Block> get readingOrder => [
-        for (final d in documents)
-          if (d.isLinear) ...d.blocks,
-      ];
+    for (final d in documents)
+      if (d.isLinear) ...d.blocks,
+  ];
 
   int get blockCount => readingOrder.length;
 }

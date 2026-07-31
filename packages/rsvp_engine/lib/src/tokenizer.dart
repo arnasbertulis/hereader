@@ -1,13 +1,37 @@
 import 'token.dart';
 
 const _defaultAbbreviations = {
-  'dr.', 'mr.', 'mrs.', 'ms.', 'prof.', 'st.',
-  'etc.', 'e.g.', 'i.e.', 'vs.', 'cf.', 'approx.',
+  'dr.',
+  'mr.',
+  'mrs.',
+  'ms.',
+  'prof.',
+  'st.',
+  'etc.',
+  'e.g.',
+  'i.e.',
+  'vs.',
+  'cf.',
+  'approx.',
 };
 
 const _defaultNumericSuffixes = {
-  'm.', 'd.', 'mėn.', 'sav.', 'val.', 'min.', 'sek.',
-  'psl.', 'nr.', 'proc.', 'kg', 'g', 'km', 'cm', 'mm', 'ha',
+  'm.',
+  'd.',
+  'mėn.',
+  'sav.',
+  'val.',
+  'min.',
+  'sek.',
+  'psl.',
+  'nr.',
+  'proc.',
+  'kg',
+  'g',
+  'km',
+  'cm',
+  'mm',
+  'ha',
 };
 
 const _sentenceEnders = {'.', '!', '?', '\u2026'};
@@ -16,8 +40,14 @@ const _clauseEnders = {',', ';', ':'};
 final _alphanumeric = RegExp(r'[\p{L}\p{N}]', unicode: true);
 
 bool _isWhitespace(int c) =>
-    c == 0x20 || c == 0x09 || c == 0x0A || c == 0x0D ||
-    c == 0x0B || c == 0x0C || c == 0x2028 || c == 0x2029;
+    c == 0x20 ||
+    c == 0x09 ||
+    c == 0x0A ||
+    c == 0x0D ||
+    c == 0x0B ||
+    c == 0x0C ||
+    c == 0x2028 ||
+    c == 0x2029;
 
 PauseAfter _longer(PauseAfter a, PauseAfter b) => a.index >= b.index ? a : b;
 
@@ -26,8 +56,8 @@ class Tokenizer {
   final Set<String> numericSuffixes;
 
   Tokenizer({Set<String>? abbreviations, Set<String>? numericSuffixes})
-      : abbreviations = abbreviations ?? _defaultAbbreviations,
-        numericSuffixes = numericSuffixes ?? _defaultNumericSuffixes;
+    : abbreviations = abbreviations ?? _defaultAbbreviations,
+      numericSuffixes = numericSuffixes ?? _defaultNumericSuffixes;
 
   PauseAfter _fromPunctuation(String text) {
     final lower = text.toLowerCase();
@@ -97,7 +127,8 @@ class Tokenizer {
 
       final text = buffer.toString();
       final endsInDigit =
-          tokens.isNotEmpty && RegExp(r'[\p{N}]$', unicode: true).hasMatch(tokens.last.text);
+          tokens.isNotEmpty &&
+          RegExp(r'[\p{N}]$', unicode: true).hasMatch(tokens.last.text);
 
       if (endsInDigit && numericSuffixes.contains(text.toLowerCase())) {
         // Fold the unit into the number so "2005 m." shows as one token.
@@ -111,14 +142,16 @@ class Tokenizer {
           ),
         );
       } else {
-        tokens.add(Token(
-          text: text,
-          charOffset: start,
-          pauseAfter: _longer(
-            _fromPunctuation(text),
-            _fromFollowingWhitespace(source, i),
+        tokens.add(
+          Token(
+            text: text,
+            charOffset: start,
+            pauseAfter: _longer(
+              _fromPunctuation(text),
+              _fromFollowingWhitespace(source, i),
+            ),
           ),
-        ));
+        );
       }
     }
 
@@ -135,4 +168,3 @@ class Tokenizer {
     return newlines == 1 && j < source.length;
   }
 }
-
