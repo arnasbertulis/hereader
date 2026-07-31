@@ -2,18 +2,33 @@ name: dart
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [rsvp_engine, epub_reader]
+
     defaults:
       run:
-        working-directory: packages/rsvp_engine
+        working-directory: packages/${{ matrix.package }}
+
     steps:
       - uses: actions/checkout@v4
       - uses: dart-lang/setup-dart@v1
-      - run: dart pub get
-      - run: dart analyze --fatal-infos
-      - run: dart test
+
+      - name: Install dependencies
+        run: dart pub get
+
+      - name: Verify formatting
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Analyze
+        run: dart analyze --fatal-infos
+
+      - name: Run tests
+        run: dart test
