@@ -1,6 +1,6 @@
 # Hereader
 
-![dart](https://github.com/arnasbertulis/hereader/actions/workflows/ci-dart.yml/badge.svg) ![flutter](https://github.com/arnasbertulis/hereader/actions/workflows/ci-flutter.yml/badge.svg)
+![dart](https://github.com/arnasbertulis/hereader/actions/workflows/ci-dart.yml/badge.svg?branch=main) ![flutter](https://github.com/arnasbertulis/hereader/actions/workflows/ci-flutter.yml/badge.svg?branch=main)
 
 A configurable reading surface. Text is presented one word at a time in a fixed position, instead of as a page you scan with your eyes.
 
