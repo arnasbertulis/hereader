@@ -1,0 +1,6 @@
+app/windows/** linguist-vendored
+app/linux/** linguist-vendored
+app/macos/** linguist-vendored
+app/ios/** linguist-vendored
+app/android/** linguist-vendored
+app/web/** linguist-vendored
