@@ -1,5 +1,5 @@
+import 'package:app/reading/library_screen.dart';
 import 'package:flutter/material.dart';
-import 'reading/paste_reader_screen.dart';
 
 void main() => runApp(const HereaderApp());
 
@@ -8,8 +8,8 @@ class HereaderApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: 'Hereader',
-        theme: ThemeData(useMaterial3: true),
-        home: const PasteReaderScreen(),
-      );
+    title: 'Hereader',
+    theme: ThemeData(useMaterial3: true),
+    home: const LibraryScreen(),
+  );
 }

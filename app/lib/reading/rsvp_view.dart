@@ -10,11 +10,7 @@ class RsvpView extends StatelessWidget {
   final PlaybackUpdate? update;
   final PresentationConfig presentation;
 
-  const RsvpView({
-    super.key,
-    required this.update,
-    required this.presentation,
-  });
+  const RsvpView({super.key, required this.update, required this.presentation});
 
   Color get _foreground => presentation.polarity == Polarity.lightOnDark
       ? const Color(0xFFF2F2F2)
@@ -62,14 +58,16 @@ class RsvpView extends StatelessWidget {
     } else if (presentation.orpHighlight) {
       final i = _orpIndex(token.text);
       word = Text.rich(
-        TextSpan(children: [
-          TextSpan(text: token.text.substring(0, i)),
-          TextSpan(
-            text: token.text[i],
-            style: const TextStyle(color: Color(0xFFD23B2E)),
-          ),
-          TextSpan(text: token.text.substring(i + 1)),
-        ]),
+        TextSpan(
+          children: [
+            TextSpan(text: token.text.substring(0, i)),
+            TextSpan(
+              text: token.text[i],
+              style: const TextStyle(color: Color(0xFFD23B2E)),
+            ),
+            TextSpan(text: token.text.substring(i + 1)),
+          ],
+        ),
         key: ValueKey('${update!.index}'),
         style: style,
         textAlign: TextAlign.center,
