@@ -2,29 +2,31 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:app/main.dart';
+import 'package:app/reading/library_screen.dart';
 import 'package:app/reading/paste_reader_screen.dart';
 
 void main() {
-  testWidgets('launches into the paste screen with reading disabled',
-      (tester) async {
+  testWidgets('launches into an empty library', (tester) async {
     await tester.pumpWidget(const HereaderApp());
 
-    expect(find.byType(PasteReaderScreen), findsOneWidget);
-
-    final button = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Read this'),
-    );
-    expect(button.onPressed, isNull,
-        reason: 'reading should stay disabled until there is text');
+    expect(find.byType(LibraryScreen), findsOneWidget);
+    expect(find.text('No books yet'), findsOneWidget);
   });
 
-  testWidgets('entering text enables reading', (tester) async {
-    await tester.pumpWidget(const HereaderApp());
+  testWidgets('the paste screen enables reading once there is text', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const MaterialApp(home: PasteReaderScreen()));
+
+    var button = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Read this'),
+    );
+    expect(button.onPressed, isNull);
 
     await tester.enterText(find.byType(TextField), 'Labas rytas.');
     await tester.pump();
 
-    final button = tester.widget<FilledButton>(
+    button = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'Read this'),
     );
     expect(button.onPressed, isNotNull);
