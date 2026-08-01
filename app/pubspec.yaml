@@ -39,6 +39,8 @@ dependencies:
   file_picker: ^11.0.3
   epub_reader:
     path: ../packages/epub_reader
+  drift: ^2.34.3
+  drift_flutter: ^0.3.1
 
 dev_dependencies:
   flutter_test:
@@ -50,6 +52,8 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  drift_dev: ^2.34.5
+  build_runner: ^2.15.1
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

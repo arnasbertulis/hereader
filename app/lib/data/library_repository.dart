@@ -1,0 +1,294 @@
+import 'dart:convert';
+
+import 'package:drift/drift.dart';
+import 'package:rsvp_engine/rsvp_engine.dart';
+
+import 'database.dart';
+
+/// A book as the library list needs it: metadata without the bytes.
+///
+/// Loading blobs to draw a list would read every book into memory to render
+/// a few titles.
+class BookSummary {
+  final String id;
+  final String title;
+  final String? author;
+  final String? language;
+  final int wordCount;
+  final Locator? position;
+  final DateTime importedAt;
+
+  const BookSummary({
+    required this.id,
+    required this.title,
+    required this.wordCount,
+    required this.importedAt,
+    this.author,
+    this.language,
+    this.position,
+  });
+}
+
+/// Everything the app stores locally.
+///
+/// The only place that knows about drift. Screens talk to this.
+class LibraryRepository {
+  final AppDatabase _db;
+
+  LibraryRepository(this._db);
+
+  // -- books ---------------------------------------------------------
+
+  /// Library contents, most recently imported first, without book bytes.
+  Stream<List<BookSummary>> watchLibrary() {
+    final query = _db.select(_db.books).join([
+      leftOuterJoin(
+        _db.readingPositions,
+        _db.readingPositions.bookId.equalsExp(_db.books.id),
+      ),
+    ])..orderBy([OrderingTerm.desc(_db.books.importedAt)]);
+
+    return query.watch().map(
+      (rows) => rows.map((row) {
+        final book = row.readTable(_db.books);
+        final position = row.readTableOrNull(_db.readingPositions);
+
+        return BookSummary(
+          id: book.id,
+          title: book.title,
+          author: book.author,
+          language: book.language,
+          wordCount: book.wordCount,
+          importedAt: book.importedAt,
+          position: position == null
+              ? null
+              : Locator(
+                  blockId: position.blockId,
+                  charOffset: position.charOffset,
+                  parserVersion: position.parserVersion,
+                ),
+        );
+      }).toList(),
+    );
+  }
+
+  /// Stored EPUB bytes, or null if the book is not on this device.
+  Future<Uint8List?> bytesOf(String bookId) async {
+    final row = await (_db.select(
+      _db.books,
+    )..where((b) => b.id.equals(bookId))).getSingleOrNull();
+
+    return row?.bytes;
+  }
+
+  /// Adds a book, or replaces it if the same edition is imported again.
+  Future<void> addBook({
+    required String id,
+    required String title,
+    required Uint8List bytes,
+    required int wordCount,
+    String? author,
+    String? language,
+  }) async {
+    await _db
+        .into(_db.books)
+        .insertOnConflictUpdate(
+          BooksCompanion.insert(
+            id: id,
+            title: title,
+            bytes: bytes,
+            importedAt: DateTime.now().toUtc(),
+            wordCount: Value(wordCount),
+            author: Value(author),
+            language: Value(language),
+          ),
+        );
+  }
+
+  /// Removes a book and, by cascade, its reading position.
+  Future<void> removeBook(String bookId) =>
+      (_db.delete(_db.books)..where((b) => b.id.equals(bookId))).go();
+
+  // -- positions -----------------------------------------------------
+
+  Future<Locator?> positionOf(String bookId) async {
+    final row = await (_db.select(
+      _db.readingPositions,
+    )..where((p) => p.bookId.equals(bookId))).getSingleOrNull();
+
+    if (row == null) return null;
+
+    return Locator(
+      blockId: row.blockId,
+      charOffset: row.charOffset,
+      parserVersion: row.parserVersion,
+    );
+  }
+
+  /// Records where the reader stopped, and queues the change for sync.
+  ///
+  /// Both writes happen in one transaction: a position that reaches disk
+  /// without an outbox entry would never sync, and an outbox entry without
+  /// a position would sync a change this device does not have.
+  Future<void> savePosition({
+    required String bookId,
+    required Locator locator,
+    required String hlc,
+  }) async {
+    await _db.transaction(() async {
+      final now = DateTime.now().toUtc();
+
+      await _db
+          .into(_db.readingPositions)
+          .insertOnConflictUpdate(
+            ReadingPositionsCompanion.insert(
+              bookId: bookId,
+              blockId: locator.blockId,
+              charOffset: locator.charOffset,
+              parserVersion: locator.parserVersion,
+              hlc: hlc,
+              updatedAt: now,
+            ),
+          );
+
+      await _enqueue(
+        entityType: 'position',
+        entityId: bookId,
+        payload: locator.toJson(),
+        hlc: hlc,
+        now: now,
+      );
+    });
+  }
+
+  // -- profiles ------------------------------------------------------
+
+  /// Built-in presets first, then the reader's own profiles.
+  ///
+  /// Presets are not stored, so changing one in code takes effect without a
+  /// migration. A fork is an ordinary stored row.
+  Future<List<ReadingProfile>> allProfiles() async {
+    final rows = await _db.select(_db.storedProfiles).get();
+
+    return [
+      ...Presets.all,
+      for (final row in rows)
+        ReadingProfile(
+          id: row.id,
+          name: row.name,
+          pacing: PacingConfig.fromJson(
+            jsonDecode(row.pacingJson) as Map<String, dynamic>,
+          ),
+          presentation: PresentationConfig.fromJson(
+            jsonDecode(row.presentationJson) as Map<String, dynamic>,
+          ),
+          rewindWords: row.rewindWords,
+        ),
+    ];
+  }
+
+  Future<void> saveProfile(
+    ReadingProfile profile, {
+    required String hlc,
+  }) async {
+    if (profile.isBuiltIn) {
+      throw ArgumentError('Built-in presets are not stored; fork one first.');
+    }
+
+    await _db.transaction(() async {
+      final now = DateTime.now().toUtc();
+
+      await _db
+          .into(_db.storedProfiles)
+          .insertOnConflictUpdate(
+            StoredProfilesCompanion.insert(
+              id: profile.id,
+              name: profile.name,
+              pacingJson: jsonEncode(profile.pacing.toJson()),
+              presentationJson: jsonEncode(profile.presentation.toJson()),
+              rewindWords: Value(profile.rewindWords),
+              hlc: hlc,
+              updatedAt: now,
+            ),
+          );
+
+      await _enqueue(
+        entityType: 'profile',
+        entityId: profile.id,
+        payload: profile.toJson(),
+        hlc: hlc,
+        now: now,
+      );
+    });
+  }
+
+  // -- preferences ---------------------------------------------------
+
+  Future<String?> preference(String key) async {
+    final row = await (_db.select(
+      _db.preferences,
+    )..where((p) => p.key.equals(key))).getSingleOrNull();
+
+    return row?.value;
+  }
+
+  Future<void> setPreference(
+    String key,
+    String value, {
+    required String hlc,
+  }) async {
+    await _db
+        .into(_db.preferences)
+        .insertOnConflictUpdate(
+          PreferencesCompanion.insert(key: key, value: value, hlc: hlc),
+        );
+  }
+
+  // -- outbox --------------------------------------------------------
+
+  /// Unsent events, oldest first, skipping any parked after repeated
+  /// failures so one bad event cannot block the queue behind it.
+  Future<List<OutboxEvent>> pendingEvents({int limit = 100}) {
+    return (_db.select(_db.outboxEvents)
+          ..where((e) => e.attempts.isSmallerThanValue(5))
+          ..orderBy([(e) => OrderingTerm.asc(e.id)])
+          ..limit(limit))
+        .get();
+  }
+
+  Future<void> markSent(Iterable<int> ids) =>
+      (_db.delete(_db.outboxEvents)..where((e) => e.id.isIn(ids))).go();
+
+  Future<void> markFailed(int id, String error) {
+    return (_db.update(_db.outboxEvents)..where((e) => e.id.equals(id))).write(
+      OutboxEventsCompanion(
+        attempts: const Value.absent(),
+        lastError: Value(error),
+      ),
+    );
+  }
+
+  Future<void> _enqueue({
+    required String entityType,
+    required String entityId,
+    required Map<String, dynamic> payload,
+    required String hlc,
+    required DateTime now,
+  }) {
+    return _db
+        .into(_db.outboxEvents)
+        .insert(
+          OutboxEventsCompanion.insert(
+            // The HLC stamp is unique per device and write, so it doubles as
+            // the idempotency key rather than needing a separate uuid.
+            idempotencyKey: '$entityType:$entityId:$hlc',
+            entityType: entityType,
+            entityId: entityId,
+            payloadJson: jsonEncode(payload),
+            hlc: hlc,
+            createdAt: now,
+          ),
+          mode: InsertMode.insertOrIgnore,
+        );
+  }
+}
