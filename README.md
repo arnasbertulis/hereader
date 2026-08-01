@@ -4,7 +4,7 @@
 
 A configurable reading surface. Text is presented one word at a time in a fixed position, instead of as a page you scan with your eyes.
 
-**Status: in active development.** The reading engine is complete and tested, and pasted text can be read in the app. There is no way to open a book yet. See [Current state](#current-state) for what works today.
+**Status: in active development.** Books can be imported, read, and picked up again where you left off, on a single device. Sync and the backend are not built. See [Current state](#current-state) for what works today.
 
 ---
 
@@ -47,21 +47,21 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 **Working**
 
 - [x] Monorepo scaffold: two pure Dart packages plus the Flutter app
-- [x] `Token` model with source character offsets and pause classification
-- [x] Tokenizer: whitespace splitting, attached punctuation, clause and sentence and paragraph pauses, abbreviation handling, numeric separators, line-break hyphen rejoining, Unicode-aware letter counting
+- [x] Tokenizer: whitespace splitting, attached punctuation, clause and sentence and paragraph pauses, abbreviation handling, numeric separators and units, line-break hyphen rejoining, Unicode-aware letter counting
 - [x] Pacing models: constant, length-scaled, and reader-elicited advance
 - [x] Reading profiles: pacing plus presentation settings, JSON round-tripping, forkable built-in presets
 - [x] Playback state machine: play, pause, rewind-on-resume, reader-driven advance, seek by character offset
-- [x] Test suite covering all of the above, including effective words per minute over real prose and virtual-clock playback timing
-- [x] CI running analyzer and tests on every push
+- [x] EPUB parsing: zip container, manifest and spine, HTML normalisation into blocks with stable ids
+- [x] Front matter detection, so a book opens on its text rather than its licence page
 - [x] Reading surface: word anchored per profile, punctuation gaps, keyboard control, reduce-motion support
-- [x] Paste-to-read screen with preset selection
+- [x] Library: import, list, open, remove, and resume where you left off after a restart
+- [x] Local persistence with drift, including an outbox for changes waiting to sync
+- [x] Test suite across all of the above, including a real Project Gutenberg book as a golden fixture, effective words per minute over real prose, and virtual-clock playback timing
+- [x] CI running analyzer and tests on every push, across every package and the app
 
 **Not started**
 
-- [ ] EPUB parsing and normalisation
-- [ ] Library screen, settings, and reading from a file
-- [ ] Local persistence
+- [ ] Settings screen and chapter navigation
 - [ ] Backend: auth, sync event log, conflict resolution
 - [ ] Deployment
 
@@ -73,9 +73,13 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 
 **Pacing returns a decision, not a duration.** Reader-elicited advance has no duration; the word waits for input that may never arrive. Encoding that as a zero or sentinel `Duration` would make one value mean two things, so `decide` returns a sealed type with `Hold` and `AwaitAdvance` variants. Recorded in [`docs/adr/0003-pacing-decision-model.md`](docs/adr/0003-pacing-decision-model.md).
 
+**Book files are stored; parsed text is not.** Parsed output is derived data, and a parser change invalidates every cached copy. Keeping the source file means the parser stays the single source of truth and a normalisation improvement applies to books already in the library. Recorded in [`docs/adr/0004-store-book-files.md`](docs/adr/0004-store-book-files.md).
+
+**Front matter is skipped, never removed.** Dropping blocks would shift every block id and invalidate saved positions, and a wrong guess would delete real text with no way back. Detection only reports a suggested opening index, so the reader can rewind into the licence page if they want it.
+
 **Waiting for the reader is not the same as being paused.** Under reader-elicited pacing the session sits in `awaitingAdvance`, a distinct state from `paused`. Collapsing the two would make the pause button meaningless in that mode and would fire the profile's rewind on every single word.
 
-**Profiles are plain data, including their colours.** Presentation settings live in the pure Dart engine rather than the Flutter app, so they serialise, round-trip and test without a widget harness. The cost is that colours are stored as ARGB integers and the app maps them at the boundary. Profiles cross the sync boundary later, which is what makes this worth the small ugliness.
+**Profiles are plain data, including their colours.** Presentation settings live in the pure Dart engine rather than the Flutter app, so they serialise, round-trip and test without a widget harness. The cost is that colours are stored as ARGB integers and the app maps them at the boundary.
 
 **Punctuation stays attached to its word.** Flashing a lone comma on screen makes no sense. It also means the tokenizer only inspects the *end* of a token, so interior periods and commas stop being a special case. `1,234.56`, `don't`, and `e.g.` all fall out of one rule rather than three.
 
@@ -83,18 +87,19 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 
 **Hyphenation is resolved during the walk, not by preprocessing.** Rewriting the source string to strip `-\n` would invalidate every character offset computed afterward.
 
-**The reading engine has no Flutter dependency.** `rsvp_engine` and `epub_reader` are plain Dart, so the entire core is testable in under a second without a widget harness. Playback timing is tested against a virtual clock, so a five-minute reading session runs in microseconds.
+**The reading engine has no Flutter dependency.** `rsvp_engine` and `epub_reader` are plain Dart, so the entire core is testable in about a second without a widget harness. Playback timing is tested against a virtual clock, so a five-minute reading session runs in microseconds.
 
-**Books imported by the user never leave the device.** Parsing happens on-device. The server stores reading positions, preferences, and metadata only. This is a deliberate privacy and licensing decision.
+**Books imported by the reader never leave the device.** Parsing happens on-device. The server stores reading positions, preferences, and metadata only. This is a deliberate privacy and licensing decision, and it is why a book has to be imported on each device that reads it.
 
 ---
 
 ## Repository layout
 
 ```
-packages/rsvp_engine/     Pure Dart. Tokenizer, pacing models,
-                          reading profiles, playback state machine.
-packages/epub_reader/     Pure Dart. EPUB container parsing.    (not started)
+packages/rsvp_engine/     Pure Dart. Tokenizer, pacing models, reading
+                          profiles, playback state machine, locators.
+packages/epub_reader/     Pure Dart. Zip container and OPF parsing, HTML
+                          normalisation, front matter detection.
 app/                      Flutter client. Android, Windows, web.
 server/                   API service. Auth, sync event log.    (not started)
 docs/adr/                 Architecture decision records.
@@ -109,26 +114,35 @@ Requires the Flutter SDK, which bundles Dart.
 
 ```bash
 git clone https://github.com/arnasbertulis/hereader.git
-cd hereader/packages/rsvp_engine
-dart test
-dart analyze
-```
+cd hereader
 
-The app currently opens on a paste screen: drop in any text, choose a profile, and read it. Book import comes next.
+cd packages/rsvp_engine && dart test && dart analyze
+cd ../epub_reader && dart test && dart analyze
+```
 
 ```bash
 cd app
-flutter run -d windows   # or -d chrome
+flutter pub get
+flutter run -d windows   # or -d chrome, or a connected Android device
 ```
+
+Add an EPUB from the library screen and read it. Books and reading positions
+persist across restarts. There is also a paste screen for reading arbitrary
+text without a file.
 
 ---
 
 ## Known limitations
 
+- Books do not transfer between devices. Reading positions sync once the backend exists, but the file itself has to be imported on each device.
+- Every book open re-parses the file, which takes a few hundred milliseconds for a novel. Caching parsed blocks keyed by parser version is the fix if this becomes a problem.
+- Book bytes live in a database column. Fine for text, less comfortable for a heavily illustrated volume of tens of megabytes.
+- A reading position is saved when the reader closes a book, not periodically. Killing the app mid-chapter loses the place.
+- Front matter detection uses an explicit marker where a book provides one, and pattern matching otherwise. The pattern path is a guess, capped at fifteen percent of a book and never destructive, but it can still skip a dedication that looks like a rights line.
+- Tables, images, figures and MathML are dropped rather than flattened. Reading a table cell one word at a time loses what made it a table.
 - The tokenizer reads `Chapter 3.` as a sentence end. Telling list numbering apart from sentence terminators needs context the current design does not carry.
 - The abbreviation list is English-only, while the numeric suffix list defaults to Lithuanian and metric units. Both are constructor parameters on `Tokenizer`, so a per-language set can be supplied, but nothing selects one automatically yet.
 - A date that genuinely ends a sentence, such as `įvyko 2005 m.`, loses its sentence pause, because the unit is treated as an abbreviation rather than a terminator. Same ambiguity as `e.g.`, and unsolvable without more context than the tokenizer carries.
-- No handling yet for sentence boundaries that are ambiguous across quotation marks.
 - Length-scaled pacing normalises against a fixed reference word length, so the configured words-per-minute is only accurate on average. Text whose mean word length differs sharply from English will read faster or slower than the setting says.
 - Chunk sizes above one token are rejected. Showing several words per advance requires pacing to decide over a group rather than a token, which the engine does not do yet.
 - Pausing mid-word restarts that word's full duration on resume rather than preserving the remainder. The difference is a few hundred milliseconds and was not judged worth the bookkeeping.
@@ -142,14 +156,15 @@ flutter run -d windows   # or -d chrome
 
 ## Roadmap
 
-1. EPUB import, block normalisation, and the reader surface
-2. Local library and progress persistence
-3. Backend auth and offline-first sync with conflict resolution
+1. Backend auth and offline-first sync with conflict resolution, over the outbox that already exists
+2. Settings screen, so profiles can be edited rather than only chosen
+3. Chapter navigation from the book's own table of contents
 4. Bookmarks and highlights over the same sync event log
-5. Public domain catalogue via OPDS feeds, with server-side ingestion
-6. Google sign-in as an additional identity source
-7. PDF support, which needs column detection, header and footer stripping, and reading-order reconstruction
-8. Continuous scrolling presentation, as a separate renderer rather than a toggle. Smooth scroll needs constant velocity, so honouring a per-token duration would make text surge and stall mid-sentence. Whether per-token pacing collapses into a single velocity, or that mode drops pacing entirely, is unresolved.
+5. Book transfer between devices, either over the local network or through the platform share sheet. Relaying files through the server is deliberately excluded: it would make this a service that transmits copyrighted content, which storing books on-device exists to avoid.
+6. Public domain catalogue via OPDS feeds, with server-side ingestion
+7. Google sign-in as an additional identity source
+8. PDF support, which needs column detection, header and footer stripping, and reading-order reconstruction
+9. Continuous scrolling presentation, as a separate renderer rather than a toggle. Smooth scroll needs constant velocity, so honouring a per-token duration would make text surge and stall mid-sentence. Whether per-token pacing collapses into a single velocity, or that mode drops pacing entirely, is unresolved.
 
 ---
 
