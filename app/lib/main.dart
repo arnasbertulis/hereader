@@ -1,15 +1,27 @@
-import 'package:app/reading/library_screen.dart';
 import 'package:flutter/material.dart';
 
-void main() => runApp(const HereaderApp());
+import 'data/database.dart';
+import 'data/library_repository.dart';
+import 'reading/library_screen.dart';
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  final database = AppDatabase();
+  runApp(HereaderApp(repository: LibraryRepository(database)));
+}
 
 class HereaderApp extends StatelessWidget {
-  const HereaderApp({super.key});
+  final LibraryRepository repository;
+
+  const HereaderApp({super.key, required this.repository});
 
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    title: 'Hereader',
-    theme: ThemeData(useMaterial3: true),
-    home: const LibraryScreen(),
-  );
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Hereader',
+      theme: ThemeData(useMaterial3: true),
+      home: LibraryScreen(repository: repository),
+    );
+  }
 }

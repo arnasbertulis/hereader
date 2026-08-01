@@ -3,61 +3,124 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
+import '../data/library_repository.dart';
 import 'library_book.dart';
+import 'paste_reader_screen.dart';
 import 'reader_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
-  const LibraryScreen({super.key});
+  final LibraryRepository repository;
+
+  const LibraryScreen({super.key, required this.repository});
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
 }
 
 class _LibraryScreenState extends State<LibraryScreen> {
-  final _books = <LibraryBook>[];
-  bool _importing = false;
+  bool _busy = false;
+
+  LibraryRepository get _repo => widget.repository;
 
   Future<void> _import() async {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['epub'],
+      // Bytes rather than a path: the web has no file behind the picker, and
+      // the bytes are what gets stored anyway.
       withData: true,
     );
 
     final bytes = result?.files.singleOrNull?.bytes;
     if (bytes == null || !mounted) return;
 
-    setState(() => _importing = true);
+    setState(() => _busy = true);
 
     try {
       final book = await const BookImporter().import(bytes);
-      if (!mounted) return;
 
-      setState(() {
-        _books.removeWhere((b) => b.id == book.id);
-        _books.insert(0, book);
-      });
+      await _repo.addBook(
+        id: book.id,
+        title: book.title,
+        author: book.author,
+        language: book.language,
+        bytes: bytes,
+        wordCount: book.text.length,
+      );
     } on EpubException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message)));
+      _report(e.message);
     } finally {
-      if (mounted) setState(() => _importing = false);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _open(LibraryBook book) async {
-    final position = await Navigator.of(context).push<Locator?>(
-      MaterialPageRoute(builder: (_) => ReaderScreen(book: book)),
+  Future<void> _open(BookSummary summary) async {
+    setState(() => _busy = true);
+
+    try {
+      final bytes = await _repo.bytesOf(summary.id);
+      if (bytes == null) {
+        _report('That book is not on this device.');
+        return;
+      }
+
+      // Re-parsed rather than cached: the parser is the single source of
+      // truth for block ids and offsets, so a normalizer change applies to
+      // books already in the library instead of invalidating them.
+      final parsed = await const BookImporter().import(bytes);
+      final book = parsed.withPosition(summary.position);
+
+      if (!mounted) return;
+
+      final position = await Navigator.of(context).push<Locator?>(
+        MaterialPageRoute(builder: (_) => ReaderScreen(book: book)),
+      );
+
+      if (position == null) return;
+
+      await _repo.savePosition(
+        bookId: summary.id,
+        locator: position,
+        // Placeholder until the hybrid logical clock lands. Wall clocks are
+        // not monotonic across devices, which is exactly what the HLC fixes.
+        hlc: DateTime.now().toUtc().toIso8601String(),
+      );
+    } on EpubException catch (e) {
+      _report(e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _confirmRemove(BookSummary summary) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Remove ${summary.title}?'),
+        content: const Text(
+          'The file and your place in it are deleted from this device.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Keep'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
     );
 
-    if (position == null || !mounted) return;
+    if (confirmed == true) await _repo.removeBook(summary.id);
+  }
 
-    setState(() {
-      final i = _books.indexWhere((b) => b.id == book.id);
-      if (i != -1) _books[i] = _books[i].withPosition(position);
-    });
+  void _report(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -67,31 +130,63 @@ class _LibraryScreenState extends State<LibraryScreen> {
         title: const Text('Library'),
         actions: [
           IconButton(
-            onPressed: _importing ? null : _import,
+            onPressed: _busy
+                ? null
+                : () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const PasteReaderScreen(),
+                    ),
+                  ),
+            icon: const Icon(Icons.content_paste),
+            tooltip: 'Read pasted text',
+          ),
+          IconButton(
+            onPressed: _busy ? null : _import,
             icon: const Icon(Icons.add),
             tooltip: 'Add a book',
           ),
         ],
       ),
-      body: _importing
-          ? const Center(child: CircularProgressIndicator())
-          : _books.isEmpty
-          ? _EmptyLibrary(onImport: _import)
-          : ListView.separated(
-              itemCount: _books.length,
-              separatorBuilder: (_, _) => const Divider(height: 1),
-              itemBuilder: (_, i) =>
-                  _BookTile(book: _books[i], onTap: () => _open(_books[i])),
+      body: StreamBuilder<List<BookSummary>>(
+        stream: _repo.watchLibrary(),
+        builder: (context, snapshot) {
+          if (_busy) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final books = snapshot.data;
+          if (books == null) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (books.isEmpty) {
+            return _EmptyLibrary(onImport: _import);
+          }
+
+          return ListView.separated(
+            itemCount: books.length,
+            separatorBuilder: (_, _) => const Divider(height: 1),
+            itemBuilder: (_, i) => _BookTile(
+              book: books[i],
+              onTap: () => _open(books[i]),
+              onRemove: () => _confirmRemove(books[i]),
             ),
+          );
+        },
+      ),
     );
   }
 }
 
 class _BookTile extends StatelessWidget {
-  final LibraryBook book;
+  final BookSummary book;
   final VoidCallback onTap;
+  final VoidCallback onRemove;
 
-  const _BookTile({required this.book, required this.onTap});
+  const _BookTile({
+    required this.book,
+    required this.onTap,
+    required this.onRemove,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -106,18 +201,22 @@ class _BookTile extends StatelessWidget {
           if (book.author != null) Text(book.author!),
           const SizedBox(height: 6),
           Text(
-            started
-                ? '${(book.progress * 100).round()}% through'
-                : '${book.text.length} words',
+            started ? 'In progress' : '${book.wordCount} words',
             style: Theme.of(context).textTheme.bodySmall,
           ),
-          if (started) ...[
-            const SizedBox(height: 6),
-            LinearProgressIndicator(value: book.progress),
-          ],
         ],
       ),
-      trailing: Icon(started ? Icons.play_arrow : Icons.chevron_right),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(started ? Icons.play_arrow : Icons.chevron_right),
+          IconButton(
+            onPressed: onRemove,
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Remove',
+          ),
+        ],
+      ),
       onTap: onTap,
     );
   }
