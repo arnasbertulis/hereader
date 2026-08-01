@@ -264,7 +264,8 @@ void main() {
         for (var i = 0; i < 1200; i++)
           (
             id: 'block$i',
-            text: 'This is a paragraph of ordinary prose, roughly the length '
+            text:
+                'This is a paragraph of ordinary prose, roughly the length '
                 'of a sentence in a real book.',
           ),
       ];
