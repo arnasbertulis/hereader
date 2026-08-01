@@ -20,6 +20,15 @@ class LibraryBook {
   /// Where the reader last was, or null if never opened.
   final Locator? position;
 
+  /// Token index where the book's own text appears to begin. Front matter is
+  /// still present and reachable by rewinding; this only decides where an
+  /// unread book opens.
+  final int contentStartIndex;
+
+  /// Why [contentStartIndex] is where it is. A guess should be easy for the
+  /// reader to undo; a marker the book itself provides need not be.
+  final ContentStartReason contentStartReason;
+
   const LibraryBook({
     required this.id,
     required this.title,
@@ -27,6 +36,8 @@ class LibraryBook {
     this.author,
     this.language,
     this.position,
+    this.contentStartIndex = 0,
+    this.contentStartReason = ContentStartReason.none,
   });
 
   LibraryBook withPosition(Locator? next) => LibraryBook(
@@ -36,13 +47,23 @@ class LibraryBook {
     language: language,
     text: text,
     position: next,
+    contentStartIndex: contentStartIndex,
+    contentStartReason: contentStartReason,
   );
 
-  /// Token to resume from. Falls back to the start when the stored position
-  /// refers to a block this copy of the book does not have.
+  /// True when front matter was skipped on a guess rather than on a marker
+  /// the book supplied. The reader should be offered a way back.
+  bool get skippedFrontMatterOnAGuess =>
+      contentStartReason == ContentStartReason.boilerplateHeuristic;
+
+  /// Token to resume from.
+  ///
+  /// An unread book opens past the front matter. A stored position wins over
+  /// that, and falls back to it when the position refers to a block this copy
+  /// of the book does not have.
   int get resumeIndex {
-    if (position == null) return 0;
-    return text.indexOf(position!) ?? 0;
+    if (position == null) return contentStartIndex;
+    return text.indexOf(position!) ?? contentStartIndex;
   }
 
   double get progress => position == null ? 0 : text.progressAt(resumeIndex);
@@ -52,9 +73,10 @@ class LibraryBook {
 /// closure.
 LibraryBook _parseBook(Uint8List bytes) {
   final book = const EpubParser().parse(bytes);
+  final blocks = book.readingOrder;
 
   final text = TokenizedText.from(
-    book.readingOrder.map((b) => (id: b.id, text: b.text)),
+    blocks.map((b) => (id: b.id, text: b.text)),
     tokenizer: _tokenizerFor(book.metadata.language),
     parserVersion: kParserVersion,
   );
@@ -63,12 +85,25 @@ LibraryBook _parseBook(Uint8List bytes) {
     throw const EpubException('The book contains no readable words.');
   }
 
+  final start = findContentStart(blocks);
+
+  // Blocks that tokenize to nothing are dropped from the stream, so the
+  // suggested block may have no tokens of its own. Fall back to the start
+  // rather than guessing at a nearby one.
+  final startIndex = start.blockIndex == 0
+      ? 0
+      : text.startOfBlock(blocks[start.blockIndex].id) ?? 0;
+
   return LibraryBook(
     id: _idFor(book.metadata),
     title: book.metadata.title,
     author: book.metadata.author,
     language: book.metadata.language,
     text: text,
+    contentStartIndex: startIndex,
+    contentStartReason: startIndex == 0
+        ? ContentStartReason.none
+        : start.reason,
   );
 }
 
