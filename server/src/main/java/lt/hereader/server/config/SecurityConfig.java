@@ -9,6 +9,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 
 @Configuration
 class SecurityConfig {
@@ -20,11 +22,12 @@ class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(s ->
                         s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .exceptionHandling(e -> e
+                        .authenticationEntryPoint(
+                                new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/health", "/auth/**").permitAll()
                         .anyRequest().authenticated())
-                // Must run before authorization is evaluated, so the request
-                // already knows who the caller is by then.
                 .addFilterBefore(jwt, AuthorizationFilter.class)
                 .build();
     }
