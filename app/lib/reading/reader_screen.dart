@@ -7,9 +7,22 @@ import 'package:rsvp_engine/rsvp_engine.dart';
 import 'library_book.dart';
 import 'rsvp_view.dart';
 
+/// Where the reader stopped.
+///
+/// The token index travels alongside the locator because the service has no
+/// copy of the book and cannot work out how far apart two positions are
+/// without it. The locator remains the authoritative position; this is only
+/// a hint for judging divergence.
+class ReadingResult {
+  final Locator locator;
+  final int tokenIndex;
+
+  const ReadingResult({required this.locator, required this.tokenIndex});
+}
+
 /// Full-screen reading surface for a book.
 ///
-/// Pops with the reader's final [Locator] so the library can record it.
+/// Pops with a [ReadingResult] so the library can record and sync it.
 class ReaderScreen extends StatefulWidget {
   final LibraryBook book;
 
@@ -46,7 +59,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
     super.dispose();
   }
 
-  Locator? get _position => widget.book.text.locatorAt(_session.index);
+  ReadingResult? get _result {
+    final locator = widget.book.text.locatorAt(_session.index);
+    if (locator == null) return null;
+
+    return ReadingResult(locator: locator, tokenIndex: _session.index);
+  }
 
   void _toggle() {
     if (_session.state == PlaybackState.playing ||
@@ -100,7 +118,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     PacingModelKind.constant => '${p.pacing.baseWpm.round()} words a minute',
   };
 
-  void _close() => Navigator.of(context).pop(_position);
+  void _close() => Navigator.of(context).pop(_result);
 
   @override
   Widget build(BuildContext context) {

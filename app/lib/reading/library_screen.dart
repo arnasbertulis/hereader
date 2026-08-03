@@ -1,17 +1,26 @@
 import 'package:epub_reader/epub_reader.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
+import '../sync/api_client.dart';
+import '../sync/sign_in_screen.dart';
+import '../sync/sync_engine.dart';
 import 'library_book.dart';
 import 'paste_reader_screen.dart';
 import 'reader_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
   final LibraryRepository repository;
+  final SyncEngine sync;
+  final ApiClient api;
 
-  const LibraryScreen({super.key, required this.repository});
+  const LibraryScreen({
+    super.key,
+    required this.repository,
+    required this.sync,
+    required this.api,
+  });
 
   @override
   State<LibraryScreen> createState() => _LibraryScreenState();
@@ -26,7 +35,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['epub'],
-      // Bytes rather than a path: the web has no file behind the picker, and
+      // Bytes rather than a path: the web has no file behind the dialog, and
       // the bytes are what gets stored anyway.
       withData: true,
     );
@@ -72,24 +81,40 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
       if (!mounted) return;
 
-      final position = await Navigator.of(context).push<Locator?>(
+      final result = await Navigator.of(context).push<ReadingResult>(
         MaterialPageRoute(builder: (_) => ReaderScreen(book: book)),
       );
 
-      if (position == null) return;
+      if (result == null) return;
 
       await _repo.savePosition(
         bookId: summary.id,
-        locator: position,
-        // Placeholder until the hybrid logical clock lands. Wall clocks are
-        // not monotonic across devices, which is exactly what the HLC fixes.
-        hlc: DateTime.now().toUtc().toIso8601String(),
+        locator: result.locator,
+        // A real clock stamp, not a wall-clock string: the service rejects
+        // anything that does not parse, and ordering across devices depends
+        // on this being monotonic.
+        hlc: await widget.sync.issueStamp(),
+        // The service has no copy of the book, so it cannot tell how far
+        // apart two positions are without this hint.
+        tokenIndex: result.tokenIndex,
       );
+
+      // Positions are worth sending promptly: the reader may pick up
+      // another device in a minute.
+      widget.sync.syncNow();
     } on EpubException catch (e) {
       _report(e.message);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _signIn() async {
+    final signedIn = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => SignInScreen(api: widget.api)),
+    );
+
+    if (signedIn == true) widget.sync.syncNow();
   }
 
   Future<void> _confirmRemove(BookSummary summary) async {
@@ -129,6 +154,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       appBar: AppBar(
         title: const Text('Library'),
         actions: [
+          _SyncButton(sync: widget.sync, api: widget.api, onSignIn: _signIn),
           IconButton(
             onPressed: _busy
                 ? null
@@ -173,6 +199,70 @@ class _LibraryScreenState extends State<LibraryScreen> {
           );
         },
       ),
+    );
+  }
+}
+
+/// Sync state in the app bar, and the way in to signing in.
+///
+/// Deliberately quiet. Sync failing is not the reader's problem to solve
+/// mid-chapter, so nothing here interrupts; it reports and gets out of the
+/// way.
+class _SyncButton extends StatelessWidget {
+  final SyncEngine sync;
+  final ApiClient api;
+  final VoidCallback onSignIn;
+
+  const _SyncButton({
+    required this.sync,
+    required this.api,
+    required this.onSignIn,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<SyncState>(
+      stream: sync.state,
+      builder: (context, snapshot) {
+        if (!api.auth.isSignedIn) {
+          return IconButton(
+            onPressed: onSignIn,
+            icon: const Icon(Icons.cloud_off_outlined),
+            tooltip: 'Sign in to sync',
+          );
+        }
+
+        final status = snapshot.data?.status ?? SyncStatus.idle;
+
+        return switch (status) {
+          SyncStatus.syncing => const Padding(
+            padding: EdgeInsets.all(14),
+            child: SizedBox(
+              height: 20,
+              width: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+          SyncStatus.offline => IconButton(
+            onPressed: sync.syncNow,
+            icon: const Icon(Icons.cloud_off),
+            tooltip: 'Offline. Changes are saved and will sync later.',
+          ),
+          SyncStatus.failed => IconButton(
+            onPressed: sync.syncNow,
+            icon: Icon(
+              Icons.error_outline,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            tooltip: snapshot.data?.message ?? 'Sync failed. Tap to retry.',
+          ),
+          _ => IconButton(
+            onPressed: sync.syncNow,
+            icon: const Icon(Icons.cloud_done_outlined),
+            tooltip: 'Synced. Tap to sync now.',
+          ),
+        };
+      },
     );
   }
 }

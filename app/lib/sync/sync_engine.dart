@@ -150,10 +150,21 @@ class SyncEngine {
       final pending = await repository.pendingEvents(limit: batchSize);
       if (pending.isEmpty) return;
 
-      final result = await api.push(
-        deviceId: deviceId,
-        events: pending.map(_toWireEvent).toList(),
-      );
+      final PushResult result;
+      try {
+        result = await api.push(
+          deviceId: deviceId,
+          events: pending.map(_toWireEvent).toList(),
+        );
+      } on ApiException catch (e) {
+        // The service refused this batch. Retrying it unchanged will fail
+        // the same way, so count the attempt: after enough failures these
+        // events are parked and stop blocking everything behind them.
+        for (final event in pending) {
+          await repository.markFailed(event.id, e.message);
+        }
+        rethrow;
+      }
 
       // Duplicates are not failures: the service had already seen them, so
       // they are done and should leave the queue with everything else.
