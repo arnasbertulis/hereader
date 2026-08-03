@@ -2195,6 +2195,365 @@ class OutboxEventsCompanion extends UpdateCompanion<OutboxEvent> {
   }
 }
 
+class $PositionConflictsTable extends PositionConflicts
+    with TableInfo<$PositionConflictsTable, PositionConflict> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PositionConflictsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _serverIdMeta = const VerificationMeta(
+    'serverId',
+  );
+  @override
+  late final GeneratedColumn<int> serverId = GeneratedColumn<int>(
+    'server_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _bookIdMeta = const VerificationMeta('bookId');
+  @override
+  late final GeneratedColumn<String> bookId = GeneratedColumn<String>(
+    'book_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _oursJsonMeta = const VerificationMeta(
+    'oursJson',
+  );
+  @override
+  late final GeneratedColumn<String> oursJson = GeneratedColumn<String>(
+    'ours_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _theirsJsonMeta = const VerificationMeta(
+    'theirsJson',
+  );
+  @override
+  late final GeneratedColumn<String> theirsJson = GeneratedColumn<String>(
+    'theirs_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    serverId,
+    bookId,
+    oursJson,
+    theirsJson,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'position_conflicts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PositionConflict> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('server_id')) {
+      context.handle(
+        _serverIdMeta,
+        serverId.isAcceptableOrUnknown(data['server_id']!, _serverIdMeta),
+      );
+    }
+    if (data.containsKey('book_id')) {
+      context.handle(
+        _bookIdMeta,
+        bookId.isAcceptableOrUnknown(data['book_id']!, _bookIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bookIdMeta);
+    }
+    if (data.containsKey('ours_json')) {
+      context.handle(
+        _oursJsonMeta,
+        oursJson.isAcceptableOrUnknown(data['ours_json']!, _oursJsonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_oursJsonMeta);
+    }
+    if (data.containsKey('theirs_json')) {
+      context.handle(
+        _theirsJsonMeta,
+        theirsJson.isAcceptableOrUnknown(data['theirs_json']!, _theirsJsonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_theirsJsonMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {serverId};
+  @override
+  PositionConflict map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PositionConflict(
+      serverId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}server_id'],
+      )!,
+      bookId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}book_id'],
+      )!,
+      oursJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ours_json'],
+      )!,
+      theirsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}theirs_json'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PositionConflictsTable createAlias(String alias) {
+    return $PositionConflictsTable(attachedDatabase, alias);
+  }
+}
+
+class PositionConflict extends DataClass
+    implements Insertable<PositionConflict> {
+  /// The service's id for this conflict. Resolving it means telling the
+  /// service which side won, so the local row is keyed by the remote id.
+  final int serverId;
+  final String bookId;
+
+  /// Both candidate positions, whole, so the app can show what each one is.
+  final String oursJson;
+  final String theirsJson;
+  final DateTime createdAt;
+  const PositionConflict({
+    required this.serverId,
+    required this.bookId,
+    required this.oursJson,
+    required this.theirsJson,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['server_id'] = Variable<int>(serverId);
+    map['book_id'] = Variable<String>(bookId);
+    map['ours_json'] = Variable<String>(oursJson);
+    map['theirs_json'] = Variable<String>(theirsJson);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  PositionConflictsCompanion toCompanion(bool nullToAbsent) {
+    return PositionConflictsCompanion(
+      serverId: Value(serverId),
+      bookId: Value(bookId),
+      oursJson: Value(oursJson),
+      theirsJson: Value(theirsJson),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory PositionConflict.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PositionConflict(
+      serverId: serializer.fromJson<int>(json['serverId']),
+      bookId: serializer.fromJson<String>(json['bookId']),
+      oursJson: serializer.fromJson<String>(json['oursJson']),
+      theirsJson: serializer.fromJson<String>(json['theirsJson']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'serverId': serializer.toJson<int>(serverId),
+      'bookId': serializer.toJson<String>(bookId),
+      'oursJson': serializer.toJson<String>(oursJson),
+      'theirsJson': serializer.toJson<String>(theirsJson),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  PositionConflict copyWith({
+    int? serverId,
+    String? bookId,
+    String? oursJson,
+    String? theirsJson,
+    DateTime? createdAt,
+  }) => PositionConflict(
+    serverId: serverId ?? this.serverId,
+    bookId: bookId ?? this.bookId,
+    oursJson: oursJson ?? this.oursJson,
+    theirsJson: theirsJson ?? this.theirsJson,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  PositionConflict copyWithCompanion(PositionConflictsCompanion data) {
+    return PositionConflict(
+      serverId: data.serverId.present ? data.serverId.value : this.serverId,
+      bookId: data.bookId.present ? data.bookId.value : this.bookId,
+      oursJson: data.oursJson.present ? data.oursJson.value : this.oursJson,
+      theirsJson: data.theirsJson.present
+          ? data.theirsJson.value
+          : this.theirsJson,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PositionConflict(')
+          ..write('serverId: $serverId, ')
+          ..write('bookId: $bookId, ')
+          ..write('oursJson: $oursJson, ')
+          ..write('theirsJson: $theirsJson, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(serverId, bookId, oursJson, theirsJson, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PositionConflict &&
+          other.serverId == this.serverId &&
+          other.bookId == this.bookId &&
+          other.oursJson == this.oursJson &&
+          other.theirsJson == this.theirsJson &&
+          other.createdAt == this.createdAt);
+}
+
+class PositionConflictsCompanion extends UpdateCompanion<PositionConflict> {
+  final Value<int> serverId;
+  final Value<String> bookId;
+  final Value<String> oursJson;
+  final Value<String> theirsJson;
+  final Value<DateTime> createdAt;
+  const PositionConflictsCompanion({
+    this.serverId = const Value.absent(),
+    this.bookId = const Value.absent(),
+    this.oursJson = const Value.absent(),
+    this.theirsJson = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  PositionConflictsCompanion.insert({
+    this.serverId = const Value.absent(),
+    required String bookId,
+    required String oursJson,
+    required String theirsJson,
+    required DateTime createdAt,
+  }) : bookId = Value(bookId),
+       oursJson = Value(oursJson),
+       theirsJson = Value(theirsJson),
+       createdAt = Value(createdAt);
+  static Insertable<PositionConflict> custom({
+    Expression<int>? serverId,
+    Expression<String>? bookId,
+    Expression<String>? oursJson,
+    Expression<String>? theirsJson,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (serverId != null) 'server_id': serverId,
+      if (bookId != null) 'book_id': bookId,
+      if (oursJson != null) 'ours_json': oursJson,
+      if (theirsJson != null) 'theirs_json': theirsJson,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  PositionConflictsCompanion copyWith({
+    Value<int>? serverId,
+    Value<String>? bookId,
+    Value<String>? oursJson,
+    Value<String>? theirsJson,
+    Value<DateTime>? createdAt,
+  }) {
+    return PositionConflictsCompanion(
+      serverId: serverId ?? this.serverId,
+      bookId: bookId ?? this.bookId,
+      oursJson: oursJson ?? this.oursJson,
+      theirsJson: theirsJson ?? this.theirsJson,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (serverId.present) {
+      map['server_id'] = Variable<int>(serverId.value);
+    }
+    if (bookId.present) {
+      map['book_id'] = Variable<String>(bookId.value);
+    }
+    if (oursJson.present) {
+      map['ours_json'] = Variable<String>(oursJson.value);
+    }
+    if (theirsJson.present) {
+      map['theirs_json'] = Variable<String>(theirsJson.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PositionConflictsCompanion(')
+          ..write('serverId: $serverId, ')
+          ..write('bookId: $bookId, ')
+          ..write('oursJson: $oursJson, ')
+          ..write('theirsJson: $theirsJson, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $SyncStateTable extends SyncState
     with TableInfo<$SyncStateTable, SyncStateData> {
   @override
@@ -2463,6 +2822,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $StoredProfilesTable storedProfiles = $StoredProfilesTable(this);
   late final $PreferencesTable preferences = $PreferencesTable(this);
   late final $OutboxEventsTable outboxEvents = $OutboxEventsTable(this);
+  late final $PositionConflictsTable positionConflicts =
+      $PositionConflictsTable(this);
   late final $SyncStateTable syncState = $SyncStateTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -2474,6 +2835,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     storedProfiles,
     preferences,
     outboxEvents,
+    positionConflicts,
     syncState,
   ];
   @override
@@ -3862,6 +4224,215 @@ typedef $$OutboxEventsTableProcessedTableManager =
       OutboxEvent,
       PrefetchHooks Function()
     >;
+typedef $$PositionConflictsTableCreateCompanionBuilder =
+    PositionConflictsCompanion Function({
+      Value<int> serverId,
+      required String bookId,
+      required String oursJson,
+      required String theirsJson,
+      required DateTime createdAt,
+    });
+typedef $$PositionConflictsTableUpdateCompanionBuilder =
+    PositionConflictsCompanion Function({
+      Value<int> serverId,
+      Value<String> bookId,
+      Value<String> oursJson,
+      Value<String> theirsJson,
+      Value<DateTime> createdAt,
+    });
+
+class $$PositionConflictsTableFilterComposer
+    extends Composer<_$AppDatabase, $PositionConflictsTable> {
+  $$PositionConflictsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get serverId => $composableBuilder(
+    column: $table.serverId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get bookId => $composableBuilder(
+    column: $table.bookId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get oursJson => $composableBuilder(
+    column: $table.oursJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get theirsJson => $composableBuilder(
+    column: $table.theirsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PositionConflictsTableOrderingComposer
+    extends Composer<_$AppDatabase, $PositionConflictsTable> {
+  $$PositionConflictsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get serverId => $composableBuilder(
+    column: $table.serverId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get bookId => $composableBuilder(
+    column: $table.bookId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get oursJson => $composableBuilder(
+    column: $table.oursJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get theirsJson => $composableBuilder(
+    column: $table.theirsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PositionConflictsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PositionConflictsTable> {
+  $$PositionConflictsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get serverId =>
+      $composableBuilder(column: $table.serverId, builder: (column) => column);
+
+  GeneratedColumn<String> get bookId =>
+      $composableBuilder(column: $table.bookId, builder: (column) => column);
+
+  GeneratedColumn<String> get oursJson =>
+      $composableBuilder(column: $table.oursJson, builder: (column) => column);
+
+  GeneratedColumn<String> get theirsJson => $composableBuilder(
+    column: $table.theirsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$PositionConflictsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PositionConflictsTable,
+          PositionConflict,
+          $$PositionConflictsTableFilterComposer,
+          $$PositionConflictsTableOrderingComposer,
+          $$PositionConflictsTableAnnotationComposer,
+          $$PositionConflictsTableCreateCompanionBuilder,
+          $$PositionConflictsTableUpdateCompanionBuilder,
+          (
+            PositionConflict,
+            BaseReferences<
+              _$AppDatabase,
+              $PositionConflictsTable,
+              PositionConflict
+            >,
+          ),
+          PositionConflict,
+          PrefetchHooks Function()
+        > {
+  $$PositionConflictsTableTableManager(
+    _$AppDatabase db,
+    $PositionConflictsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PositionConflictsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PositionConflictsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PositionConflictsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> serverId = const Value.absent(),
+                Value<String> bookId = const Value.absent(),
+                Value<String> oursJson = const Value.absent(),
+                Value<String> theirsJson = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => PositionConflictsCompanion(
+                serverId: serverId,
+                bookId: bookId,
+                oursJson: oursJson,
+                theirsJson: theirsJson,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> serverId = const Value.absent(),
+                required String bookId,
+                required String oursJson,
+                required String theirsJson,
+                required DateTime createdAt,
+              }) => PositionConflictsCompanion.insert(
+                serverId: serverId,
+                bookId: bookId,
+                oursJson: oursJson,
+                theirsJson: theirsJson,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PositionConflictsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PositionConflictsTable,
+      PositionConflict,
+      $$PositionConflictsTableFilterComposer,
+      $$PositionConflictsTableOrderingComposer,
+      $$PositionConflictsTableAnnotationComposer,
+      $$PositionConflictsTableCreateCompanionBuilder,
+      $$PositionConflictsTableUpdateCompanionBuilder,
+      (
+        PositionConflict,
+        BaseReferences<
+          _$AppDatabase,
+          $PositionConflictsTable,
+          PositionConflict
+        >,
+      ),
+      PositionConflict,
+      PrefetchHooks Function()
+    >;
 typedef $$SyncStateTableCreateCompanionBuilder =
     SyncStateCompanion Function({
       Value<int> id,
@@ -4034,6 +4605,8 @@ class $AppDatabaseManager {
       $$PreferencesTableTableManager(_db, _db.preferences);
   $$OutboxEventsTableTableManager get outboxEvents =>
       $$OutboxEventsTableTableManager(_db, _db.outboxEvents);
+  $$PositionConflictsTableTableManager get positionConflicts =>
+      $$PositionConflictsTableTableManager(_db, _db.positionConflicts);
   $$SyncStateTableTableManager get syncState =>
       $$SyncStateTableTableManager(_db, _db.syncState);
 }
