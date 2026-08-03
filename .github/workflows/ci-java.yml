@@ -39,7 +39,7 @@ jobs:
       JWT_SECRET: ci-only-secret-that-is-long-enough-for-hs256-signing
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up JDK 25
         uses: actions/setup-java@v4
