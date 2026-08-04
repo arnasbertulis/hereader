@@ -4,7 +4,7 @@
 
 A configurable reading surface. Text is presented one word at a time in a fixed position, instead of as a page you scan with your eyes.
 
-**Status: in active development.** Books can be imported, read, and picked up again where you left off. The sync service is built and tested but the app does not talk to it yet. See [Current state](#current-state) for what works today.
+**Status: in active development.** Books can be imported and read, and a reading position follows the reader between devices. Not deployed yet, so the service has to be run locally. See [Current state](#current-state) for what works today.
 
 ---
 
@@ -56,29 +56,30 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 - [x] Library: import, list, open, remove, and resume where you left off after a restart
 - [x] Local persistence with drift, including an outbox for changes waiting to sync
 - [x] Sync service: registration, login, token refresh, an append-only event log with per-user sequence numbers, idempotent pushes, hybrid logical clock ordering, and per-entity conflict resolution
-- [x] Test suite across all of the above, including a real Project Gutenberg book as a golden fixture, effective words per minute over real prose, virtual-clock playback timing, and sync ordering and divergence against a real Postgres
+- [x] Sync client: hybrid logical clocks in Dart, tokens in the platform keystore, transparent token refresh, an outbox drainer, and sign-in that is offered rather than required
+- [x] A sheet asking the reader which position they meant when two devices diverge
+- [x] Test suite across all of the above, including a real Project Gutenberg book as a golden fixture, effective words per minute over real prose, virtual-clock playback timing, sync ordering and divergence against a real Postgres, and the sync client against a fake service
 - [x] CI running analyzer and tests on every push, across every package, the app, and the service
 
 **Not started**
 
-- [ ] The app talking to the sync service: no HTTP client, no login screen, nothing draining the outbox
-- [ ] A screen for settling a reading position the service has flagged as diverged
-- [ ] Settings screen and chapter navigation
-- [ ] Deployment
+- [ ] Deployment: the service runs locally only
+- [ ] Settings screen, so profiles can be edited rather than only chosen
+- [ ] Chapter navigation
 
 ---
 
 ## How sync works
 
-The reader's device is authoritative for reading. Everything works with no network, because a reading app that stalls on a dead connection is a broken reading app.
+The reader's device is authoritative for reading. Everything works with no network, because a reading app that stalls on a dead connection is a broken reading app. An account is offered and never required.
 
-Writes go to the local database and append an event to an outbox. A background sender drains it when there is a connection. The service assigns each accepted event a sequence number that is monotonic per user, and other devices pull everything after the number they last saw.
+Writes go to the local database and append an event to an outbox, in one transaction: a position that reached disk without an outbox entry would never sync, and an entry without a position would sync a change the device does not have. A sender drains the outbox when there is a connection. The service assigns each accepted event a sequence number that is monotonic per user, and other devices pull everything after the number they last saw.
 
-**Ordering uses hybrid logical clocks.** Wall clocks disagree across devices, so ordering by timestamp can pick the older write. A pure counter orders correctly but loses any relation to real time. An HLC is a millisecond, a counter for writes in the same millisecond, and a device id to break ties. It sorts as a string and never moves backwards.
+**Ordering uses hybrid logical clocks.** Wall clocks disagree across devices, so ordering by timestamp can pick the older write. A pure counter orders correctly but loses any relation to real time. An HLC is a millisecond, a counter for writes in the same millisecond, and a device id to break ties. It sorts as a string and never moves backwards, even if the system clock does.
 
 Clients supply their own stamps, so the service does not trust them. A stamp more than five minutes ahead of server time is rejected rather than clamped: rewriting it would break the client's own local ordering, and a device claiming next week would otherwise win every comparison from then on.
 
-**Retries are safe.** Every event carries a client-generated idempotency key, enforced by a unique constraint rather than a check followed by an insert, so a push resent after a lost response cannot apply twice under concurrency.
+**Retries are safe.** Every event carries a client-generated idempotency key, enforced by a unique constraint rather than a check followed by an insert, so a push resent after a lost response cannot apply twice under concurrency. An event the service refuses outright counts against a limit and is eventually parked, so one bad event cannot block everything queued behind it.
 
 **Conflict resolution differs by entity, which is the substantive decision.** Preferences and profiles take last write wins, because a stale font size costs nothing. Deletions leave tombstones, because a row that vanished entirely would be resurrected by any device that was offline when it happened. Reading positions are different: being dropped in the wrong chapter is the failure a reader actually notices. Two devices within 500 tokens of each other resolve silently; beyond that, the divergence is recorded and the reader is asked which position they meant.
 
@@ -97,6 +98,10 @@ Recorded in [`docs/adr/0005-sync-event-log.md`](docs/adr/0005-sync-event-log.md)
 **Book files are stored; parsed text is not.** Parsed output is derived data, and a parser change invalidates every cached copy. Keeping the source file means the parser stays the single source of truth and a normalisation improvement applies to books already in the library. Recorded in [`docs/adr/0004-store-book-files.md`](docs/adr/0004-store-book-files.md).
 
 **The service issues its own tokens.** Not delegating to Firebase or Google as the token issuer means a social login can be added later purely as an identity source, without reworking how the API authenticates. Access and refresh tokens carry a type claim; without it a refresh token would work as an access token and quietly extend every session to the refresh window.
+
+**Tokens live in the platform keystore, not the app database.** A refresh token is a two-month credential: anyone who reads it can act as the reader until it expires. The database holds book files and reading positions, which are private but are not credentials, and it is readable by anything with the device's filesystem. On the web there is no keystore, which is one reason to treat that target as the least trusted.
+
+**The divergence hint is used by the service and ignored by the reader.** A position carries a token index so the service can judge how far apart two devices are without holding a copy of the book. It cannot verify that number. The service uses it for a threshold, where a wrong value costs a prompt that was not needed or misses one that was. The app does not show it: both candidates are resolved against this device's own copy, because a sheet promising 30% through and then landing the reader at 4% is worse than no sheet at all.
 
 **Front matter is skipped, never removed.** Dropping blocks would shift every block id and invalidate saved positions, and a wrong guess would delete real text with no way back. Detection only reports a suggested opening index, so the reader can rewind into the licence page if they want it.
 
@@ -120,7 +125,8 @@ Recorded in [`docs/adr/0005-sync-event-log.md`](docs/adr/0005-sync-event-log.md)
 
 ```
 packages/rsvp_engine/     Pure Dart. Tokenizer, pacing models, reading
-                          profiles, playback state machine, locators.
+                          profiles, playback state machine, locators,
+                          hybrid logical clocks.
 packages/epub_reader/     Pure Dart. Zip container and OPF parsing, HTML
                           normalisation, front matter detection.
 app/                      Flutter client. Android, Windows, web.
@@ -134,29 +140,10 @@ docs/research/            Evidence notes behind the design.
 
 ## Running it
 
-### The reading app
-
-Requires the Flutter SDK, which bundles Dart.
-
-```bash
-git clone https://github.com/arnasbertulis/hereader.git
-cd hereader
-
-cd packages/rsvp_engine && dart test && dart analyze
-cd ../epub_reader && dart test && dart analyze
-```
-
-```bash
-cd app
-flutter pub get
-flutter run -d windows   # or -d chrome, or a connected Android device
-```
-
-Add an EPUB from the library screen and read it. Books and reading positions
-persist across restarts. There is also a paste screen for reading arbitrary
-text without a file.
-
 ### The sync service
+
+Optional: the app reads perfectly well without it, and only needs it to sync
+between devices.
 
 Requires JDK 25 and a Postgres. The Maven wrapper handles the rest.
 
@@ -181,15 +168,47 @@ service can reach its database, not merely whether the process is alive.
 ./mvnw verify   # tests need a hereader_test database
 ```
 
+### The reading app
+
+Requires the Flutter SDK, which bundles Dart.
+
+```bash
+git clone https://github.com/arnasbertulis/hereader.git
+cd hereader
+
+cd packages/rsvp_engine && dart test && dart analyze
+cd ../epub_reader && dart test && dart analyze
+```
+
+```bash
+cd app
+flutter pub get
+flutter run -d windows   # or -d chrome, or a connected Android device
+```
+
+Add an EPUB from the library screen and read it. Books and reading positions
+persist across restarts. There is also a paste screen for reading arbitrary
+text without a file.
+
+The app expects the service on `http://localhost:8080`. Point it elsewhere at
+build time:
+
+```bash
+flutter run --dart-define=HEREADER_API=https://api.example.com
+```
+
 ---
 
 ## Known limitations
 
-- The app does not yet talk to the sync service. Everything on the client is local, and the outbox fills with events nothing sends.
+- Not deployed. The service runs locally, so syncing between two devices means both reaching the same machine.
 - Books do not transfer between devices. Reading positions sync, but the file itself has to be imported on each device.
-- Position divergence is judged from a token index the client supplies alongside the locator. The service cannot verify it, and does not need to: a wrong value causes a prompt that was not needed, or misses one that was, and the locator itself remains authoritative.
+- Opening a book waits on a sync attempt so the reader never starts from a position that is about to change. A slow connection therefore delays opening, bounded by a fifteen second request timeout.
+- A rejected batch counts the attempt against every event in it, not just the one the service objected to. Coarse, but the alternative is pushing events one at a time.
+- Position divergence is judged from a token index the client supplies. The service cannot verify it, and a wrong value causes a prompt that was not needed or misses one that was. The locator itself remains authoritative, and the app resolves both candidates locally rather than trusting the hint.
 - Duplicate events consume a sequence number that is then skipped, so the log has gaps and `lastSeq` overstates how many events exist. Harmless, since clients ask for everything after a number rather than counting.
 - The event log grows without bound. Compaction is not implemented and is not needed at the scale this will see.
+- Profiles arrive from other devices but are not applied, because editing them needs a settings screen that does not exist yet.
 - Every book open re-parses the file, which takes a few hundred milliseconds for a novel. Caching parsed blocks keyed by parser version is the fix if this becomes a problem.
 - Book bytes live in a database column. Fine for text, less comfortable for a heavily illustrated volume of tens of megabytes.
 - A reading position is saved when the reader closes a book, not periodically. Killing the app mid-chapter loses the place.
@@ -203,7 +222,7 @@ service can reach its database, not merely whether the process is alive.
 - Pausing mid-word restarts that word's full duration on resume rather than preserving the remainder. The difference is a few hundred milliseconds and was not judged worth the bookkeeping.
 - The optimal recognition point highlight is offered as a preference with no evidence behind it. None of the studies above tested it.
 - iOS is untested. The codebase targets it, but building and signing requires macOS hardware.
-- Flutter web renders text to canvas rather than DOM, so screen reader support on the web target is weaker than a conventional website.
+- Flutter web renders text to canvas rather than DOM, so screen reader support on the web target is weaker than a conventional website. There is also no keystore there, so tokens fall back to local storage.
 - The supporting research is small-sample and predates modern displays. Rubin and Turano tested 23 people in 1994; Arditi tested 15 in 1999. These are the best available comparisons, not large trials.
 - No study cited here measures reading comprehension. Every figure is a reading rate.
 
@@ -211,17 +230,15 @@ service can reach its database, not merely whether the process is alive.
 
 ## Roadmap
 
-1. The sync client: hybrid logical clocks in Dart, an authentication store, and a sender that drains the outbox
-2. A screen for settling a diverged reading position, without which the conflict design is invisible to the reader
-3. Deployment to a public URL, with the service containerised and deployed on merge
-4. Settings screen, so profiles can be edited rather than only chosen
-5. Chapter navigation from the book's own table of contents
-6. Bookmarks and highlights over the same sync event log
-7. Book transfer between devices, either over the local network or through the platform share sheet. Relaying files through the service is deliberately excluded: it would make this a system that transmits copyrighted content, which storing books on-device exists to avoid.
-8. Public domain catalogue via OPDS feeds, with server-side ingestion
-9. Google sign-in as an additional identity source
-10. PDF support, which needs column detection, header and footer stripping, and reading-order reconstruction
-11. Continuous scrolling presentation, as a separate renderer rather than a toggle. Smooth scroll needs constant velocity, so honouring a per-token duration would make text surge and stall mid-sentence. Whether per-token pacing collapses into a single velocity, or that mode drops pacing entirely, is unresolved.
+1. Deployment to a public URL, with the service containerised and deployed on merge
+2. Settings screen, so profiles can be edited rather than only chosen
+3. Chapter navigation from the book's own table of contents
+4. Bookmarks and highlights over the same sync event log
+5. Book transfer between devices, either over the local network or through the platform share sheet. Relaying files through the service is deliberately excluded: it would make this a system that transmits copyrighted content, which storing books on-device exists to avoid.
+6. Public domain catalogue via OPDS feeds, with server-side ingestion
+7. Google sign-in as an additional identity source
+8. PDF support, which needs column detection, header and footer stripping, and reading-order reconstruction
+9. Continuous scrolling presentation, as a separate renderer rather than a toggle. Smooth scroll needs constant velocity, so honouring a per-token duration would make text surge and stall mid-sentence. Whether per-token pacing collapses into a single velocity, or that mode drops pacing entirely, is unresolved.
 
 ---
 
