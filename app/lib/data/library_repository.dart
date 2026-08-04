@@ -130,10 +130,16 @@ class LibraryRepository {
   /// Both writes happen in one transaction: a position that reaches disk
   /// without an outbox entry would never sync, and an outbox entry without
   /// a position would sync a change this device does not have.
+  ///
+  /// [tokenIndex] travels with the locator as a hint for how far into the
+  /// book this is. The service cannot derive that itself — it has no copy of
+  /// the book — and uses it to judge whether two devices have genuinely
+  /// diverged or are a few words apart.
   Future<void> savePosition({
     required String bookId,
     required Locator locator,
     required String hlc,
+    int? tokenIndex,
   }) async {
     await _db.transaction(() async {
       final now = DateTime.now().toUtc();
@@ -154,10 +160,49 @@ class LibraryRepository {
       await _enqueue(
         entityType: 'position',
         entityId: bookId,
-        payload: locator.toJson(),
+        payload: {...locator.toJson(), 'tokenIndex': ?tokenIndex},
         hlc: hlc,
         now: now,
       );
+    });
+  }
+
+  /// Writes a position that came from another device.
+  ///
+  /// Deliberately does not enqueue an outbox event. The service already has
+  /// this write — that is where it came from — and sending it back would
+  /// loop, with each round trip producing another event.
+  ///
+  /// The stamp comparison is a second line of defence. The service has
+  /// already decided which write wins, but an event can arrive after a newer
+  /// local write on this device, and applying it would move the reader
+  /// backwards.
+  Future<void> applyRemotePosition({
+    required String bookId,
+    required Locator locator,
+    required String hlc,
+  }) async {
+    await _db.transaction(() async {
+      final existing = await (_db.select(
+        _db.readingPositions,
+      )..where((p) => p.bookId.equals(bookId))).getSingleOrNull();
+
+      // Stamps are fixed-width, so comparing them as text gives the same
+      // order as comparing the parts.
+      if (existing != null && existing.hlc.compareTo(hlc) >= 0) return;
+
+      await _db
+          .into(_db.readingPositions)
+          .insertOnConflictUpdate(
+            ReadingPositionsCompanion.insert(
+              bookId: bookId,
+              blockId: locator.blockId,
+              charOffset: locator.charOffset,
+              parserVersion: locator.parserVersion,
+              hlc: hlc,
+              updatedAt: DateTime.now().toUtc(),
+            ),
+          );
     });
   }
 
@@ -244,6 +289,58 @@ class LibraryRepository {
         );
   }
 
+  /// Writes a preference that came from another device.
+  ///
+  /// Not enqueued, for the same reason as [applyRemotePosition].
+  Future<void> applyRemotePreference({
+    required String key,
+    required String value,
+    required String hlc,
+  }) async {
+    await _db.transaction(() async {
+      final existing = await (_db.select(
+        _db.preferences,
+      )..where((p) => p.key.equals(key))).getSingleOrNull();
+
+      if (existing != null && existing.hlc.compareTo(hlc) >= 0) return;
+
+      await _db
+          .into(_db.preferences)
+          .insertOnConflictUpdate(
+            PreferencesCompanion.insert(key: key, value: value, hlc: hlc),
+          );
+    });
+  }
+
+  // -- position conflicts --------------------------------------------
+
+  Future<void> recordPositionConflict({
+    required int serverId,
+    required String bookId,
+    required String ours,
+    required String theirs,
+  }) async {
+    await _db
+        .into(_db.positionConflicts)
+        .insertOnConflictUpdate(
+          PositionConflictsCompanion.insert(
+            serverId: Value(serverId),
+            bookId: bookId,
+            oursJson: ours,
+            theirsJson: theirs,
+            createdAt: DateTime.now().toUtc(),
+          ),
+        );
+  }
+
+  /// Divergences the reader has not settled yet.
+  Stream<List<PositionConflict>> watchConflicts() =>
+      _db.select(_db.positionConflicts).watch();
+
+  Future<void> clearPositionConflict(int serverId) => (_db.delete(
+    _db.positionConflicts,
+  )..where((c) => c.serverId.equals(serverId))).go();
+
   // -- outbox --------------------------------------------------------
 
   /// Unsent events, oldest first, skipping any parked after repeated
@@ -256,15 +353,29 @@ class LibraryRepository {
         .get();
   }
 
+  /// How many events are waiting, for the app to show.
+  Stream<int> watchPendingCount() {
+    final count = _db.outboxEvents.id.count();
+
+    return (_db.selectOnly(
+      _db.outboxEvents,
+    )..addColumns([count])).watchSingle().map((row) => row.read(count) ?? 0);
+  }
+
   Future<void> markSent(Iterable<int> ids) =>
       (_db.delete(_db.outboxEvents)..where((e) => e.id.isIn(ids))).go();
 
-  Future<void> markFailed(int id, String error) {
-    return (_db.update(_db.outboxEvents)..where((e) => e.id.equals(id))).write(
-      OutboxEventsCompanion(
-        attempts: const Value.absent(),
-        lastError: Value(error),
-      ),
+  /// Records a failed send and counts the attempt.
+  ///
+  /// Written as a raw statement because the increment reads the current
+  /// value: a read followed by a write could lose a count if two drains
+  /// overlapped.
+  Future<void> markFailed(int id, String error) async {
+    await _db.customUpdate(
+      'update outbox_events set attempts = attempts + 1, last_error = ? '
+      'where id = ?',
+      variables: [Variable.withString(error), Variable.withInt(id)],
+      updates: {_db.outboxEvents},
     );
   }
 

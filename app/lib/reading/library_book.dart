@@ -3,12 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 /// A book the reader has imported.
-///
-/// Holds the parsed text in memory for now. Persistence replaces this with a
-/// row plus the file on disk; the shape stays the same.
 class LibraryBook {
-  /// Stable across restarts once persistence lands: derived from the book's
-  /// own identifier where it has one, otherwise its title and author.
+  /// Stable across devices: the book's own identifier where it has one,
+  /// otherwise its title and author.
   final String id;
 
   final String title;
@@ -56,11 +53,20 @@ class LibraryBook {
   bool get skippedFrontMatterOnAGuess =>
       contentStartReason == ContentStartReason.boilerplateHeuristic;
 
+  /// True when a stored position names a block this copy of the book does
+  /// not contain.
+  ///
+  /// Happens when a book is re-imported under a different `kParserVersion`,
+  /// or when a position synced from a device holding a different edition.
+  /// Worth reporting rather than silently restarting: a reader who appears
+  /// to have lost their place has no way to tell that from a bug.
+  bool get positionUnresolvable =>
+      position != null && text.indexOf(position!) == null;
+
   /// Token to resume from.
   ///
   /// An unread book opens past the front matter. A stored position wins over
-  /// that, and falls back to it when the position refers to a block this copy
-  /// of the book does not have.
+  /// that, and falls back to it when the position cannot be resolved.
   int get resumeIndex {
     if (position == null) return contentStartIndex;
     return text.indexOf(position!) ?? contentStartIndex;

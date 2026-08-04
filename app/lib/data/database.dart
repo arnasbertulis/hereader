@@ -95,9 +95,9 @@ class Preferences extends Table {
 
 /// Changes waiting to be sent to the server.
 ///
-/// Included from the first schema version even though nothing drains it yet.
-/// Retrofitting an outbox after positions are already being written is a
-/// migration; having the table from the start is free.
+/// Included from the first schema version even though nothing drained it
+/// then. Retrofitting an outbox after positions are already being written is
+/// a migration; having the table from the start was free.
 class OutboxEvents extends Table {
   IntColumn get id => integer().autoIncrement()();
 
@@ -123,6 +123,28 @@ class OutboxEvents extends Table {
   TextColumn get lastError => text().nullable()();
 }
 
+/// Reading positions the service says two devices disagree about.
+///
+/// Mirrored locally rather than fetched on demand so the prompt survives
+/// going offline: a reader who sees the question and then loses signal
+/// should still be able to answer it.
+class PositionConflicts extends Table {
+  /// The service's id for this conflict. Resolving it means telling the
+  /// service which side won, so the local row is keyed by the remote id.
+  IntColumn get serverId => integer()();
+
+  TextColumn get bookId => text()();
+
+  /// Both candidate positions, whole, so the app can show what each one is.
+  TextColumn get oursJson => text()();
+  TextColumn get theirsJson => text()();
+
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {serverId};
+}
+
 /// Sync bookkeeping. One row, enforced by a fixed primary key.
 class SyncState extends Table {
   IntColumn get id => integer().withDefault(const Constant(0))();
@@ -143,6 +165,7 @@ class SyncState extends Table {
     StoredProfiles,
     Preferences,
     OutboxEvents,
+    PositionConflicts,
     SyncState,
   ],
 )
@@ -151,7 +174,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: 'hereader'));
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -160,6 +183,13 @@ class AppDatabase extends _$AppDatabase {
       await into(
         syncState,
       ).insert(SyncStateCompanion.insert(), mode: InsertMode.insertOrIgnore);
+    },
+    onUpgrade: (m, from, to) async {
+      // Existing installs have every table except this one. Creating it
+      // rather than recreating the database keeps the reader's books.
+      if (from < 2) {
+        await m.createTable(positionConflicts);
+      }
     },
     beforeOpen: (details) async {
       // Foreign keys are off by default in SQLite, so the cascade on

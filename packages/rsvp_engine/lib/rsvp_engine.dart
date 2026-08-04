@@ -7,3 +7,4 @@ export 'src/profile/profile.dart';
 export 'src/profile/presets.dart';
 export 'src/playback/playback_session.dart';
 export 'src/text/tokenized_text.dart';
+export 'src/sync/hlc.dart';
