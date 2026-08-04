@@ -126,6 +126,8 @@ class SyncEngine {
       await _pushPending();
       await _pullRemote();
 
+      await _recordConflicts(await api.conflicts());
+
       await repository.setPreference(
         'sync.last_synced_at',
         DateTime.now().toUtc().toIso8601String(),

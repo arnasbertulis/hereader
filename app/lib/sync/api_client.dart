@@ -45,6 +45,8 @@ class ApiClient {
   final AuthStore auth;
   final http.Client _http;
 
+  static const _timeout = Duration(seconds: 15);
+
   /// Guards against a burst of parallel requests each triggering their own
   /// refresh. The first one refreshes; the rest wait for it.
   Future<void>? _refreshing;
@@ -187,7 +189,9 @@ class ApiClient {
       final request = http.Request(method, uri)..headers.addAll(headers);
       if (body != null) request.body = jsonEncode(body);
 
-      response = await http.Response.fromStream(await _http.send(request));
+      response = await http.Response.fromStream(
+        await _http.send(request).timeout(_timeout),
+      );
     } catch (e) {
       // Unreachable, refused, timed out: all the same to a caller, which
       // should leave its work queued and try later.
