@@ -132,6 +132,16 @@ problem requires. It is here because sync is the part of this project that is
 worth building carefully, and because the per-entity rules above are a real
 design judgment rather than a library call.
 
+The divergence hint is for the service and not for the reader. Building the client made the distinction sharper than this document originally put it.
+
+The token index a client sends is unverifiable, which is acceptable for a threshold: a wrong value costs a prompt that was not needed, or misses one that was, and the locator remains the position either way.
+
+It is not acceptable as something to show a reader. An early version of the conflict sheet displayed the hint, so a candidate labelled "30% through" landed the reader at 4% when the hint and the locator disagreed. Promising a place and then going somewhere else is worse than not asking at all.
+
+The app therefore resolves both candidates against its own copy of the book before showing them. It has the book; the service does not. A position whose block is absent from this copy is shown as unusable rather than offered.
+
+The same reasoning applies to labelling. The service's ours is whichever write last won, which is not reliably the device asking. Candidates are described by where they are in the book rather than which device wrote them.
+
 ## Alternatives considered
 
 **Firebase or another sync-as-a-service.** Rejected: it would remove the part
