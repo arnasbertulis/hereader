@@ -77,6 +77,8 @@ class AuthStore {
     _sessions.add(null);
   }
 
+  String? _deviceId;
+
   /// A stable identifier for this installation.
   ///
   /// Generated once and kept, because it is part of every clock stamp: a
@@ -86,11 +88,18 @@ class AuthStore {
   /// Not tied to any hardware identifier. Those are restricted on modern
   /// platforms, and a random value serves the purpose exactly as well.
   Future<String> deviceId() async {
-    final existing = await _storage.read(key: _deviceKey);
-    if (existing != null) return existing;
+    final cached = _deviceId;
+    if (cached != null) return cached;
+
+    final stored = await _storage.read(key: _deviceKey);
+    if (stored != null && stored.isNotEmpty) {
+      _deviceId = stored;
+      return stored;
+    }
 
     final generated = _generateDeviceId();
     await _storage.write(key: _deviceKey, value: generated);
+    _deviceId = generated;
     return generated;
   }
 
