@@ -7,6 +7,7 @@ import 'data/library_repository.dart';
 import 'reading/library_screen.dart';
 import 'sync/api_client.dart';
 import 'sync/auth_store.dart';
+import 'sync/position_conflict_sheet.dart';
 import 'sync/sync_engine.dart';
 
 /// Where the sync service lives.
@@ -53,18 +54,31 @@ class HereaderApp extends StatelessWidget {
   final SyncEngine sync;
   final ApiClient api;
 
-  const HereaderApp({
+  HereaderApp({
     super.key,
     required this.repository,
     required this.sync,
     required this.api,
   });
 
+  /// Lets the conflict watcher present a sheet over whatever route is
+  /// showing, including the reading surface.
+  final _navigatorKey = GlobalKey<NavigatorState>();
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Hereader',
       theme: ThemeData(useMaterial3: true),
+      navigatorKey: _navigatorKey,
+      // Above the app rather than inside a screen, so a divergence arriving
+      // during a periodic sync is asked about wherever the reader is.
+      builder: (context, child) => ConflictWatcher(
+        repository: repository,
+        sync: sync,
+        navigatorKey: _navigatorKey,
+        child: child ?? const SizedBox.shrink(),
+      ),
       home: LibraryScreen(repository: repository, sync: sync, api: api),
     );
   }

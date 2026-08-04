@@ -9,6 +9,7 @@ import '../sync/sync_engine.dart';
 import 'library_book.dart';
 import 'paste_reader_screen.dart';
 import 'reader_screen.dart';
+import 'dart:async';
 
 class LibraryScreen extends StatefulWidget {
   final LibraryRepository repository;
@@ -67,6 +68,31 @@ class _LibraryScreenState extends State<LibraryScreen> {
     setState(() => _busy = true);
 
     try {
+      // Sync before opening rather than only checking: a divergence may
+      // exist that this device has not heard about yet, and reading from a
+      // stale position before discovering it is the failure this whole
+      // design exists to avoid. Offline is fine — syncNow reports and
+      // returns rather than throwing, so reading never depends on a network.
+      await widget.sync.syncNow();
+
+      final conflicts = await _repo.watchConflicts().first;
+
+      if (conflicts.any((c) => c.bookId == summary.id)) {
+        // The watcher is already showing the sheet. Wait for the answer
+        // rather than sending the reader back to tap again, which would
+        // repeat the sync that just ran.
+        final settled = await _waitForConflict(summary.id);
+
+        if (!settled) {
+          // Resolving failed, most likely because the network dropped
+          // mid-choice. Better to say so than to hold the reader in a
+          // spinner indefinitely.
+          _report('Could not settle where to carry on. Try again.');
+          return;
+        }
+        if (!mounted) return;
+      }
+
       final bytes = await _repo.bytesOf(summary.id);
       if (bytes == null) {
         _report('That book is not on this device.');
@@ -77,7 +103,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
       // truth for block ids and offsets, so a normalizer change applies to
       // books already in the library instead of invalidating them.
       final parsed = await const BookImporter().import(bytes);
-      final book = parsed.withPosition(summary.position);
+
+      // Read fresh rather than trusting the summary, which was captured
+      // when the list was last built. A conflict settled moments ago would
+      // otherwise be ignored and the reader sent to the old position.
+      final stored = await _repo.positionOf(summary.id);
+      final book = parsed.withPosition(stored);
+
+      if (book.positionUnresolvable) {
+        // Silently restarting looks identical to losing the reader's place.
+        _report(
+          'Your saved place in this book could not be found, so it opens '
+          'from the start.',
+        );
+      }
 
       if (!mounted) return;
 
@@ -94,7 +133,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         // anything that does not parse, and ordering across devices depends
         // on this being monotonic.
         hlc: await widget.sync.issueStamp(),
-        // The service has no copy of the book, so it cannot tell how far
+        // The service has no copy of the book, so it cannot work out how far
         // apart two positions are without this hint.
         tokenIndex: result.tokenIndex,
       );
@@ -106,6 +145,22 @@ class _LibraryScreenState extends State<LibraryScreen> {
       _report(e.message);
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Waits for the reader to settle a divergence on [bookId].
+  ///
+  /// Bounded, because the sheet cannot be dismissed: if resolving fails the
+  /// reader would otherwise be held in a spinner with no way out.
+  Future<bool> _waitForConflict(String bookId) async {
+    try {
+      await _repo
+          .watchConflicts()
+          .firstWhere((list) => !list.any((c) => c.bookId == bookId))
+          .timeout(const Duration(minutes: 2));
+      return true;
+    } on TimeoutException {
+      return false;
     }
   }
 
@@ -173,31 +228,36 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ),
         ],
       ),
-      body: StreamBuilder<List<BookSummary>>(
-        stream: _repo.watchLibrary(),
-        builder: (context, snapshot) {
-          if (_busy) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: RefreshIndicator(
+        // Pull to sync: the periodic timer is five minutes, which is a long
+        // time to wait when you have just put down another device.
+        onRefresh: widget.sync.syncNow,
+        child: StreamBuilder<List<BookSummary>>(
+          stream: _repo.watchLibrary(),
+          builder: (context, snapshot) {
+            if (_busy) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-          final books = snapshot.data;
-          if (books == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (books.isEmpty) {
-            return _EmptyLibrary(onImport: _import);
-          }
+            final books = snapshot.data;
+            if (books == null) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (books.isEmpty) {
+              return _EmptyLibrary(onImport: _import);
+            }
 
-          return ListView.separated(
-            itemCount: books.length,
-            separatorBuilder: (_, _) => const Divider(height: 1),
-            itemBuilder: (_, i) => _BookTile(
-              book: books[i],
-              onTap: () => _open(books[i]),
-              onRemove: () => _confirmRemove(books[i]),
-            ),
-          );
-        },
+            return ListView.separated(
+              itemCount: books.length,
+              separatorBuilder: (_, _) => const Divider(height: 1),
+              itemBuilder: (_, i) => _BookTile(
+                book: books[i],
+                onTap: () => _open(books[i]),
+                onRemove: () => _confirmRemove(books[i]),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
