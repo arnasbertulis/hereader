@@ -1,6 +1,7 @@
 package lt.hereader.server.config;
 
 import lt.hereader.server.auth.JwtAuthFilter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -11,15 +12,28 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 @Configuration
 class SecurityConfig {
+
+    // Comma-separated. Defaults cover local Flutter web dev (random port
+    // per run, hence the wildcard) and the live sslip.io deployment.
+    // Overridable via env var so a future real domain doesn't need a
+    // code change, just a new value in .env.
+    @Value("${hereader.cors.allowed-origins:http://localhost:*,https://204-168-240-12.sslip.io}")
+    private String allowedOrigins;
 
     @Bean
     SecurityFilterChain filterChain(HttpSecurity http, JwtAuthFilter jwt)
             throws Exception {
         return http
                 .csrf(csrf -> csrf.disable())
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(s ->
                         s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(e -> e
@@ -30,6 +44,19 @@ class SecurityConfig {
                         .anyRequest().authenticated())
                 .addFilterBefore(jwt, AuthorizationFilter.class)
                 .build();
+    }
+
+    @Bean
+    CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOriginPatterns(List.of(allowedOrigins.split(",")));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        config.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
     }
 
     @Bean
