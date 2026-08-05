@@ -171,7 +171,19 @@ class SyncState extends Table {
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
-    : super(executor ?? driftDatabase(name: 'hereader'));
+    : super(executor ?? driftDatabase(
+        name: 'hereader',
+        // Web has no native filesystem, so drift needs sqlite3 compiled to
+        // WebAssembly plus a worker script to run it. Both files are
+        // downloaded manually into app/web/ (drift doesn't generate them):
+        // sqlite3.wasm from simolus3/sqlite3.dart releases, drift_worker.js
+        // from simolus3/drift releases. Native platforms need no equivalent
+        // setup — drift_flutter's defaults already handle those.
+        web: DriftWebOptions(
+          sqlite3Wasm: Uri.parse('sqlite3.wasm'),
+          driftWorker: Uri.parse('drift_worker.js'),
+        ),
+      ));
 
   @override
   int get schemaVersion => 2;
