@@ -18,7 +18,7 @@ import 'sync/sync_engine.dart';
 ///   flutter run --dart-define=HEREADER_API=https://api.example.com
 const _apiBase = String.fromEnvironment(
   'HEREADER_API',
-  defaultValue: 'http://localhost:8080',
+  defaultValue: 'http://localhost:8080/api',
 );
 
 Future<void> main() async {

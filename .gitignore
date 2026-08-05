@@ -35,3 +35,5 @@ application-local.properties
 app/windows/flutter/generated_plugin_registrant.cc
 app/windows/flutter/generated_plugins.cmake
 app/windows/flutter/ephemeral/
+
+server/web-dist/
