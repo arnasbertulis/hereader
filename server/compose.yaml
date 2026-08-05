@@ -2,6 +2,7 @@ services:
   db:
     image: postgres:17
     container_name: hereader-db
+    restart: unless-stopped
     environment:
       POSTGRES_DB: hereader
       POSTGRES_USER: ${DATABASE_USER}
@@ -17,6 +18,7 @@ services:
   app:
     build: .
     container_name: hereader-server
+    restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
@@ -29,6 +31,7 @@ services:
   caddy:
     image: caddy:2
     container_name: hereader-caddy
+    restart: unless-stopped
     depends_on:
       - app
     ports:
