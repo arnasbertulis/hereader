@@ -29,3 +29,8 @@ doc/api/
 .flutter-plugins
 .flutter-plugins-dependencies
 application-local.properties
+
+# Flutter Windows build artifacts — regenerated per-build, not source
+app/windows/flutter/generated_plugin_registrant.cc
+app/windows/flutter/generated_plugins.cmake
+app/windows/flutter/ephemeral/
