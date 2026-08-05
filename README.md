@@ -4,7 +4,7 @@
 
 A configurable reading surface. Text is presented one word at a time in a fixed position, instead of as a page you scan with your eyes.
 
-**Status: in active development.** Books can be imported and read, and a reading position follows the reader between devices. Not deployed yet, so the service has to be run locally. See [Current state](#current-state) for what works today.
+**Status: in active development.** Books can be imported and read, and a reading position follows the reader between devices. Live at **[https://204-168-240-12.sslip.io](https://204-168-240-12.sslip.io)** — open it directly in a browser, or see [Current state](#current-state) for what works today.
 
 ---
 
@@ -54,18 +54,23 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 - [x] Front matter detection, so a book opens on its text rather than its licence page
 - [x] Reading surface: word anchored per profile, punctuation gaps, keyboard control, reduce-motion support
 - [x] Library: import, list, open, remove, and resume where you left off after a restart
-- [x] Local persistence with drift, including an outbox for changes waiting to sync
+- [x] Local persistence with drift, including an outbox for changes waiting to sync — native SQLite on Android and Windows, WASM SQLite over OPFS on web
 - [x] Sync service: registration, login, token refresh, an append-only event log with per-user sequence numbers, idempotent pushes, hybrid logical clock ordering, and per-entity conflict resolution
 - [x] Sync client: hybrid logical clocks in Dart, tokens in the platform keystore, transparent token refresh, an outbox drainer, and sign-in that is offered rather than required
 - [x] A sheet asking the reader which position they meant when two devices diverge
 - [x] Test suite across all of the above, including a real Project Gutenberg book as a golden fixture, effective words per minute over real prose, virtual-clock playback timing, sync ordering and divergence against a real Postgres, and the sync client against a fake service
 - [x] CI running analyzer and tests on every push, across every package, the app, and the service
+- [x] Deployed: containerised service and web build behind Caddy on a Hetzner VPS, automatic HTTPS via an sslip.io hostname, cross-platform sync verified between Windows and web against the live service
 
 **Not started**
 
-- [ ] Deployment: the service runs locally only
 - [ ] Settings screen, so profiles can be edited rather than only chosen
 - [ ] Chapter navigation
+- [ ] CD pipeline — deploys are currently a manual `git pull` and rebuild on the server
+
+**Known issue, under investigation**
+
+- [ ] The sync indicator can spin indefinitely after login in some sessions. Reproduced against the live deployment; not yet reproduced or diagnosed locally.
 
 ---
 
@@ -119,6 +124,12 @@ Recorded in [`docs/adr/0005-sync-event-log.md`](docs/adr/0005-sync-event-log.md)
 
 **Books imported by the reader never leave the device.** Parsing happens on-device. The service stores reading positions, preferences, and metadata only. This is a deliberate privacy and licensing decision, and it is why a book has to be imported on each device that reads it.
 
+**Block ids hash to 32 bits, not 64.** `dart2js` represents Dart `int` as a JS double, exact only up to 2^53, so a 64-bit FNV-1a hash's constants and arithmetic silently broke on the web target. 32 bits is nowhere near collision territory for one document's block count, and the multiplication step is decomposed into shifts so the arithmetic itself stays exact under JavaScript's number representation, not just the final result.
+
+**The app and service share one hostname in production.** The service runs under an `/api` context path and Caddy serves the compiled web build alongside it, so browser requests are same-origin rather than cross-origin. CORS is still configured, but only load-bearing for local development against a random Flutter dev-server port.
+
+**Deployment stores no application secrets in git.** `.env` holds the JWT signing secret and database credentials on both a developer's machine and the server, populated separately in each place and never committed. Recorded in [`docs/adr/0006-deployment-infrastructure.md`](docs/adr/0006-deployment-infrastructure.md), including the hosting comparison and the security hardening applied.
+
 ---
 
 ## Repository layout
@@ -132,6 +143,8 @@ packages/epub_reader/     Pure Dart. Zip container and OPF parsing, HTML
 app/                      Flutter client. Android, Windows, web.
 server/                   Spring Boot service. Auth, sync event log,
                           conflict resolution. Postgres via Flyway.
+                          Dockerfile, compose.yaml and Caddyfile for
+                          deployment.
 docs/adr/                 Architecture decision records.
 docs/research/            Evidence notes behind the design.
 ```
@@ -145,7 +158,19 @@ docs/research/            Evidence notes behind the design.
 Optional: the app reads perfectly well without it, and only needs it to sync
 between devices.
 
-Requires JDK 25 and a Postgres. The Maven wrapper handles the rest.
+**Via Docker Compose** (recommended — matches what runs in production):
+
+```bash
+cd server
+cp .env.example .env   # then edit JWT_SECRET and DATABASE_PASSWORD
+docker compose up --build -d
+```
+
+Flyway applies the schema on first start. `GET /api/health` reports whether
+the service can reach its database, not merely whether the process is alive.
+
+**Directly with Maven**, for backend development without rebuilding a
+container on every change. Requires JDK 25 and a Postgres:
 
 ```bash
 docker run --name hereader-db -e POSTGRES_PASSWORD=dev \
@@ -160,9 +185,6 @@ cd server
 export JWT_SECRET=$(head -c 48 /dev/urandom | base64)   # any 32+ byte string
 ./mvnw spring-boot:run
 ```
-
-Flyway applies the schema on first start. `GET /health` reports whether the
-service can reach its database, not merely whether the process is alive.
 
 ```bash
 ./mvnw verify   # tests need a hereader_test database
@@ -186,22 +208,32 @@ flutter pub get
 flutter run -d windows   # or -d chrome, or a connected Android device
 ```
 
+Web needs two additional assets that are not generated by any build step:
+`sqlite3.wasm` and `drift_worker.js` are committed under `app/web/`, pinned
+copies from drift's own releases, since browsers have no native SQLite and
+drift runs a WebAssembly build of it instead.
+
 Add an EPUB from the library screen and read it. Books and reading positions
 persist across restarts. There is also a paste screen for reading arbitrary
 text without a file.
 
-The app expects the service on `http://localhost:8080`. Point it elsewhere at
-build time:
+The app expects the service on `http://localhost:8080/api`. Point it
+elsewhere at build time:
 
 ```bash
-flutter run --dart-define=HEREADER_API=https://api.example.com
+flutter run --dart-define=HEREADER_API=https://api.example.com/api
+```
+
+The live deployment is built the same way:
+
+```bash
+flutter build web --dart-define=HEREADER_API=https://204-168-240-12.sslip.io/api
 ```
 
 ---
 
 ## Known limitations
 
-- Not deployed. The service runs locally, so syncing between two devices means both reaching the same machine.
 - Books do not transfer between devices. Reading positions sync, but the file itself has to be imported on each device.
 - Opening a book waits on a sync attempt so the reader never starts from a position that is about to change. A slow connection therefore delays opening, bounded by a fifteen second request timeout.
 - A rejected batch counts the attempt against every event in it, not just the one the service objected to. Coarse, but the alternative is pushing events one at a time.
@@ -223,6 +255,8 @@ flutter run --dart-define=HEREADER_API=https://api.example.com
 - The optimal recognition point highlight is offered as a preference with no evidence behind it. None of the studies above tested it.
 - iOS is untested. The codebase targets it, but building and signing requires macOS hardware.
 - Flutter web renders text to canvas rather than DOM, so screen reader support on the web target is weaker than a conventional website. There is also no keystore there, so tokens fall back to local storage.
+- The deployed server has no automated backups. Postgres holds reading positions and preferences, not book files, so the practical cost of loss is low — recoverable by re-registering test devices rather than an irreplaceable loss.
+- Deploys are manual: SSH in, `git pull`, `docker compose up --build -d`. No CD pipeline yet.
 - The supporting research is small-sample and predates modern displays. Rubin and Turano tested 23 people in 1994; Arditi tested 15 in 1999. These are the best available comparisons, not large trials.
 - No study cited here measures reading comprehension. Every figure is a reading rate.
 
@@ -230,15 +264,15 @@ flutter run --dart-define=HEREADER_API=https://api.example.com
 
 ## Roadmap
 
-1. Deployment to a public URL, with the service containerised and deployed on merge
-2. Settings screen, so profiles can be edited rather than only chosen
-3. Chapter navigation from the book's own table of contents
-4. Bookmarks and highlights over the same sync event log
-5. Book transfer between devices, either over the local network or through the platform share sheet. Relaying files through the service is deliberately excluded: it would make this a system that transmits copyrighted content, which storing books on-device exists to avoid.
-6. Public domain catalogue via OPDS feeds, with server-side ingestion
-7. Google sign-in as an additional identity source
-8. PDF support, which needs column detection, header and footer stripping, and reading-order reconstruction
-9. Continuous scrolling presentation, as a separate renderer rather than a toggle. Smooth scroll needs constant velocity, so honouring a per-token duration would make text surge and stall mid-sentence. Whether per-token pacing collapses into a single velocity, or that mode drops pacing entirely, is unresolved.
+1. Settings screen, so profiles can be edited rather than only chosen
+2. Chapter navigation from the book's own table of contents
+3. Bookmarks and highlights over the same sync event log
+4. Book transfer between devices, either over the local network or through the platform share sheet. Relaying files through the service is deliberately excluded: it would make this a system that transmits copyrighted content, which storing books on-device exists to avoid.
+5. Public domain catalogue via OPDS feeds, with server-side ingestion
+6. Google sign-in as an additional identity source
+7. PDF support, which needs column detection, header and footer stripping, and reading-order reconstruction
+8. Continuous scrolling presentation, as a separate renderer rather than a toggle. Smooth scroll needs constant velocity, so honouring a per-token duration would make text surge and stall mid-sentence. Whether per-token pacing collapses into a single velocity, or that mode drops pacing entirely, is unresolved.
+9. CD pipeline, so a merge to `main` deploys automatically instead of requiring a manual SSH session
 
 ---
 
