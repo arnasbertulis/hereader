@@ -25,6 +25,7 @@ doc/api/
 *.js_
 *.js.deps
 *.js.map
+!app/web/drift_worker.js
 
 .flutter-plugins
 .flutter-plugins-dependencies
