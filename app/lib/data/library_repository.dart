@@ -264,8 +264,7 @@ class LibraryRepository {
 
   /// Drops every held position. Call on sign-out, alongside clearing tokens:
   /// they belong to the account that has just gone away.
-  Future<void> clearPendingPositions() =>
-      _db.delete(_db.pendingPositions).go();
+  Future<void> clearPendingPositions() => _db.delete(_db.pendingPositions).go();
 
   /// Parks a position until its book arrives.
   ///
