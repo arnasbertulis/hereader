@@ -58,6 +58,7 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 - [x] Sync service: registration, login, token refresh, an append-only event log with per-user sequence numbers, idempotent pushes, hybrid logical clock ordering, and per-entity conflict resolution
 - [x] Sync client: hybrid logical clocks in Dart, tokens in the platform keystore, transparent token refresh, an outbox drainer, and sign-in that is offered rather than required
 - [x] A sheet asking the reader which position they meant when two devices diverge
+- [x] Positions synced for a book not yet imported on this device are held locally and applied the moment the book is imported, rather than crashing sync or being lost
 - [x] Test suite across all of the above, including a real Project Gutenberg book as a golden fixture, effective words per minute over real prose, virtual-clock playback timing, sync ordering and divergence against a real Postgres, and the sync client against a fake service
 - [x] CI running analyzer and tests on every push, across every package, the app, and the service
 - [x] Deployed: containerised service and web build behind Caddy on a Hetzner VPS, automatic HTTPS via an sslip.io hostname, cross-platform sync verified between Windows and web against the live service
@@ -67,10 +68,6 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 - [ ] Settings screen, so profiles can be edited rather than only chosen
 - [ ] Chapter navigation
 - [ ] CD pipeline — deploys are currently a manual `git pull` and rebuild on the server
-
-**Known issue, under investigation**
-
-- [ ] The sync indicator can spin indefinitely after login in some sessions. Reproduced against the live deployment; not yet reproduced or diagnosed locally.
 
 ---
 
@@ -90,6 +87,8 @@ Clients supply their own stamps, so the service does not trust them. A stamp mor
 
 One device moving a long way is not a divergence — that is an afternoon of reading. It takes two devices disagreeing.
 
+**A position can arrive before its book does.** Book files never leave the device, so a position for a book this device has not imported cannot be written straight into local storage — every web client meets this on its first sign-in, since nothing ever transfers a book file. The position is held locally until the matching book is imported, then applied in the same transaction as the import, rather than being dropped or crashing sync. Recorded in [`docs/adr/0007-pending-positions.md`](docs/adr/0007-pending-positions.md).
+
 Recorded in [`docs/adr/0005-sync-event-log.md`](docs/adr/0005-sync-event-log.md).
 
 ---
@@ -107,6 +106,8 @@ Recorded in [`docs/adr/0005-sync-event-log.md`](docs/adr/0005-sync-event-log.md)
 **Tokens live in the platform keystore, not the app database.** A refresh token is a two-month credential: anyone who reads it can act as the reader until it expires. The database holds book files and reading positions, which are private but are not credentials, and it is readable by anything with the device's filesystem. On the web there is no keystore, which is one reason to treat that target as the least trusted.
 
 **The divergence hint is used by the service and ignored by the reader.** A position carries a token index so the service can judge how far apart two devices are without holding a copy of the book. It cannot verify that number. The service uses it for a threshold, where a wrong value costs a prompt that was not needed or misses one that was. The app does not show it: both candidates are resolved against this device's own copy, because a sheet promising 30% through and then landing the reader at 4% is worse than no sheet at all.
+
+**A position for a book not yet imported is held, not dropped.** Book files never leave the device, so a position can arrive on a device that has not imported the matching book — every web client's first sign-in, since books never transfer. Dropping the event would lose the position permanently, since the sequence number moves past it regardless. It is held in a local table with no foreign key to books, and applied once the book is imported, in the same transaction as the import. Recorded in [`docs/adr/0007-pending-positions.md`](docs/adr/0007-pending-positions.md).
 
 **Front matter is skipped, never removed.** Dropping blocks would shift every block id and invalidate saved positions, and a wrong guess would delete real text with no way back. Detection only reports a suggested opening index, so the reader can rewind into the licence page if they want it.
 
@@ -190,6 +191,11 @@ export JWT_SECRET=$(head -c 48 /dev/urandom | base64)   # any 32+ byte string
 ./mvnw verify   # tests need a hereader_test database
 ```
 
+Note that the `db` service in the deployed `compose.yaml` does not publish
+its port to the host, by design (see ADR 0006), so integration tests must run
+against a separate Postgres container with its port actually published — not
+against a running deployment stack.
+
 ### The reading app
 
 Requires the Flutter SDK, which bundles Dart.
@@ -257,6 +263,7 @@ flutter build web --dart-define=HEREADER_API=https://204-168-240-12.sslip.io/api
 - Flutter web renders text to canvas rather than DOM, so screen reader support on the web target is weaker than a conventional website. There is also no keystore there, so tokens fall back to local storage.
 - The deployed server has no automated backups. Postgres holds reading positions and preferences, not book files, so the practical cost of loss is low — recoverable by re-registering test devices rather than an irreplaceable loss.
 - Deploys are manual: SSH in, `git pull`, `docker compose up --build -d`. No CD pipeline yet.
+- A position for a book not yet imported on a device is held locally rather than lost. It stays held forever if the reader never imports that book on that device; harmless, since each held position is a locator and two integers, and sign-out clears them.
 - The supporting research is small-sample and predates modern displays. Rubin and Turano tested 23 people in 1994; Arditi tested 15 in 1999. These are the best available comparisons, not large trials.
 - No study cited here measures reading comprehension. Every figure is a reading rate.
 
