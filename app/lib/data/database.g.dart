@@ -895,6 +895,424 @@ class ReadingPositionsCompanion extends UpdateCompanion<ReadingPosition> {
   }
 }
 
+class $PendingPositionsTable extends PendingPositions
+    with TableInfo<$PendingPositionsTable, PendingPosition> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PendingPositionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _bookIdMeta = const VerificationMeta('bookId');
+  @override
+  late final GeneratedColumn<String> bookId = GeneratedColumn<String>(
+    'book_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _blockIdMeta = const VerificationMeta(
+    'blockId',
+  );
+  @override
+  late final GeneratedColumn<String> blockId = GeneratedColumn<String>(
+    'block_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _charOffsetMeta = const VerificationMeta(
+    'charOffset',
+  );
+  @override
+  late final GeneratedColumn<int> charOffset = GeneratedColumn<int>(
+    'char_offset',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _parserVersionMeta = const VerificationMeta(
+    'parserVersion',
+  );
+  @override
+  late final GeneratedColumn<int> parserVersion = GeneratedColumn<int>(
+    'parser_version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _hlcMeta = const VerificationMeta('hlc');
+  @override
+  late final GeneratedColumn<String> hlc = GeneratedColumn<String>(
+    'hlc',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    bookId,
+    blockId,
+    charOffset,
+    parserVersion,
+    hlc,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'pending_positions';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PendingPosition> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('book_id')) {
+      context.handle(
+        _bookIdMeta,
+        bookId.isAcceptableOrUnknown(data['book_id']!, _bookIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bookIdMeta);
+    }
+    if (data.containsKey('block_id')) {
+      context.handle(
+        _blockIdMeta,
+        blockId.isAcceptableOrUnknown(data['block_id']!, _blockIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_blockIdMeta);
+    }
+    if (data.containsKey('char_offset')) {
+      context.handle(
+        _charOffsetMeta,
+        charOffset.isAcceptableOrUnknown(data['char_offset']!, _charOffsetMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_charOffsetMeta);
+    }
+    if (data.containsKey('parser_version')) {
+      context.handle(
+        _parserVersionMeta,
+        parserVersion.isAcceptableOrUnknown(
+          data['parser_version']!,
+          _parserVersionMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_parserVersionMeta);
+    }
+    if (data.containsKey('hlc')) {
+      context.handle(
+        _hlcMeta,
+        hlc.isAcceptableOrUnknown(data['hlc']!, _hlcMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_hlcMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {bookId};
+  @override
+  PendingPosition map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PendingPosition(
+      bookId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}book_id'],
+      )!,
+      blockId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}block_id'],
+      )!,
+      charOffset: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}char_offset'],
+      )!,
+      parserVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}parser_version'],
+      )!,
+      hlc: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}hlc'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PendingPositionsTable createAlias(String alias) {
+    return $PendingPositionsTable(attachedDatabase, alias);
+  }
+}
+
+class PendingPosition extends DataClass implements Insertable<PendingPosition> {
+  final String bookId;
+  final String blockId;
+  final int charOffset;
+  final int parserVersion;
+  final String hlc;
+  final DateTime updatedAt;
+  const PendingPosition({
+    required this.bookId,
+    required this.blockId,
+    required this.charOffset,
+    required this.parserVersion,
+    required this.hlc,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['book_id'] = Variable<String>(bookId);
+    map['block_id'] = Variable<String>(blockId);
+    map['char_offset'] = Variable<int>(charOffset);
+    map['parser_version'] = Variable<int>(parserVersion);
+    map['hlc'] = Variable<String>(hlc);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  PendingPositionsCompanion toCompanion(bool nullToAbsent) {
+    return PendingPositionsCompanion(
+      bookId: Value(bookId),
+      blockId: Value(blockId),
+      charOffset: Value(charOffset),
+      parserVersion: Value(parserVersion),
+      hlc: Value(hlc),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory PendingPosition.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PendingPosition(
+      bookId: serializer.fromJson<String>(json['bookId']),
+      blockId: serializer.fromJson<String>(json['blockId']),
+      charOffset: serializer.fromJson<int>(json['charOffset']),
+      parserVersion: serializer.fromJson<int>(json['parserVersion']),
+      hlc: serializer.fromJson<String>(json['hlc']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'bookId': serializer.toJson<String>(bookId),
+      'blockId': serializer.toJson<String>(blockId),
+      'charOffset': serializer.toJson<int>(charOffset),
+      'parserVersion': serializer.toJson<int>(parserVersion),
+      'hlc': serializer.toJson<String>(hlc),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  PendingPosition copyWith({
+    String? bookId,
+    String? blockId,
+    int? charOffset,
+    int? parserVersion,
+    String? hlc,
+    DateTime? updatedAt,
+  }) => PendingPosition(
+    bookId: bookId ?? this.bookId,
+    blockId: blockId ?? this.blockId,
+    charOffset: charOffset ?? this.charOffset,
+    parserVersion: parserVersion ?? this.parserVersion,
+    hlc: hlc ?? this.hlc,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  PendingPosition copyWithCompanion(PendingPositionsCompanion data) {
+    return PendingPosition(
+      bookId: data.bookId.present ? data.bookId.value : this.bookId,
+      blockId: data.blockId.present ? data.blockId.value : this.blockId,
+      charOffset: data.charOffset.present
+          ? data.charOffset.value
+          : this.charOffset,
+      parserVersion: data.parserVersion.present
+          ? data.parserVersion.value
+          : this.parserVersion,
+      hlc: data.hlc.present ? data.hlc.value : this.hlc,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingPosition(')
+          ..write('bookId: $bookId, ')
+          ..write('blockId: $blockId, ')
+          ..write('charOffset: $charOffset, ')
+          ..write('parserVersion: $parserVersion, ')
+          ..write('hlc: $hlc, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(bookId, blockId, charOffset, parserVersion, hlc, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PendingPosition &&
+          other.bookId == this.bookId &&
+          other.blockId == this.blockId &&
+          other.charOffset == this.charOffset &&
+          other.parserVersion == this.parserVersion &&
+          other.hlc == this.hlc &&
+          other.updatedAt == this.updatedAt);
+}
+
+class PendingPositionsCompanion extends UpdateCompanion<PendingPosition> {
+  final Value<String> bookId;
+  final Value<String> blockId;
+  final Value<int> charOffset;
+  final Value<int> parserVersion;
+  final Value<String> hlc;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const PendingPositionsCompanion({
+    this.bookId = const Value.absent(),
+    this.blockId = const Value.absent(),
+    this.charOffset = const Value.absent(),
+    this.parserVersion = const Value.absent(),
+    this.hlc = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PendingPositionsCompanion.insert({
+    required String bookId,
+    required String blockId,
+    required int charOffset,
+    required int parserVersion,
+    required String hlc,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : bookId = Value(bookId),
+       blockId = Value(blockId),
+       charOffset = Value(charOffset),
+       parserVersion = Value(parserVersion),
+       hlc = Value(hlc),
+       updatedAt = Value(updatedAt);
+  static Insertable<PendingPosition> custom({
+    Expression<String>? bookId,
+    Expression<String>? blockId,
+    Expression<int>? charOffset,
+    Expression<int>? parserVersion,
+    Expression<String>? hlc,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (bookId != null) 'book_id': bookId,
+      if (blockId != null) 'block_id': blockId,
+      if (charOffset != null) 'char_offset': charOffset,
+      if (parserVersion != null) 'parser_version': parserVersion,
+      if (hlc != null) 'hlc': hlc,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PendingPositionsCompanion copyWith({
+    Value<String>? bookId,
+    Value<String>? blockId,
+    Value<int>? charOffset,
+    Value<int>? parserVersion,
+    Value<String>? hlc,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return PendingPositionsCompanion(
+      bookId: bookId ?? this.bookId,
+      blockId: blockId ?? this.blockId,
+      charOffset: charOffset ?? this.charOffset,
+      parserVersion: parserVersion ?? this.parserVersion,
+      hlc: hlc ?? this.hlc,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (bookId.present) {
+      map['book_id'] = Variable<String>(bookId.value);
+    }
+    if (blockId.present) {
+      map['block_id'] = Variable<String>(blockId.value);
+    }
+    if (charOffset.present) {
+      map['char_offset'] = Variable<int>(charOffset.value);
+    }
+    if (parserVersion.present) {
+      map['parser_version'] = Variable<int>(parserVersion.value);
+    }
+    if (hlc.present) {
+      map['hlc'] = Variable<String>(hlc.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PendingPositionsCompanion(')
+          ..write('bookId: $bookId, ')
+          ..write('blockId: $blockId, ')
+          ..write('charOffset: $charOffset, ')
+          ..write('parserVersion: $parserVersion, ')
+          ..write('hlc: $hlc, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $StoredProfilesTable extends StoredProfiles
     with TableInfo<$StoredProfilesTable, StoredProfile> {
   @override
@@ -2819,6 +3237,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ReadingPositionsTable readingPositions = $ReadingPositionsTable(
     this,
   );
+  late final $PendingPositionsTable pendingPositions = $PendingPositionsTable(
+    this,
+  );
   late final $StoredProfilesTable storedProfiles = $StoredProfilesTable(this);
   late final $PreferencesTable preferences = $PreferencesTable(this);
   late final $OutboxEventsTable outboxEvents = $OutboxEventsTable(this);
@@ -2832,6 +3253,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     books,
     readingPositions,
+    pendingPositions,
     storedProfiles,
     preferences,
     outboxEvents,
@@ -3539,6 +3961,235 @@ typedef $$ReadingPositionsTableProcessedTableManager =
       (ReadingPosition, $$ReadingPositionsTableReferences),
       ReadingPosition,
       PrefetchHooks Function({bool bookId})
+    >;
+typedef $$PendingPositionsTableCreateCompanionBuilder =
+    PendingPositionsCompanion Function({
+      required String bookId,
+      required String blockId,
+      required int charOffset,
+      required int parserVersion,
+      required String hlc,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$PendingPositionsTableUpdateCompanionBuilder =
+    PendingPositionsCompanion Function({
+      Value<String> bookId,
+      Value<String> blockId,
+      Value<int> charOffset,
+      Value<int> parserVersion,
+      Value<String> hlc,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$PendingPositionsTableFilterComposer
+    extends Composer<_$AppDatabase, $PendingPositionsTable> {
+  $$PendingPositionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get bookId => $composableBuilder(
+    column: $table.bookId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get blockId => $composableBuilder(
+    column: $table.blockId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get charOffset => $composableBuilder(
+    column: $table.charOffset,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get parserVersion => $composableBuilder(
+    column: $table.parserVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get hlc => $composableBuilder(
+    column: $table.hlc,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PendingPositionsTableOrderingComposer
+    extends Composer<_$AppDatabase, $PendingPositionsTable> {
+  $$PendingPositionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get bookId => $composableBuilder(
+    column: $table.bookId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get blockId => $composableBuilder(
+    column: $table.blockId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get charOffset => $composableBuilder(
+    column: $table.charOffset,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get parserVersion => $composableBuilder(
+    column: $table.parserVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get hlc => $composableBuilder(
+    column: $table.hlc,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PendingPositionsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PendingPositionsTable> {
+  $$PendingPositionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get bookId =>
+      $composableBuilder(column: $table.bookId, builder: (column) => column);
+
+  GeneratedColumn<String> get blockId =>
+      $composableBuilder(column: $table.blockId, builder: (column) => column);
+
+  GeneratedColumn<int> get charOffset => $composableBuilder(
+    column: $table.charOffset,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get parserVersion => $composableBuilder(
+    column: $table.parserVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get hlc =>
+      $composableBuilder(column: $table.hlc, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$PendingPositionsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PendingPositionsTable,
+          PendingPosition,
+          $$PendingPositionsTableFilterComposer,
+          $$PendingPositionsTableOrderingComposer,
+          $$PendingPositionsTableAnnotationComposer,
+          $$PendingPositionsTableCreateCompanionBuilder,
+          $$PendingPositionsTableUpdateCompanionBuilder,
+          (
+            PendingPosition,
+            BaseReferences<
+              _$AppDatabase,
+              $PendingPositionsTable,
+              PendingPosition
+            >,
+          ),
+          PendingPosition,
+          PrefetchHooks Function()
+        > {
+  $$PendingPositionsTableTableManager(
+    _$AppDatabase db,
+    $PendingPositionsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PendingPositionsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PendingPositionsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PendingPositionsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> bookId = const Value.absent(),
+                Value<String> blockId = const Value.absent(),
+                Value<int> charOffset = const Value.absent(),
+                Value<int> parserVersion = const Value.absent(),
+                Value<String> hlc = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PendingPositionsCompanion(
+                bookId: bookId,
+                blockId: blockId,
+                charOffset: charOffset,
+                parserVersion: parserVersion,
+                hlc: hlc,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String bookId,
+                required String blockId,
+                required int charOffset,
+                required int parserVersion,
+                required String hlc,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => PendingPositionsCompanion.insert(
+                bookId: bookId,
+                blockId: blockId,
+                charOffset: charOffset,
+                parserVersion: parserVersion,
+                hlc: hlc,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PendingPositionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PendingPositionsTable,
+      PendingPosition,
+      $$PendingPositionsTableFilterComposer,
+      $$PendingPositionsTableOrderingComposer,
+      $$PendingPositionsTableAnnotationComposer,
+      $$PendingPositionsTableCreateCompanionBuilder,
+      $$PendingPositionsTableUpdateCompanionBuilder,
+      (
+        PendingPosition,
+        BaseReferences<_$AppDatabase, $PendingPositionsTable, PendingPosition>,
+      ),
+      PendingPosition,
+      PrefetchHooks Function()
     >;
 typedef $$StoredProfilesTableCreateCompanionBuilder =
     StoredProfilesCompanion Function({
@@ -4599,6 +5250,8 @@ class $AppDatabaseManager {
       $$BooksTableTableManager(_db, _db.books);
   $$ReadingPositionsTableTableManager get readingPositions =>
       $$ReadingPositionsTableTableManager(_db, _db.readingPositions);
+  $$PendingPositionsTableTableManager get pendingPositions =>
+      $$PendingPositionsTableTableManager(_db, _db.pendingPositions);
   $$StoredProfilesTableTableManager get storedProfiles =>
       $$StoredProfilesTableTableManager(_db, _db.storedProfiles);
   $$PreferencesTableTableManager get preferences =>
