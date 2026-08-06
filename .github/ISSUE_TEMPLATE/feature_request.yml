@@ -1,0 +1,27 @@
+name: Feature request
+description: Something the app or service should do that it doesn't yet.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's missing, and for whom
+      description: The gap this would close. Prefer a concrete reading scenario over an abstract feature name.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: Optional. A rough idea of how this could work, if you have one.
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other ways to solve the same problem, and why they don't fit as well.
+    validations:
+      required: false

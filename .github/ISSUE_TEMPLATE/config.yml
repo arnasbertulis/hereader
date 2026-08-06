@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Known limitations
+    url: https://github.com/arnasbertulis/hereader/blob/main/README.md#known-limitations
+    about: Check here first — a lot of edge cases are already documented as deliberate, not missed.
