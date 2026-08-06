@@ -116,6 +116,11 @@ class SyncEngine {
   /// Safe to call at any time. Overlapping calls collapse into one, since a
   /// second drain of the same queue would push events the first is already
   /// sending.
+  ///
+  /// Never throws. The periodic timer calls this without awaiting, and an
+  /// escaping error there is unobservable; worse, an error escaping before
+  /// the final [_emit] would leave the indicator claiming work is still
+  /// happening. Every exit from here emits a terminal status.
   Future<void> syncNow() async {
     if (_running || !auth.isSignedIn) return;
     _running = true;
@@ -124,7 +129,7 @@ class SyncEngine {
 
     try {
       await _pushPending();
-      await _pullRemote();
+      final skipped = await _pullRemote();
 
       await _recordConflicts(await api.conflicts());
 
@@ -134,12 +139,25 @@ class SyncEngine {
         hlc: await issueStamp(),
       );
 
-      _emit(SyncStatus.upToDate, lastSyncedAt: DateTime.now());
+      _emit(
+        SyncStatus.upToDate,
+        lastSyncedAt: DateTime.now(),
+        message: skipped == 0
+            ? null
+            : '$skipped change${skipped == 1 ? '' : 's'} from another device '
+                  'could not be applied and was skipped.',
+      );
     } on NetworkException {
       // The queue is intact. This is the ordinary case on a train.
       _emit(SyncStatus.offline);
     } on ApiException catch (e) {
       _emit(SyncStatus.failed, message: e.message);
+    } catch (e) {
+      // Anything else: a constraint violation, a malformed payload, a bug.
+      // Previously these escaped both catch clauses, left the last emitted
+      // status at syncing, and the indicator span forever with no work
+      // running. A visible failure is worse-looking and more honest.
+      _emit(SyncStatus.failed, message: 'Sync could not finish: $e');
     } finally {
       _running = false;
     }
@@ -191,14 +209,32 @@ class SyncEngine {
 
   // -- pull ----------------------------------------------------------
 
-  Future<void> _pullRemote() async {
+  /// Applies everything after the last sequence this device saw.
+  ///
+  /// Returns how many events could not be applied.
+  ///
+  /// An event that throws is counted and skipped rather than aborting the
+  /// run. Stalling instead would be permanent: sync.last_seq is written only
+  /// after the batch, so the next attempt pulls the same event, fails the
+  /// same way, and the device never advances again. Skipping loses that one
+  /// change; stalling loses every change after it.
+  Future<int> _pullRemote() async {
     var since = await _lastSeq();
+    var skipped = 0;
 
     while (true) {
       final result = await api.pull(since: since, limit: batchSize);
 
       for (final event in result.events) {
-        await _apply(event);
+        try {
+          await _apply(event);
+        } on NetworkException {
+          rethrow;
+        } on ApiException {
+          rethrow;
+        } catch (_) {
+          skipped++;
+        }
       }
 
       since = result.events.isEmpty ? result.lastSeq : result.events.last.seq;
@@ -209,7 +245,9 @@ class SyncEngine {
         hlc: await issueStamp(),
       );
 
-      if (!result.hasMore) return;
+      // A service reporting more to come while sending nothing would spin
+      // this loop forever, with the indicator running the whole time.
+      if (result.events.isEmpty || !result.hasMore) return skipped;
     }
   }
 
@@ -245,14 +283,27 @@ class SyncEngine {
   }
 
   Future<void> _applyPosition(PulledEvent event) async {
+    final blockId = event.payload['blockId'];
+    if (blockId is! String) {
+      throw FormatException(
+        'Position event ${event.seq} carries no blockId.',
+        jsonEncode(event.payload),
+      );
+    }
+
     final locator = Locator(
-      blockId: event.payload['blockId'] as String,
+      blockId: blockId,
       charOffset: (event.payload['charOffset'] as num?)?.toInt() ?? 0,
       parserVersion: (event.payload['parserVersion'] as num?)?.toInt() ?? 0,
     );
 
     // Written without queuing an outbox event: this came from the service,
     // so sending it back would loop.
+    //
+    // The repository decides whether this lands in reading_positions or
+    // waits in pending_positions. A device that has not imported this book
+    // — every web client on first sign-in — cannot satisfy the foreign key,
+    // and the position waits there until the book is imported.
     await repository.applyRemotePosition(
       bookId: event.entityId,
       locator: locator,

@@ -82,6 +82,10 @@ class LibraryRepository {
   }
 
   /// Adds a book, or replaces it if the same edition is imported again.
+  ///
+  /// One transaction with the pending-position drain: a book that reached
+  /// disk while its waiting position stayed behind would open at the start
+  /// and then jump the moment the next sync ran.
   Future<void> addBook({
     required String id,
     required String title,
@@ -90,24 +94,47 @@ class LibraryRepository {
     String? author,
     String? language,
   }) async {
-    await _db
-        .into(_db.books)
-        .insertOnConflictUpdate(
-          BooksCompanion.insert(
-            id: id,
-            title: title,
-            bytes: bytes,
-            importedAt: DateTime.now().toUtc(),
-            wordCount: Value(wordCount),
-            author: Value(author),
-            language: Value(language),
-          ),
-        );
+    await _db.transaction(() async {
+      await _db
+          .into(_db.books)
+          .insertOnConflictUpdate(
+            BooksCompanion.insert(
+              id: id,
+              title: title,
+              bytes: bytes,
+              importedAt: DateTime.now().toUtc(),
+              wordCount: Value(wordCount),
+              author: Value(author),
+              language: Value(language),
+            ),
+          );
+
+      await _drainPendingPosition(id);
+    });
   }
 
   /// Removes a book and, by cascade, its reading position.
+  ///
+  /// Any position held for this book stays. It is only reachable again if
+  /// the reader re-imports the same edition, which is when they would want
+  /// their place back.
   Future<void> removeBook(String bookId) =>
       (_db.delete(_db.books)..where((b) => b.id.equals(bookId))).go();
+
+  /// Whether this device holds the book itself, not merely a position in it.
+  ///
+  /// Reads only the id column. Selecting the row would pull the EPUB blob
+  /// into memory to answer a yes-or-no question.
+  Future<bool> hasBook(String bookId) async {
+    final row =
+        await (_db.selectOnly(_db.books)
+              ..addColumns([_db.books.id])
+              ..where(_db.books.id.equals(bookId))
+              ..limit(1))
+            .getSingleOrNull();
+
+    return row != null;
+  }
 
   // -- positions -----------------------------------------------------
 
@@ -173,6 +200,12 @@ class LibraryRepository {
   /// this write — that is where it came from — and sending it back would
   /// loop, with each round trip producing another event.
   ///
+  /// If this device has not imported the book, the position is held rather
+  /// than written. ReadingPositions.bookId cascades from Books, so writing
+  /// it would fail the constraint outright, and skipping it would lose the
+  /// position for good: sync.last_seq moves past the event and no later
+  /// pull returns it.
+  ///
   /// The stamp comparison is a second line of defence. The service has
   /// already decided which write wins, but an event can arrive after a newer
   /// local write on this device, and applying it would move the reader
@@ -183,6 +216,11 @@ class LibraryRepository {
     required String hlc,
   }) async {
     await _db.transaction(() async {
+      if (!await hasBook(bookId)) {
+        await _holdPosition(bookId: bookId, locator: locator, hlc: hlc);
+        return;
+      }
+
       final existing = await (_db.select(
         _db.readingPositions,
       )..where((p) => p.bookId.equals(bookId))).getSingleOrNull();
@@ -204,6 +242,98 @@ class LibraryRepository {
             ),
           );
     });
+  }
+
+  /// The position waiting for a book this device has not imported.
+  ///
+  /// For tests and for anything that wants to tell a reader their place is
+  /// already known before they import.
+  Future<Locator?> pendingPositionOf(String bookId) async {
+    final row = await (_db.select(
+      _db.pendingPositions,
+    )..where((p) => p.bookId.equals(bookId))).getSingleOrNull();
+
+    if (row == null) return null;
+
+    return Locator(
+      blockId: row.blockId,
+      charOffset: row.charOffset,
+      parserVersion: row.parserVersion,
+    );
+  }
+
+  /// Drops every held position. Call on sign-out, alongside clearing tokens:
+  /// they belong to the account that has just gone away.
+  Future<void> clearPendingPositions() => _db.delete(_db.pendingPositions).go();
+
+  /// Parks a position until its book arrives.
+  ///
+  /// Keeps whichever stamp is greater, so a book that has been read on
+  /// several devices while absent here holds only the latest place.
+  ///
+  /// Assumes it is already inside a transaction.
+  Future<void> _holdPosition({
+    required String bookId,
+    required Locator locator,
+    required String hlc,
+  }) async {
+    final held = await (_db.select(
+      _db.pendingPositions,
+    )..where((p) => p.bookId.equals(bookId))).getSingleOrNull();
+
+    if (held != null && held.hlc.compareTo(hlc) >= 0) return;
+
+    await _db
+        .into(_db.pendingPositions)
+        .insertOnConflictUpdate(
+          PendingPositionsCompanion.insert(
+            bookId: bookId,
+            blockId: locator.blockId,
+            charOffset: locator.charOffset,
+            parserVersion: locator.parserVersion,
+            hlc: hlc,
+            updatedAt: DateTime.now().toUtc(),
+          ),
+        );
+  }
+
+  /// Moves a held position into place now that the book exists.
+  ///
+  /// Carries the original stamp and timestamp across rather than issuing new
+  /// ones. This write happened on another device at that time, and restamping
+  /// it here would let an old place outrank a newer read elsewhere.
+  ///
+  /// Assumes it is already inside a transaction.
+  Future<void> _drainPendingPosition(String bookId) async {
+    final held = await (_db.select(
+      _db.pendingPositions,
+    )..where((p) => p.bookId.equals(bookId))).getSingleOrNull();
+
+    if (held == null) return;
+
+    final existing = await (_db.select(
+      _db.readingPositions,
+    )..where((p) => p.bookId.equals(bookId))).getSingleOrNull();
+
+    // Re-importing a book the reader already had keeps the newer place.
+    if (existing == null || existing.hlc.compareTo(held.hlc) < 0) {
+      await _db
+          .into(_db.readingPositions)
+          .insertOnConflictUpdate(
+            ReadingPositionsCompanion.insert(
+              bookId: bookId,
+              blockId: held.blockId,
+              charOffset: held.charOffset,
+              parserVersion: held.parserVersion,
+              hlc: held.hlc,
+              updatedAt: held.updatedAt,
+            ),
+          );
+    }
+
+    await (_db.delete(
+      _db.pendingPositions,
+    )..where((p) => p.bookId.equals(bookId))).go();
   }
 
   // -- profiles ------------------------------------------------------

@@ -60,6 +60,35 @@ class ReadingPositions extends Table {
   Set<Column> get primaryKey => {bookId};
 }
 
+/// Positions from other devices for books this one has not imported.
+///
+/// The missing foreign key to Books is the entire reason this table exists
+/// separately. ADR 0004 keeps book files on the device, so a position can
+/// reach a device long before the book does — on web, where nothing is ever
+/// transferred, that is every first sign-in.
+///
+/// Writing such a position straight into ReadingPositions fails the cascade
+/// constraint. Dropping it instead loses the position permanently, because
+/// sync.last_seq advances past the event and no later pull returns it.
+/// Holding it here costs a locator and two integers per waiting book.
+///
+/// Drained into ReadingPositions in the same transaction that imports the
+/// matching book, so the book never exists without the position that was
+/// waiting for it.
+class PendingPositions extends Table {
+  TextColumn get bookId => text()();
+
+  TextColumn get blockId => text()();
+  IntColumn get charOffset => integer()();
+  IntColumn get parserVersion => integer()();
+
+  TextColumn get hlc => text()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {bookId};
+}
+
 /// Reading profiles, including forks of the built-in presets.
 ///
 /// Built-ins are not stored: they live in code and are merged in at read
@@ -162,6 +191,7 @@ class SyncState extends Table {
   tables: [
     Books,
     ReadingPositions,
+    PendingPositions,
     StoredProfiles,
     Preferences,
     OutboxEvents,
@@ -171,22 +201,25 @@ class SyncState extends Table {
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
-    : super(executor ?? driftDatabase(
-        name: 'hereader',
-        // Web has no native filesystem, so drift needs sqlite3 compiled to
-        // WebAssembly plus a worker script to run it. Both files are
-        // downloaded manually into app/web/ (drift doesn't generate them):
-        // sqlite3.wasm from simolus3/sqlite3.dart releases, drift_worker.js
-        // from simolus3/drift releases. Native platforms need no equivalent
-        // setup — drift_flutter's defaults already handle those.
-        web: DriftWebOptions(
-          sqlite3Wasm: Uri.parse('sqlite3.wasm'),
-          driftWorker: Uri.parse('drift_worker.js'),
-        ),
-      ));
+    : super(
+        executor ??
+            driftDatabase(
+              name: 'hereader',
+              // Web has no native filesystem, so drift needs sqlite3 compiled to
+              // WebAssembly plus a worker script to run it. Both files are
+              // downloaded manually into app/web/ (drift doesn't generate them):
+              // sqlite3.wasm from simolus3/sqlite3.dart releases, drift_worker.js
+              // from simolus3/drift releases. Native platforms need no equivalent
+              // setup — drift_flutter's defaults already handle those.
+              web: DriftWebOptions(
+                sqlite3Wasm: Uri.parse('sqlite3.wasm'),
+                driftWorker: Uri.parse('drift_worker.js'),
+              ),
+            ),
+      );
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -197,10 +230,13 @@ class AppDatabase extends _$AppDatabase {
       ).insert(SyncStateCompanion.insert(), mode: InsertMode.insertOrIgnore);
     },
     onUpgrade: (m, from, to) async {
-      // Existing installs have every table except this one. Creating it
-      // rather than recreating the database keeps the reader's books.
+      // Each step adds a table and touches nothing existing, so an install
+      // several versions behind runs them in order and keeps its books.
       if (from < 2) {
         await m.createTable(positionConflicts);
+      }
+      if (from < 3) {
+        await m.createTable(pendingPositions);
       }
     },
     beforeOpen: (details) async {
