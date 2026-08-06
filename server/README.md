@@ -6,6 +6,9 @@ Stores reading positions, profiles and preferences. Never book files: those
 stay on the reader's device, which is a privacy decision and a licensing one.
 See [ADR 0004](../docs/adr/0004-store-book-files.md).
 
+Deployed on a single Hetzner VPS via Docker Compose, behind Caddy. See
+[ADR 0006](../docs/adr/0006-deployment-infrastructure.md).
+
 ## Running it
 
 Needs JDK 25 and a Postgres. The Maven wrapper handles everything else.
@@ -24,7 +27,13 @@ export JWT_SECRET=$(head -c 48 /dev/urandom | base64)
 ./mvnw spring-boot:run
 ```
 
-On Windows, set `JWT_SECRET` in the IntelliJ run configuration instead.
+On Windows, set `JWT_SECRET` in the IntelliJ run configuration, or in
+PowerShell before running Maven:
+
+```powershell
+$env:JWT_SECRET = [Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random -Maximum 256 }))
+./mvnw spring-boot:run
+```
 
 Flyway applies the schema on first start. `GET /health` reports whether the
 service can reach its database rather than merely whether the process is
@@ -126,6 +135,14 @@ divergence is recorded for the reader to settle.
 One device moving a long way is not a divergence — that is an afternoon of
 reading. It takes two devices disagreeing.
 
+The service has no way to know whether a device has actually imported the
+book a position refers to — book files never reach it, by design. A client
+that receives a position for a book it does not have holds it locally until
+the book is imported, rather than discarding it or failing. See
+[ADR 0007](../docs/adr/0007-pending-positions.md); nothing about that changes
+this service's schema or behaviour, since the position event it delivered was
+already correct.
+
 Recorded in [ADR 0005](../docs/adr/0005-sync-event-log.md).
 
 ## Schema
@@ -163,6 +180,15 @@ Needs a `hereader_test` database:
 docker exec hereader-db psql -U postgres -c "create database hereader_test"
 ```
 
+If nothing is listening on `localhost:5432` when `verify` runs, every
+integration test fails with the same `UnsatisfiedDependencyException` chain
+down to `Connection refused` — Flyway cannot open a connection, so the
+Spring context never starts, and every test in that context fails identically
+after the first. Check `docker ps` for a Postgres container with its port
+actually published to the host before assuming anything else is wrong; the
+deployed compose stack's `db` service does **not** count, since ADR 0006
+deliberately keeps that port internal to the Docker network only.
+
 Unit tests for tokens and clock stamps run without a Spring context. Everything
 else runs the real filter chain against a real Postgres, because the failures
 that matter in sync are ordering, retried pushes and cross-device races, none
@@ -174,5 +200,6 @@ CI runs the same suite against a Postgres service container.
 
 ## Not built yet
 
-Deployment. Compaction of the event log. Bookmarks, which have a conflict rule
-defined but no endpoint using it.
+Compaction of the event log. Bookmarks, which have a conflict rule defined but
+no endpoint using it. A CD pipeline — deploys are currently a manual SSH
+session; see [ADR 0006](../docs/adr/0006-deployment-infrastructure.md).
