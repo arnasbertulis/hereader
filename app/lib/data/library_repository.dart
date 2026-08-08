@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:drift/drift.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
@@ -338,34 +339,67 @@ class LibraryRepository {
 
   // -- profiles ------------------------------------------------------
 
-  /// Built-in presets first, then the reader's own profiles.
+  /// An id for a newly forked profile.
+  ///
+  /// The id travels with the sync event log, so two devices forking the same
+  /// preset while offline from each other must not produce the same one. A
+  /// millisecond plus 32 random bits is enough: a collision needs both the
+  /// same millisecond and the same draw.
+  ///
+  /// Never lands in [ReadingProfile.builtInIdPrefix], so a fork cannot shadow
+  /// a preset.
+  static String newProfileId() {
+    final entropy = Random.secure().nextInt(1 << 32).toRadixString(16);
+    return 'p.${DateTime.now().toUtc().millisecondsSinceEpoch}.$entropy';
+  }
+
+  /// Built-in presets first, then the reader's own profiles by name.
   ///
   /// Presets are not stored, so changing one in code takes effect without a
   /// migration. A fork is an ordinary stored row.
-  Future<List<ReadingProfile>> allProfiles() async {
-    final rows = await _db.select(_db.storedProfiles).get();
+  ///
+  /// Tombstoned rows stay out. A stored row inside the built-in namespace
+  /// also stays out: both the save path and the apply path refuse to write
+  /// one, but being wrong costs the reader a duplicate entry in their list
+  /// while the guard costs a string comparison.
+  Stream<List<ReadingProfile>> watchProfiles() {
+    final query = _db.select(_db.storedProfiles)
+      ..where((p) => p.deleted.equals(false))
+      ..orderBy([(p) => OrderingTerm.asc(p.name)]);
 
-    return [
-      ...Presets.all,
-      for (final row in rows)
-        ReadingProfile(
-          id: row.id,
-          name: row.name,
-          pacing: PacingConfig.fromJson(
-            jsonDecode(row.pacingJson) as Map<String, dynamic>,
-          ),
-          presentation: PresentationConfig.fromJson(
-            jsonDecode(row.presentationJson) as Map<String, dynamic>,
-          ),
-          rewindWords: row.rewindWords,
-        ),
-    ];
+    return query.watch().map(
+      (rows) => [
+        ...Presets.all,
+        for (final row in rows)
+          if (!row.id.startsWith(ReadingProfile.builtInIdPrefix))
+            _toProfile(row),
+      ],
+    );
   }
 
+  /// A one-shot read of [watchProfiles], for callers that do not need to
+  /// follow changes.
+  Future<List<ReadingProfile>> allProfiles() => watchProfiles().first;
+
+  ReadingProfile _toProfile(StoredProfile row) => ReadingProfile(
+    id: row.id,
+    name: row.name,
+    pacing: PacingConfig.fromJson(
+      jsonDecode(row.pacingJson) as Map<String, dynamic>,
+    ),
+    presentation: PresentationConfig.fromJson(
+      jsonDecode(row.presentationJson) as Map<String, dynamic>,
+    ),
+    rewindWords: row.rewindWords,
+  );
+
+  /// Writes one of the reader's own profiles and queues it for sync.
   Future<void> saveProfile(
     ReadingProfile profile, {
     required String hlc,
   }) async {
+    // isBuiltIn reads the id namespace, so this one check covers both a
+    // preset passed in directly and a fork that kept a preset's id.
     if (profile.isBuiltIn) {
       throw ArgumentError('Built-in presets are not stored; fork one first.');
     }
@@ -382,6 +416,7 @@ class LibraryRepository {
               pacingJson: jsonEncode(profile.pacing.toJson()),
               presentationJson: jsonEncode(profile.presentation.toJson()),
               rewindWords: Value(profile.rewindWords),
+              deleted: const Value(false),
               hlc: hlc,
               updatedAt: now,
             ),
@@ -394,6 +429,104 @@ class LibraryRepository {
         hlc: hlc,
         now: now,
       );
+    });
+  }
+
+  /// Tombstones a profile and tells the other devices it is gone.
+  ///
+  /// The event carries the whole profile rather than only its id. A device
+  /// that never received the create, because it was offline for the
+  /// profile's entire life, still has to write its own tombstone, and the
+  /// columns backing that row are not nullable.
+  Future<void> deleteProfile(String id, {required String hlc}) async {
+    if (id.startsWith(ReadingProfile.builtInIdPrefix)) {
+      throw ArgumentError('Built-in presets cannot be deleted.');
+    }
+
+    await _db.transaction(() async {
+      final row = await (_db.select(
+        _db.storedProfiles,
+      )..where((p) => p.id.equals(id))).getSingleOrNull();
+
+      // Nothing here, or already tombstoned. Enqueueing again would issue a
+      // second delete for a profile every device has already dropped.
+      if (row == null || row.deleted) return;
+
+      final now = DateTime.now().toUtc();
+
+      await (_db.update(
+        _db.storedProfiles,
+      )..where((p) => p.id.equals(id))).write(
+        StoredProfilesCompanion(
+          deleted: const Value(true),
+          hlc: Value(hlc),
+          updatedAt: Value(now),
+        ),
+      );
+
+      await _enqueue(
+        entityType: 'profile',
+        entityId: id,
+        payload: {
+          'id': row.id,
+          'name': row.name,
+          'pacing': jsonDecode(row.pacingJson),
+          'presentation': jsonDecode(row.presentationJson),
+          'rewindWords': row.rewindWords,
+        },
+        hlc: hlc,
+        now: now,
+        deleted: true,
+      );
+    });
+  }
+
+  /// Writes a profile that came from another device.
+  ///
+  /// Not enqueued, for the same reason as [applyRemotePosition]: the service
+  /// is where this arrived from, and sending it back would loop.
+  ///
+  /// Whole-object last write wins, per ADR 0005. Two devices editing one
+  /// profile concurrently means the app discards an edit rather than merging
+  /// it: the pacing fields are a single coherent tuning rather than
+  /// independent scalars, and merging field by field could leave the reader
+  /// with a configuration neither device chose. A discarded font size is
+  /// visible the moment they open settings and costs five seconds to redo.
+  Future<void> applyRemoteProfile({
+    required ReadingProfile profile,
+    required String hlc,
+    required bool deleted,
+  }) async {
+    // Refused quietly rather than thrown. A throw would count against the
+    // skipped total the sync status shows, telling the reader a change was
+    // lost when this one was turned away on purpose. Presets live in code
+    // and nothing may replace them through sync.
+    if (profile.isBuiltIn) return;
+
+    await _db.transaction(() async {
+      final existing = await (_db.select(
+        _db.storedProfiles,
+      )..where((p) => p.id.equals(profile.id))).getSingleOrNull();
+
+      // Stamps are fixed-width, so comparing them as text gives the same
+      // order as comparing the parts. This is what stops a create that
+      // arrives after a delete from resurrecting the profile.
+      if (existing != null && existing.hlc.compareTo(hlc) >= 0) return;
+
+      await _db
+          .into(_db.storedProfiles)
+          .insertOnConflictUpdate(
+            StoredProfilesCompanion.insert(
+              id: profile.id,
+              name: profile.name,
+              pacingJson: jsonEncode(profile.pacing.toJson()),
+              presentationJson: jsonEncode(profile.presentation.toJson()),
+              rewindWords: Value(profile.rewindWords),
+              deleted: Value(deleted),
+              hlc: hlc,
+              updatedAt: DateTime.now().toUtc(),
+            ),
+          );
     });
   }
 
@@ -515,6 +648,7 @@ class LibraryRepository {
     required Map<String, dynamic> payload,
     required String hlc,
     required DateTime now,
+    bool deleted = false,
   }) {
     return _db
         .into(_db.outboxEvents)
@@ -526,6 +660,7 @@ class LibraryRepository {
             entityType: entityType,
             entityId: entityId,
             payloadJson: jsonEncode(payload),
+            deleted: Value(deleted),
             hlc: hlc,
             createdAt: now,
           ),

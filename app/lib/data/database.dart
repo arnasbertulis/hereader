@@ -105,6 +105,15 @@ class StoredProfiles extends Table {
 
   IntColumn get rewindWords => integer().withDefault(const Constant(2))();
 
+  /// Tombstone. The row outlives the delete so that a later-arriving older
+  /// event has a stamp to lose against. Without it, an absent row and a row
+  /// deleted a second ago look identical, and any device that was offline
+  /// during the deletion would resurrect the profile on its next push.
+  ///
+  /// ADR 0005 requires this for every deletable entity. A forked profile is
+  /// the first one a reader can actually remove.
+  BoolColumn get deleted => boolean().withDefault(const Constant(false))();
+
   TextColumn get hlc => text()();
   DateTimeColumn get updatedAt => dateTime()();
 
@@ -141,6 +150,11 @@ class OutboxEvents extends Table {
 
   /// The event body, shaped by entityType.
   TextColumn get payloadJson => text()();
+
+  /// Whether this event removes the entity rather than writing it. The wire
+  /// format has always carried the field; nothing could set it until
+  /// profiles became deletable, so the sender hardcoded false.
+  BoolColumn get deleted => boolean().withDefault(const Constant(false))();
 
   TextColumn get hlc => text()();
   DateTimeColumn get createdAt => dateTime()();
@@ -219,7 +233,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -237,6 +251,13 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 3) {
         await m.createTable(pendingPositions);
+      }
+      if (from < 4) {
+        // Both columns carry a default, so rows already on disk are correct
+        // without a backfill: every stored profile is live, and every queued
+        // event is a write rather than a delete.
+        await m.addColumn(storedProfiles, storedProfiles.deleted);
+        await m.addColumn(outboxEvents, outboxEvents.deleted);
       }
     },
     beforeOpen: (details) async {

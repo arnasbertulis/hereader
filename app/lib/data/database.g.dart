@@ -1371,6 +1371,21 @@ class $StoredProfilesTable extends StoredProfiles
     requiredDuringInsert: false,
     defaultValue: const Constant(2),
   );
+  static const VerificationMeta _deletedMeta = const VerificationMeta(
+    'deleted',
+  );
+  @override
+  late final GeneratedColumn<bool> deleted = GeneratedColumn<bool>(
+    'deleted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("deleted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _hlcMeta = const VerificationMeta('hlc');
   @override
   late final GeneratedColumn<String> hlc = GeneratedColumn<String>(
@@ -1398,6 +1413,7 @@ class $StoredProfilesTable extends StoredProfiles
     pacingJson,
     presentationJson,
     rewindWords,
+    deleted,
     hlc,
     updatedAt,
   ];
@@ -1454,6 +1470,12 @@ class $StoredProfilesTable extends StoredProfiles
         ),
       );
     }
+    if (data.containsKey('deleted')) {
+      context.handle(
+        _deletedMeta,
+        deleted.isAcceptableOrUnknown(data['deleted']!, _deletedMeta),
+      );
+    }
     if (data.containsKey('hlc')) {
       context.handle(
         _hlcMeta,
@@ -1499,6 +1521,10 @@ class $StoredProfilesTable extends StoredProfiles
         DriftSqlType.int,
         data['${effectivePrefix}rewind_words'],
       )!,
+      deleted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}deleted'],
+      )!,
       hlc: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}hlc'],
@@ -1526,6 +1552,15 @@ class StoredProfile extends DataClass implements Insertable<StoredProfile> {
   final String pacingJson;
   final String presentationJson;
   final int rewindWords;
+
+  /// Tombstone. The row outlives the delete so that a later-arriving older
+  /// event has a stamp to lose against. Without it, an absent row and a row
+  /// deleted a second ago look identical, and any device that was offline
+  /// during the deletion would resurrect the profile on its next push.
+  ///
+  /// ADR 0005 requires this for every deletable entity. A forked profile is
+  /// the first one a reader can actually remove.
+  final bool deleted;
   final String hlc;
   final DateTime updatedAt;
   const StoredProfile({
@@ -1534,6 +1569,7 @@ class StoredProfile extends DataClass implements Insertable<StoredProfile> {
     required this.pacingJson,
     required this.presentationJson,
     required this.rewindWords,
+    required this.deleted,
     required this.hlc,
     required this.updatedAt,
   });
@@ -1545,6 +1581,7 @@ class StoredProfile extends DataClass implements Insertable<StoredProfile> {
     map['pacing_json'] = Variable<String>(pacingJson);
     map['presentation_json'] = Variable<String>(presentationJson);
     map['rewind_words'] = Variable<int>(rewindWords);
+    map['deleted'] = Variable<bool>(deleted);
     map['hlc'] = Variable<String>(hlc);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -1557,6 +1594,7 @@ class StoredProfile extends DataClass implements Insertable<StoredProfile> {
       pacingJson: Value(pacingJson),
       presentationJson: Value(presentationJson),
       rewindWords: Value(rewindWords),
+      deleted: Value(deleted),
       hlc: Value(hlc),
       updatedAt: Value(updatedAt),
     );
@@ -1573,6 +1611,7 @@ class StoredProfile extends DataClass implements Insertable<StoredProfile> {
       pacingJson: serializer.fromJson<String>(json['pacingJson']),
       presentationJson: serializer.fromJson<String>(json['presentationJson']),
       rewindWords: serializer.fromJson<int>(json['rewindWords']),
+      deleted: serializer.fromJson<bool>(json['deleted']),
       hlc: serializer.fromJson<String>(json['hlc']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -1586,6 +1625,7 @@ class StoredProfile extends DataClass implements Insertable<StoredProfile> {
       'pacingJson': serializer.toJson<String>(pacingJson),
       'presentationJson': serializer.toJson<String>(presentationJson),
       'rewindWords': serializer.toJson<int>(rewindWords),
+      'deleted': serializer.toJson<bool>(deleted),
       'hlc': serializer.toJson<String>(hlc),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -1597,6 +1637,7 @@ class StoredProfile extends DataClass implements Insertable<StoredProfile> {
     String? pacingJson,
     String? presentationJson,
     int? rewindWords,
+    bool? deleted,
     String? hlc,
     DateTime? updatedAt,
   }) => StoredProfile(
@@ -1605,6 +1646,7 @@ class StoredProfile extends DataClass implements Insertable<StoredProfile> {
     pacingJson: pacingJson ?? this.pacingJson,
     presentationJson: presentationJson ?? this.presentationJson,
     rewindWords: rewindWords ?? this.rewindWords,
+    deleted: deleted ?? this.deleted,
     hlc: hlc ?? this.hlc,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -1621,6 +1663,7 @@ class StoredProfile extends DataClass implements Insertable<StoredProfile> {
       rewindWords: data.rewindWords.present
           ? data.rewindWords.value
           : this.rewindWords,
+      deleted: data.deleted.present ? data.deleted.value : this.deleted,
       hlc: data.hlc.present ? data.hlc.value : this.hlc,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -1634,6 +1677,7 @@ class StoredProfile extends DataClass implements Insertable<StoredProfile> {
           ..write('pacingJson: $pacingJson, ')
           ..write('presentationJson: $presentationJson, ')
           ..write('rewindWords: $rewindWords, ')
+          ..write('deleted: $deleted, ')
           ..write('hlc: $hlc, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -1647,6 +1691,7 @@ class StoredProfile extends DataClass implements Insertable<StoredProfile> {
     pacingJson,
     presentationJson,
     rewindWords,
+    deleted,
     hlc,
     updatedAt,
   );
@@ -1659,6 +1704,7 @@ class StoredProfile extends DataClass implements Insertable<StoredProfile> {
           other.pacingJson == this.pacingJson &&
           other.presentationJson == this.presentationJson &&
           other.rewindWords == this.rewindWords &&
+          other.deleted == this.deleted &&
           other.hlc == this.hlc &&
           other.updatedAt == this.updatedAt);
 }
@@ -1669,6 +1715,7 @@ class StoredProfilesCompanion extends UpdateCompanion<StoredProfile> {
   final Value<String> pacingJson;
   final Value<String> presentationJson;
   final Value<int> rewindWords;
+  final Value<bool> deleted;
   final Value<String> hlc;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -1678,6 +1725,7 @@ class StoredProfilesCompanion extends UpdateCompanion<StoredProfile> {
     this.pacingJson = const Value.absent(),
     this.presentationJson = const Value.absent(),
     this.rewindWords = const Value.absent(),
+    this.deleted = const Value.absent(),
     this.hlc = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1688,6 +1736,7 @@ class StoredProfilesCompanion extends UpdateCompanion<StoredProfile> {
     required String pacingJson,
     required String presentationJson,
     this.rewindWords = const Value.absent(),
+    this.deleted = const Value.absent(),
     required String hlc,
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -1703,6 +1752,7 @@ class StoredProfilesCompanion extends UpdateCompanion<StoredProfile> {
     Expression<String>? pacingJson,
     Expression<String>? presentationJson,
     Expression<int>? rewindWords,
+    Expression<bool>? deleted,
     Expression<String>? hlc,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -1713,6 +1763,7 @@ class StoredProfilesCompanion extends UpdateCompanion<StoredProfile> {
       if (pacingJson != null) 'pacing_json': pacingJson,
       if (presentationJson != null) 'presentation_json': presentationJson,
       if (rewindWords != null) 'rewind_words': rewindWords,
+      if (deleted != null) 'deleted': deleted,
       if (hlc != null) 'hlc': hlc,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -1725,6 +1776,7 @@ class StoredProfilesCompanion extends UpdateCompanion<StoredProfile> {
     Value<String>? pacingJson,
     Value<String>? presentationJson,
     Value<int>? rewindWords,
+    Value<bool>? deleted,
     Value<String>? hlc,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -1735,6 +1787,7 @@ class StoredProfilesCompanion extends UpdateCompanion<StoredProfile> {
       pacingJson: pacingJson ?? this.pacingJson,
       presentationJson: presentationJson ?? this.presentationJson,
       rewindWords: rewindWords ?? this.rewindWords,
+      deleted: deleted ?? this.deleted,
       hlc: hlc ?? this.hlc,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -1759,6 +1812,9 @@ class StoredProfilesCompanion extends UpdateCompanion<StoredProfile> {
     if (rewindWords.present) {
       map['rewind_words'] = Variable<int>(rewindWords.value);
     }
+    if (deleted.present) {
+      map['deleted'] = Variable<bool>(deleted.value);
+    }
     if (hlc.present) {
       map['hlc'] = Variable<String>(hlc.value);
     }
@@ -1779,6 +1835,7 @@ class StoredProfilesCompanion extends UpdateCompanion<StoredProfile> {
           ..write('pacingJson: $pacingJson, ')
           ..write('presentationJson: $presentationJson, ')
           ..write('rewindWords: $rewindWords, ')
+          ..write('deleted: $deleted, ')
           ..write('hlc: $hlc, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -2106,6 +2163,21 @@ class $OutboxEventsTable extends OutboxEvents
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _deletedMeta = const VerificationMeta(
+    'deleted',
+  );
+  @override
+  late final GeneratedColumn<bool> deleted = GeneratedColumn<bool>(
+    'deleted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("deleted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _hlcMeta = const VerificationMeta('hlc');
   @override
   late final GeneratedColumn<String> hlc = GeneratedColumn<String>(
@@ -2156,6 +2228,7 @@ class $OutboxEventsTable extends OutboxEvents
     entityType,
     entityId,
     payloadJson,
+    deleted,
     hlc,
     createdAt,
     attempts,
@@ -2214,6 +2287,12 @@ class $OutboxEventsTable extends OutboxEvents
     } else if (isInserting) {
       context.missing(_payloadJsonMeta);
     }
+    if (data.containsKey('deleted')) {
+      context.handle(
+        _deletedMeta,
+        deleted.isAcceptableOrUnknown(data['deleted']!, _deletedMeta),
+      );
+    }
     if (data.containsKey('hlc')) {
       context.handle(
         _hlcMeta,
@@ -2271,6 +2350,10 @@ class $OutboxEventsTable extends OutboxEvents
         DriftSqlType.string,
         data['${effectivePrefix}payload_json'],
       )!,
+      deleted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}deleted'],
+      )!,
       hlc: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}hlc'],
@@ -2310,6 +2393,11 @@ class OutboxEvent extends DataClass implements Insertable<OutboxEvent> {
 
   /// The event body, shaped by entityType.
   final String payloadJson;
+
+  /// Whether this event removes the entity rather than writing it. The wire
+  /// format has always carried the field; nothing could set it until
+  /// profiles became deletable, so the sender hardcoded false.
+  final bool deleted;
   final String hlc;
   final DateTime createdAt;
 
@@ -2323,6 +2411,7 @@ class OutboxEvent extends DataClass implements Insertable<OutboxEvent> {
     required this.entityType,
     required this.entityId,
     required this.payloadJson,
+    required this.deleted,
     required this.hlc,
     required this.createdAt,
     required this.attempts,
@@ -2336,6 +2425,7 @@ class OutboxEvent extends DataClass implements Insertable<OutboxEvent> {
     map['entity_type'] = Variable<String>(entityType);
     map['entity_id'] = Variable<String>(entityId);
     map['payload_json'] = Variable<String>(payloadJson);
+    map['deleted'] = Variable<bool>(deleted);
     map['hlc'] = Variable<String>(hlc);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['attempts'] = Variable<int>(attempts);
@@ -2352,6 +2442,7 @@ class OutboxEvent extends DataClass implements Insertable<OutboxEvent> {
       entityType: Value(entityType),
       entityId: Value(entityId),
       payloadJson: Value(payloadJson),
+      deleted: Value(deleted),
       hlc: Value(hlc),
       createdAt: Value(createdAt),
       attempts: Value(attempts),
@@ -2372,6 +2463,7 @@ class OutboxEvent extends DataClass implements Insertable<OutboxEvent> {
       entityType: serializer.fromJson<String>(json['entityType']),
       entityId: serializer.fromJson<String>(json['entityId']),
       payloadJson: serializer.fromJson<String>(json['payloadJson']),
+      deleted: serializer.fromJson<bool>(json['deleted']),
       hlc: serializer.fromJson<String>(json['hlc']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       attempts: serializer.fromJson<int>(json['attempts']),
@@ -2387,6 +2479,7 @@ class OutboxEvent extends DataClass implements Insertable<OutboxEvent> {
       'entityType': serializer.toJson<String>(entityType),
       'entityId': serializer.toJson<String>(entityId),
       'payloadJson': serializer.toJson<String>(payloadJson),
+      'deleted': serializer.toJson<bool>(deleted),
       'hlc': serializer.toJson<String>(hlc),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'attempts': serializer.toJson<int>(attempts),
@@ -2400,6 +2493,7 @@ class OutboxEvent extends DataClass implements Insertable<OutboxEvent> {
     String? entityType,
     String? entityId,
     String? payloadJson,
+    bool? deleted,
     String? hlc,
     DateTime? createdAt,
     int? attempts,
@@ -2410,6 +2504,7 @@ class OutboxEvent extends DataClass implements Insertable<OutboxEvent> {
     entityType: entityType ?? this.entityType,
     entityId: entityId ?? this.entityId,
     payloadJson: payloadJson ?? this.payloadJson,
+    deleted: deleted ?? this.deleted,
     hlc: hlc ?? this.hlc,
     createdAt: createdAt ?? this.createdAt,
     attempts: attempts ?? this.attempts,
@@ -2428,6 +2523,7 @@ class OutboxEvent extends DataClass implements Insertable<OutboxEvent> {
       payloadJson: data.payloadJson.present
           ? data.payloadJson.value
           : this.payloadJson,
+      deleted: data.deleted.present ? data.deleted.value : this.deleted,
       hlc: data.hlc.present ? data.hlc.value : this.hlc,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       attempts: data.attempts.present ? data.attempts.value : this.attempts,
@@ -2443,6 +2539,7 @@ class OutboxEvent extends DataClass implements Insertable<OutboxEvent> {
           ..write('entityType: $entityType, ')
           ..write('entityId: $entityId, ')
           ..write('payloadJson: $payloadJson, ')
+          ..write('deleted: $deleted, ')
           ..write('hlc: $hlc, ')
           ..write('createdAt: $createdAt, ')
           ..write('attempts: $attempts, ')
@@ -2458,6 +2555,7 @@ class OutboxEvent extends DataClass implements Insertable<OutboxEvent> {
     entityType,
     entityId,
     payloadJson,
+    deleted,
     hlc,
     createdAt,
     attempts,
@@ -2472,6 +2570,7 @@ class OutboxEvent extends DataClass implements Insertable<OutboxEvent> {
           other.entityType == this.entityType &&
           other.entityId == this.entityId &&
           other.payloadJson == this.payloadJson &&
+          other.deleted == this.deleted &&
           other.hlc == this.hlc &&
           other.createdAt == this.createdAt &&
           other.attempts == this.attempts &&
@@ -2484,6 +2583,7 @@ class OutboxEventsCompanion extends UpdateCompanion<OutboxEvent> {
   final Value<String> entityType;
   final Value<String> entityId;
   final Value<String> payloadJson;
+  final Value<bool> deleted;
   final Value<String> hlc;
   final Value<DateTime> createdAt;
   final Value<int> attempts;
@@ -2494,6 +2594,7 @@ class OutboxEventsCompanion extends UpdateCompanion<OutboxEvent> {
     this.entityType = const Value.absent(),
     this.entityId = const Value.absent(),
     this.payloadJson = const Value.absent(),
+    this.deleted = const Value.absent(),
     this.hlc = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.attempts = const Value.absent(),
@@ -2505,6 +2606,7 @@ class OutboxEventsCompanion extends UpdateCompanion<OutboxEvent> {
     required String entityType,
     required String entityId,
     required String payloadJson,
+    this.deleted = const Value.absent(),
     required String hlc,
     required DateTime createdAt,
     this.attempts = const Value.absent(),
@@ -2521,6 +2623,7 @@ class OutboxEventsCompanion extends UpdateCompanion<OutboxEvent> {
     Expression<String>? entityType,
     Expression<String>? entityId,
     Expression<String>? payloadJson,
+    Expression<bool>? deleted,
     Expression<String>? hlc,
     Expression<DateTime>? createdAt,
     Expression<int>? attempts,
@@ -2532,6 +2635,7 @@ class OutboxEventsCompanion extends UpdateCompanion<OutboxEvent> {
       if (entityType != null) 'entity_type': entityType,
       if (entityId != null) 'entity_id': entityId,
       if (payloadJson != null) 'payload_json': payloadJson,
+      if (deleted != null) 'deleted': deleted,
       if (hlc != null) 'hlc': hlc,
       if (createdAt != null) 'created_at': createdAt,
       if (attempts != null) 'attempts': attempts,
@@ -2545,6 +2649,7 @@ class OutboxEventsCompanion extends UpdateCompanion<OutboxEvent> {
     Value<String>? entityType,
     Value<String>? entityId,
     Value<String>? payloadJson,
+    Value<bool>? deleted,
     Value<String>? hlc,
     Value<DateTime>? createdAt,
     Value<int>? attempts,
@@ -2556,6 +2661,7 @@ class OutboxEventsCompanion extends UpdateCompanion<OutboxEvent> {
       entityType: entityType ?? this.entityType,
       entityId: entityId ?? this.entityId,
       payloadJson: payloadJson ?? this.payloadJson,
+      deleted: deleted ?? this.deleted,
       hlc: hlc ?? this.hlc,
       createdAt: createdAt ?? this.createdAt,
       attempts: attempts ?? this.attempts,
@@ -2581,6 +2687,9 @@ class OutboxEventsCompanion extends UpdateCompanion<OutboxEvent> {
     if (payloadJson.present) {
       map['payload_json'] = Variable<String>(payloadJson.value);
     }
+    if (deleted.present) {
+      map['deleted'] = Variable<bool>(deleted.value);
+    }
     if (hlc.present) {
       map['hlc'] = Variable<String>(hlc.value);
     }
@@ -2604,6 +2713,7 @@ class OutboxEventsCompanion extends UpdateCompanion<OutboxEvent> {
           ..write('entityType: $entityType, ')
           ..write('entityId: $entityId, ')
           ..write('payloadJson: $payloadJson, ')
+          ..write('deleted: $deleted, ')
           ..write('hlc: $hlc, ')
           ..write('createdAt: $createdAt, ')
           ..write('attempts: $attempts, ')
@@ -4198,6 +4308,7 @@ typedef $$StoredProfilesTableCreateCompanionBuilder =
       required String pacingJson,
       required String presentationJson,
       Value<int> rewindWords,
+      Value<bool> deleted,
       required String hlc,
       required DateTime updatedAt,
       Value<int> rowid,
@@ -4209,6 +4320,7 @@ typedef $$StoredProfilesTableUpdateCompanionBuilder =
       Value<String> pacingJson,
       Value<String> presentationJson,
       Value<int> rewindWords,
+      Value<bool> deleted,
       Value<String> hlc,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -4245,6 +4357,11 @@ class $$StoredProfilesTableFilterComposer
 
   ColumnFilters<int> get rewindWords => $composableBuilder(
     column: $table.rewindWords,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get deleted => $composableBuilder(
+    column: $table.deleted,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4293,6 +4410,11 @@ class $$StoredProfilesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get deleted => $composableBuilder(
+    column: $table.deleted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get hlc => $composableBuilder(
     column: $table.hlc,
     builder: (column) => ColumnOrderings(column),
@@ -4333,6 +4455,9 @@ class $$StoredProfilesTableAnnotationComposer
     column: $table.rewindWords,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get deleted =>
+      $composableBuilder(column: $table.deleted, builder: (column) => column);
 
   GeneratedColumn<String> get hlc =>
       $composableBuilder(column: $table.hlc, builder: (column) => column);
@@ -4379,6 +4504,7 @@ class $$StoredProfilesTableTableManager
                 Value<String> pacingJson = const Value.absent(),
                 Value<String> presentationJson = const Value.absent(),
                 Value<int> rewindWords = const Value.absent(),
+                Value<bool> deleted = const Value.absent(),
                 Value<String> hlc = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -4388,6 +4514,7 @@ class $$StoredProfilesTableTableManager
                 pacingJson: pacingJson,
                 presentationJson: presentationJson,
                 rewindWords: rewindWords,
+                deleted: deleted,
                 hlc: hlc,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -4399,6 +4526,7 @@ class $$StoredProfilesTableTableManager
                 required String pacingJson,
                 required String presentationJson,
                 Value<int> rewindWords = const Value.absent(),
+                Value<bool> deleted = const Value.absent(),
                 required String hlc,
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -4408,6 +4536,7 @@ class $$StoredProfilesTableTableManager
                 pacingJson: pacingJson,
                 presentationJson: presentationJson,
                 rewindWords: rewindWords,
+                deleted: deleted,
                 hlc: hlc,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -4606,6 +4735,7 @@ typedef $$OutboxEventsTableCreateCompanionBuilder =
       required String entityType,
       required String entityId,
       required String payloadJson,
+      Value<bool> deleted,
       required String hlc,
       required DateTime createdAt,
       Value<int> attempts,
@@ -4618,6 +4748,7 @@ typedef $$OutboxEventsTableUpdateCompanionBuilder =
       Value<String> entityType,
       Value<String> entityId,
       Value<String> payloadJson,
+      Value<bool> deleted,
       Value<String> hlc,
       Value<DateTime> createdAt,
       Value<int> attempts,
@@ -4655,6 +4786,11 @@ class $$OutboxEventsTableFilterComposer
 
   ColumnFilters<String> get payloadJson => $composableBuilder(
     column: $table.payloadJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get deleted => $composableBuilder(
+    column: $table.deleted,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4713,6 +4849,11 @@ class $$OutboxEventsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get deleted => $composableBuilder(
+    column: $table.deleted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get hlc => $composableBuilder(
     column: $table.hlc,
     builder: (column) => ColumnOrderings(column),
@@ -4764,6 +4905,9 @@ class $$OutboxEventsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get deleted =>
+      $composableBuilder(column: $table.deleted, builder: (column) => column);
+
   GeneratedColumn<String> get hlc =>
       $composableBuilder(column: $table.hlc, builder: (column) => column);
 
@@ -4813,6 +4957,7 @@ class $$OutboxEventsTableTableManager
                 Value<String> entityType = const Value.absent(),
                 Value<String> entityId = const Value.absent(),
                 Value<String> payloadJson = const Value.absent(),
+                Value<bool> deleted = const Value.absent(),
                 Value<String> hlc = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> attempts = const Value.absent(),
@@ -4823,6 +4968,7 @@ class $$OutboxEventsTableTableManager
                 entityType: entityType,
                 entityId: entityId,
                 payloadJson: payloadJson,
+                deleted: deleted,
                 hlc: hlc,
                 createdAt: createdAt,
                 attempts: attempts,
@@ -4835,6 +4981,7 @@ class $$OutboxEventsTableTableManager
                 required String entityType,
                 required String entityId,
                 required String payloadJson,
+                Value<bool> deleted = const Value.absent(),
                 required String hlc,
                 required DateTime createdAt,
                 Value<int> attempts = const Value.absent(),
@@ -4845,6 +4992,7 @@ class $$OutboxEventsTableTableManager
                 entityType: entityType,
                 entityId: entityId,
                 payloadJson: payloadJson,
+                deleted: deleted,
                 hlc: hlc,
                 createdAt: createdAt,
                 attempts: attempts,
