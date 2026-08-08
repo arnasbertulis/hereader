@@ -68,7 +68,12 @@ public class SyncService {
                     event.entityId(),
                     event.payload(),
                     event.hlc(),
-                    request.deviceId());
+                    request.deviceId(),
+                    // Stored on the event, not only on the resolved state.
+                    // A pulling device reads the log, so a deletion recorded
+                    // only in entity_state would arrive elsewhere as an
+                    // ordinary write and undo itself.
+                    event.deleted());
 
             if (!appended) {
                 // Already seen: an earlier response was lost and the client

@@ -55,6 +55,10 @@ public class SyncRepository {
     /// Relies on the unique constraint rather than a preceding select, so
     /// the guarantee holds under concurrent pushes instead of depending on
     /// a check and an insert staying together.
+    ///
+    /// [deleted] is stored on the event rather than only on the resolved
+    /// state. The log is what a device pulls, so a deletion that is recorded
+    /// only in entity_state reaches other devices as an ordinary write.
     public boolean appendEvent(
             UUID userId,
             long seq,
@@ -63,15 +67,16 @@ public class SyncRepository {
             String entityId,
             Map<String, Object> payload,
             String hlc,
-            String deviceId) {
+            String deviceId,
+            boolean deleted) {
 
         int rows = jdbc.sql("""
                 insert into sync_events
                     (user_id, seq, idempotency_key, entity_type, entity_id,
-                     payload, hlc, device_id)
+                     payload, hlc, device_id, deleted)
                 values
                     (:userId, :seq, :key, :type, :entityId,
-                     cast(:payload as jsonb), :hlc, :deviceId)
+                     cast(:payload as jsonb), :hlc, :deviceId, :deleted)
                 on conflict (user_id, idempotency_key) do nothing
                 """)
                 .param("userId", userId)
@@ -82,6 +87,7 @@ public class SyncRepository {
                 .param("payload", toJson(payload))
                 .param("hlc", hlc)
                 .param("deviceId", deviceId)
+                .param("deleted", deleted)
                 .update();
 
         return rows > 0;
@@ -156,7 +162,8 @@ public class SyncRepository {
             UUID userId, long since, int limit) {
 
         return jdbc.sql("""
-                select seq, entity_type, entity_id, payload, hlc, device_id
+                select seq, entity_type, entity_id, payload, hlc, device_id,
+                       deleted
                 from sync_events
                 where user_id = :userId and seq > :since
                 order by seq
@@ -172,7 +179,7 @@ public class SyncRepository {
                         fromJson(rs.getString("payload")),
                         rs.getString("hlc"),
                         rs.getString("device_id"),
-                        false))
+                        rs.getBoolean("deleted")))
                 .list();
     }
 
@@ -262,4 +269,3 @@ public class SyncRepository {
         }
     }
 }
-
