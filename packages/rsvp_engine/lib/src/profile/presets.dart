@@ -6,6 +6,10 @@ import 'profile.dart';
 ///
 /// Where a setting follows from a study, the citation is named. Where it is
 /// a preference with no evidence behind it, that is said outright.
+///
+/// Every id here sits in [ReadingProfile.builtInIdPrefix], which is what
+/// makes `isBuiltIn` true and what stops a stored or synced profile from
+/// shadowing one. `presets_test.dart` checks that.
 abstract final class Presets {
   /// Constant rate, centred, default type size.
   ///
@@ -14,7 +18,6 @@ abstract final class Presets {
   static const standard = ReadingProfile(
     id: 'builtin.standard',
     name: 'Standard',
-    isBuiltIn: true,
     pacing: PacingConfig(baseWpm: 250),
   );
 
@@ -27,7 +30,6 @@ abstract final class Presets {
   static const centralFieldLoss = ReadingProfile(
     id: 'builtin.cfl.elicited',
     name: 'Central field loss',
-    isBuiltIn: true,
     pacing: PacingConfig(kind: PacingModelKind.elicited),
     presentation: PresentationConfig(
       fontSizePt: 48,
@@ -45,7 +47,6 @@ abstract final class Presets {
   static const centralFieldLossTimed = ReadingProfile(
     id: 'builtin.cfl.timed',
     name: 'Central field loss (timed)',
-    isBuiltIn: true,
     pacing: PacingConfig(kind: PacingModelKind.lengthScaled, baseWpm: 120),
     presentation: PresentationConfig(
       fontSizePt: 48,
@@ -61,7 +62,6 @@ abstract final class Presets {
   static const spacedType = ReadingProfile(
     id: 'builtin.spaced',
     name: 'Spaced type',
-    isBuiltIn: true,
     pacing: PacingConfig(
       baseWpm: 180,
       clausePause: Duration(milliseconds: 140),
@@ -77,7 +77,6 @@ abstract final class Presets {
   static const lowFatigue = ReadingProfile(
     id: 'builtin.lowfatigue',
     name: 'Low fatigue',
-    isBuiltIn: true,
     rewindWords: 3,
     pacing: PacingConfig(
       baseWpm: 200,

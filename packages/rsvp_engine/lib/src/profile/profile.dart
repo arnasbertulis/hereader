@@ -1,3 +1,4 @@
+import '../json_coerce.dart';
 import '../pacing/pacing_config.dart';
 
 /// How tokens are laid out on screen.
@@ -114,28 +115,46 @@ class PresentationConfig {
     'transitionMs': transitionMs,
   };
 
-  factory PresentationConfig.fromJson(Map<String, dynamic> json) =>
-      PresentationConfig(
-        mode: _enumByName(
-          PresentationMode.values,
-          json['mode'],
-          PresentationMode.fixedSingle,
-        ),
-        anchorX: (json['anchorX'] as num?)?.toDouble() ?? 0.5,
-        anchorY: (json['anchorY'] as num?)?.toDouble() ?? 0.5,
-        fontFamily: json['fontFamily'] as String?,
-        fontSizePt: (json['fontSizePt'] as num?)?.toDouble() ?? 32,
-        letterSpacingEm: (json['letterSpacingEm'] as num?)?.toDouble() ?? 0.0,
-        chunkSize: (json['chunkSize'] as num?)?.toInt() ?? 1,
-        polarity: _enumByName(
-          Polarity.values,
-          json['polarity'],
-          Polarity.darkOnLight,
-        ),
-        tintArgb: (json['tintArgb'] as num?)?.toInt(),
-        orpHighlight: json['orpHighlight'] as bool? ?? false,
-        transitionMs: (json['transitionMs'] as num?)?.toInt() ?? 0,
-      );
+  /// Reads presentation settings written by any build of this package.
+  ///
+  /// The asserts above hold for values this app constructs and cannot hold
+  /// for values arriving through sync. Out-of-range numbers move to the
+  /// nearest bound rather than throwing; see `json_coerce.dart` for why a
+  /// throw here would lose the reader's change permanently.
+  factory PresentationConfig.fromJson(Map<String, dynamic> json) {
+    const fallback = PresentationConfig();
+
+    return PresentationConfig(
+      mode: enumByName(PresentationMode.values, json['mode'], fallback.mode),
+      anchorX: coerceDouble(json['anchorX'], fallback.anchorX, min: 0, max: 1),
+      anchorY: coerceDouble(json['anchorY'], fallback.anchorY, min: 0, max: 1),
+      fontFamily: coerceStringOrNull(json['fontFamily']),
+      fontSizePt: coerceDouble(json['fontSizePt'], fallback.fontSizePt, min: 1),
+      letterSpacingEm: coerceDouble(
+        json['letterSpacingEm'],
+        fallback.letterSpacingEm,
+        min: 0,
+      ),
+      // Pinned to 1 rather than clamped to a range. A build that renders
+      // groups will send something larger, and this one cannot draw it.
+      // Reading one word per advance is not what that reader configured, but
+      // it is legible; refusing the profile would lose their type size and
+      // contrast along with it.
+      chunkSize: coerceInt(json['chunkSize'], 1, min: 1, max: 1),
+      polarity: enumByName(
+        Polarity.values,
+        json['polarity'],
+        fallback.polarity,
+      ),
+      tintArgb: json['tintArgb'] is num ? coerceInt(json['tintArgb'], 0) : null,
+      orpHighlight: coerceBool(json['orpHighlight'], fallback.orpHighlight),
+      transitionMs: coerceInt(
+        json['transitionMs'],
+        fallback.transitionMs,
+        min: 0,
+      ),
+    );
+  }
 }
 
 /// A named bundle of pacing and presentation settings.
@@ -143,6 +162,13 @@ class PresentationConfig {
 /// [id] is stable and travels with the sync event log. [name] is what the
 /// reader sees and may be edited.
 class ReadingProfile {
+  /// Ids in this namespace belong to code rather than to the reader.
+  ///
+  /// Nothing stored or synced may claim one. A stored row shadowing a preset
+  /// would show twice in the reader's list, and an inbound event could
+  /// replace a preset the app guarantees is always available.
+  static const builtInIdPrefix = 'builtin.';
+
   final String id;
   final String name;
   final PacingConfig pacing;
@@ -152,19 +178,23 @@ class ReadingProfile {
   /// re-enters mid-sentence with some context.
   final int rewindWords;
 
-  /// True for profiles shipped with the app. The UI copies rather than
-  /// edits these.
-  final bool isBuiltIn;
-
   const ReadingProfile({
     required this.id,
     required this.name,
     this.pacing = const PacingConfig(),
     this.presentation = const PresentationConfig(),
     this.rewindWords = 2,
-    this.isBuiltIn = false,
   }) : assert(id != ''),
        assert(rewindWords >= 0);
+
+  /// True for profiles shipped with the app. The UI copies rather than
+  /// edits these.
+  ///
+  /// Derived from [id] rather than stored. A stored flag would be a second
+  /// source of truth for one fact, and a profile arriving through sync could
+  /// set it: a payload claiming to be a preset would render as a profile the
+  /// reader can neither edit nor delete.
+  bool get isBuiltIn => id.startsWith(builtInIdPrefix);
 
   ReadingProfile copyWith({
     String? id,
@@ -172,19 +202,30 @@ class ReadingProfile {
     PacingConfig? pacing,
     PresentationConfig? presentation,
     int? rewindWords,
-    bool? isBuiltIn,
   }) => ReadingProfile(
     id: id ?? this.id,
     name: name ?? this.name,
     pacing: pacing ?? this.pacing,
     presentation: presentation ?? this.presentation,
     rewindWords: rewindWords ?? this.rewindWords,
-    isBuiltIn: isBuiltIn ?? this.isBuiltIn,
   );
 
   /// Derive an editable copy of a built-in profile.
-  ReadingProfile fork({required String id, String? name}) =>
-      copyWith(id: id, name: name ?? '${this.name} (copy)', isBuiltIn: false);
+  ///
+  /// The caller supplies the id, so the namespace is checked here: a fork
+  /// keeping a preset's id would shadow that preset in the reader's list and
+  /// would be refused by the repository on save.
+  ReadingProfile fork({required String id, String? name}) {
+    if (id.startsWith(builtInIdPrefix)) {
+      throw ArgumentError.value(
+        id,
+        'id',
+        'a fork cannot take an id in the built-in namespace',
+      );
+    }
+
+    return copyWith(id: id, name: name ?? '${this.name} (copy)');
+  }
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -192,34 +233,33 @@ class ReadingProfile {
     'pacing': pacing.toJson(),
     'presentation': presentation.toJson(),
     'rewindWords': rewindWords,
-    'isBuiltIn': isBuiltIn,
   };
 
-  factory ReadingProfile.fromJson(Map<String, dynamic> json) => ReadingProfile(
-    id: json['id'] as String,
-    name: json['name'] as String? ?? 'Unnamed',
-    pacing: json['pacing'] == null
-        ? const PacingConfig()
-        : PacingConfig.fromJson(json['pacing'] as Map<String, dynamic>),
-    presentation: json['presentation'] == null
-        ? const PresentationConfig()
-        : PresentationConfig.fromJson(
-            json['presentation'] as Map<String, dynamic>,
-          ),
-    rewindWords: (json['rewindWords'] as num?)?.toInt() ?? 2,
-    isBuiltIn: json['isBuiltIn'] as bool? ?? false,
-  );
-}
+  /// Reads a profile written by any build of this package.
+  ///
+  /// Every field degrades except [id], which has no sensible fallback: a
+  /// profile without one cannot be stored, compared, or synced. The sync
+  /// client writes the service's own entity id into the payload before
+  /// calling this, so an event reaching here always carries one.
+  factory ReadingProfile.fromJson(Map<String, dynamic> json) {
+    final id = json['id'];
+    if (id is! String || id.isEmpty) {
+      throw FormatException('Profile JSON carries no id: $json');
+    }
 
-/// Resolve an enum by name, falling back rather than throwing.
-///
-/// A device running an older build may receive a profile from a newer one
-/// through sync. Unknown values degrade to the default instead of making the
-/// whole profile unreadable.
-T _enumByName<T extends Enum>(List<T> values, Object? name, T fallback) {
-  if (name is! String) return fallback;
-  for (final v in values) {
-    if (v.name == name) return v;
+    final pacing = coerceMap(json['pacing']);
+    final presentation = coerceMap(json['presentation']);
+
+    return ReadingProfile(
+      id: id,
+      name: coerceString(json['name'], 'Unnamed'),
+      pacing: pacing == null
+          ? const PacingConfig()
+          : PacingConfig.fromJson(pacing),
+      presentation: presentation == null
+          ? const PresentationConfig()
+          : PresentationConfig.fromJson(presentation),
+      rewindWords: coerceInt(json['rewindWords'], 2, min: 0),
+    );
   }
-  return fallback;
 }
