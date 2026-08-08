@@ -347,4 +347,92 @@ class SyncControllerIntegrationTest {
                                 """))
                 .andExpect(status().isBadRequest());
     }
+
+    // -- deletions -----------------------------------------------------
+
+    private static String profilePush(String device, String key,
+                                      String profileId, String name,
+                                      boolean deleted, String hlc) {
+        return """
+                {
+                  "deviceId": "%s",
+                  "events": [{
+                    "idempotencyKey": "%s",
+                    "entityType": "PROFILE",
+                    "entityId": "%s",
+                    "payload": {
+                      "id": "%s",
+                      "name": "%s",
+                      "pacing": {"kind": "constant", "baseWpm": 250.0},
+                      "presentation": {"fontSizePt": 44.0},
+                      "rewindWords": 2
+                    },
+                    "hlc": "%s",
+                    "deleted": %b
+                  }]
+                }
+                """.formatted(device, key, profileId, profileId, name, hlc, deleted);
+    }
+
+    @Test
+    void aDeletionComesBackFromPullAsATombstone() throws Exception {
+        pushExpectingOk(profilePush("laptop", "k1", "p.1", "Mine", false,
+                stamp(0, "laptop")));
+        pushExpectingOk(profilePush("laptop", "k2", "p.1", "Mine", true,
+                stamp(1000, "laptop")));
+
+        // The log is what devices pull. A deletion recorded only in
+        // entity_state would arrive here as an ordinary write carrying the
+        // profile's last payload, and every pulling device would write it
+        // back as live.
+        mvc.perform(get("/sync/events?since=0").header("Authorization", auth))
+                .andExpect(jsonPath("$.events", hasSize(2)))
+                .andExpect(jsonPath("$.events[0].deleted").value(false))
+                .andExpect(jsonPath("$.events[1].deleted").value(true))
+                // The whole profile travels, so a device that never received
+                // the create can still write a complete tombstone row.
+                .andExpect(jsonPath("$.events[1].payload.name").value("Mine"));
+    }
+
+    @Test
+    void anOrdinaryWriteComesBackUndeleted() throws Exception {
+        pushExpectingOk(push("laptop", "k1", "book-1", 100, stamp(0, "laptop")));
+
+        mvc.perform(get("/sync/events?since=0").header("Authorization", auth))
+                .andExpect(jsonPath("$.events[0].deleted").value(false));
+    }
+
+    @Test
+    void eachEventInABatchCarriesItsOwnFlag() throws Exception {
+        pushExpectingOk("""
+                {
+                  "deviceId": "laptop",
+                  "events": [
+                    {
+                      "idempotencyKey": "k1",
+                      "entityType": "PROFILE",
+                      "entityId": "p.kept",
+                      "payload": {"id": "p.kept", "name": "Kept"},
+                      "hlc": "%s",
+                      "deleted": false
+                    },
+                    {
+                      "idempotencyKey": "k2",
+                      "entityType": "PROFILE",
+                      "entityId": "p.gone",
+                      "payload": {"id": "p.gone", "name": "Gone"},
+                      "hlc": "%s",
+                      "deleted": true
+                    }
+                  ]
+                }
+                """.formatted(stamp(0, "laptop"), stamp(1, "laptop")));
+
+        mvc.perform(get("/sync/events?since=0").header("Authorization", auth))
+                .andExpect(jsonPath("$.events", hasSize(2)))
+                .andExpect(jsonPath("$.events[0].entityId").value("p.kept"))
+                .andExpect(jsonPath("$.events[0].deleted").value(false))
+                .andExpect(jsonPath("$.events[1].entityId").value("p.gone"))
+                .andExpect(jsonPath("$.events[1].deleted").value(true));
+    }
 }
