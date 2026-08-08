@@ -1,3 +1,5 @@
+import '../json_coerce.dart';
+
 enum PacingModelKind { constant, lengthScaled, elicited }
 
 class PacingConfig {
@@ -41,30 +43,40 @@ class PacingConfig {
     'maxDisplayMs': maxDisplay.inMilliseconds,
   };
 
-  factory PacingConfig.fromJson(Map<String, dynamic> json) => PacingConfig(
-    kind: PacingModelKind.values.firstWhere(
-      (k) => k.name == json['kind'],
-      orElse: () => PacingModelKind.constant,
-    ),
-    baseWpm: (json['baseWpm'] as num?)?.toDouble() ?? 250,
-    referenceLetterCount:
-        (json['referenceLetterCount'] as num?)?.toDouble() ?? 5.0,
-    lengthScaleStrength:
-        (json['lengthScaleStrength'] as num?)?.toDouble() ?? 1.0,
-    clausePause: Duration(
-      milliseconds: (json['clausePauseMs'] as num?)?.toInt() ?? 90,
-    ),
-    sentencePause: Duration(
-      milliseconds: (json['sentencePauseMs'] as num?)?.toInt() ?? 220,
-    ),
-    paragraphPause: Duration(
-      milliseconds: (json['paragraphPauseMs'] as num?)?.toInt() ?? 400,
-    ),
-    minDisplay: Duration(
-      milliseconds: (json['minDisplayMs'] as num?)?.toInt() ?? 40,
-    ),
-    maxDisplay: Duration(
-      milliseconds: (json['maxDisplayMs'] as num?)?.toInt() ?? 1200,
-    ),
-  );
+  /// Reads pacing settings written by any build of this package.
+  ///
+  /// The asserts above hold for values this app constructs. They cannot hold
+  /// for values arriving through sync, where the writing device decided what
+  /// was in range. Out-of-range numbers move to the nearest bound instead of
+  /// throwing, because a throw inside the pull loop loses the event
+  /// permanently. See `json_coerce.dart`.
+  factory PacingConfig.fromJson(Map<String, dynamic> json) {
+    // The constructor's own defaults, read off an instance, so a fallback
+    // here cannot drift away from the value it falls back to.
+    const fallback = PacingConfig();
+
+    Duration millis(Object? raw, Duration self) =>
+        Duration(milliseconds: coerceInt(raw, self.inMilliseconds, min: 0));
+
+    return PacingConfig(
+      kind: enumByName(PacingModelKind.values, json['kind'], fallback.kind),
+      baseWpm: coerceDouble(json['baseWpm'], fallback.baseWpm, min: 1),
+      referenceLetterCount: coerceDouble(
+        json['referenceLetterCount'],
+        fallback.referenceLetterCount,
+        min: 1,
+      ),
+      lengthScaleStrength: coerceDouble(
+        json['lengthScaleStrength'],
+        fallback.lengthScaleStrength,
+        min: 0,
+        max: 1,
+      ),
+      clausePause: millis(json['clausePauseMs'], fallback.clausePause),
+      sentencePause: millis(json['sentencePauseMs'], fallback.sentencePause),
+      paragraphPause: millis(json['paragraphPauseMs'], fallback.paragraphPause),
+      minDisplay: millis(json['minDisplayMs'], fallback.minDisplay),
+      maxDisplay: millis(json['maxDisplayMs'], fallback.maxDisplay),
+    );
+  }
 }
