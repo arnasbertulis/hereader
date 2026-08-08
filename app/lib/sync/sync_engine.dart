@@ -204,7 +204,11 @@ class SyncEngine {
     'entityId': event.entityId,
     'payload': jsonDecode(event.payloadJson),
     'hlc': event.hlc,
-    'deleted': false,
+    // Was hardcoded false while nothing could produce a delete. Profiles are
+    // the first entity a reader can remove, and ADR 0005 requires the
+    // deletion to reach other devices as a tombstone rather than as an
+    // absence.
+    'deleted': event.deleted,
   };
 
   // -- pull ----------------------------------------------------------
@@ -271,9 +275,7 @@ class SyncEngine {
       case 'PREFERENCE':
         await _applyPreference(event);
       case 'PROFILE':
-        // Profiles arrive but are not applied yet: editing them needs a
-        // settings screen that does not exist.
-        break;
+        await _applyProfile(event);
       default:
         // An entity type this build does not know. Ignored rather than
         // failed: a newer client may sync something this one cannot use,
@@ -319,6 +321,29 @@ class SyncEngine {
       key: event.entityId,
       value: value,
       hlc: event.hlc,
+    );
+  }
+
+  /// Writes a profile another device created, edited, or deleted.
+  ///
+  /// The service keyed and ordered this event by [PulledEvent.entityId], so
+  /// that id wins over whatever the payload carries. Everything else about
+  /// the profile degrades rather than throwing, because a throw here counts
+  /// as a skipped event and sync.last_seq advances past it.
+  ///
+  /// A payload claiming a built-in id is refused inside the repository:
+  /// ReadingProfile derives isBuiltIn from the id, so nothing on the wire can
+  /// assert it.
+  Future<void> _applyProfile(PulledEvent event) async {
+    final profile = ReadingProfile.fromJson({
+      ...event.payload,
+      'id': event.entityId,
+    });
+
+    await repository.applyRemoteProfile(
+      profile: profile,
+      hlc: event.hlc,
+      deleted: event.deleted,
     );
   }
 
