@@ -478,6 +478,17 @@ class LibraryRepository {
         now: now,
         deleted: true,
       );
+
+      // Cleared in the same transaction rather than left for activeProfile()
+      // to notice, so the reader is never briefly pointed at a profile this
+      // device has just tombstoned.
+      final active = await (_db.select(
+        _db.preferences,
+      )..where((p) => p.key.equals(activeProfileKey))).getSingleOrNull();
+
+      if (active?.value == id) {
+        await _clearActiveProfile();
+      }
     });
   }
 
@@ -530,6 +541,46 @@ class LibraryRepository {
     });
   }
 
+  // -- active profile ------------------------------------------------
+
+  /// Which profile the reader last chose, on this device only.
+  ///
+  /// Never synced. A phone read outdoors and a desktop in a dim room can
+  /// reasonably want different profiles active, and a shared pointer would
+  /// have each device pulling the other's choice out from under it. The
+  /// profiles themselves sync; which one is in use does not.
+  static const activeProfileKey = 'ui.active_profile';
+
+  Future<void> setActiveProfile(String id, {required String hlc}) =>
+      setPreference(activeProfileKey, id, hlc: hlc);
+
+  /// The profile to read with, resolved against what is actually on this
+  /// device.
+  ///
+  /// Falls back to [Presets.standard] by name rather than to the first entry
+  /// in the list. A positional fallback would change as profiles come and go,
+  /// which reads to the reader as the app reassigning their settings at
+  /// random.
+  ///
+  /// A pointer that no longer resolves is cleared rather than left. A profile
+  /// deleted on another device arrives here as a tombstone, and keeping the
+  /// dead id would mean falling back on every single open forever after.
+  Future<ReadingProfile> activeProfile() async {
+    final id = await preference(activeProfileKey);
+    if (id == null) return Presets.standard;
+
+    for (final profile in await allProfiles()) {
+      if (profile.id == id) return profile;
+    }
+
+    await _clearActiveProfile();
+    return Presets.standard;
+  }
+
+  Future<void> _clearActiveProfile() => (_db.delete(
+    _db.preferences,
+  )..where((p) => p.key.equals(activeProfileKey))).go();
+
   // -- preferences ---------------------------------------------------
 
   Future<String?> preference(String key) async {
@@ -540,16 +591,48 @@ class LibraryRepository {
     return row?.value;
   }
 
+  /// Writes an app-wide setting.
+  ///
+  /// [sync] defaults to false, and the default is the point of the parameter.
+  /// Sync bookkeeping lives in this table, and `sync.last_seq` reaching
+  /// another device would have it skip events it had never pulled. The active
+  /// profile pointer is device-local for its own reasons, below.
+  ///
+  /// Before this parameter existed the method simply never enqueued, so every
+  /// preference was device-local by omission rather than by decision. Stating
+  /// it at the call site means completing preference sync later cannot make a
+  /// device-local setting start travelling by accident.
   Future<void> setPreference(
     String key,
     String value, {
     required String hlc,
+    bool sync = false,
   }) async {
-    await _db
-        .into(_db.preferences)
-        .insertOnConflictUpdate(
-          PreferencesCompanion.insert(key: key, value: value, hlc: hlc),
-        );
+    if (!sync) {
+      await _db
+          .into(_db.preferences)
+          .insertOnConflictUpdate(
+            PreferencesCompanion.insert(key: key, value: value, hlc: hlc),
+          );
+      return;
+    }
+
+    await _db.transaction(() async {
+      await _db
+          .into(_db.preferences)
+          .insertOnConflictUpdate(
+            PreferencesCompanion.insert(key: key, value: value, hlc: hlc),
+          );
+
+      // Shaped to match what applyRemotePreference reads on the far side.
+      await _enqueue(
+        entityType: 'preference',
+        entityId: key,
+        payload: {'value': value},
+        hlc: hlc,
+        now: DateTime.now().toUtc(),
+      );
+    });
   }
 
   /// Writes a preference that came from another device.

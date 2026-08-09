@@ -31,6 +31,33 @@ class PacingConfig {
        assert(referenceLetterCount > 0),
        assert(lengthScaleStrength >= 0 && lengthScaleStrength <= 1);
 
+  /// Replaces individual settings.
+  ///
+  /// Exists so a settings screen can change one control without rebuilding
+  /// the whole object by hand, which would silently reset any field the
+  /// caller forgot to carry across.
+  PacingConfig copyWith({
+    PacingModelKind? kind,
+    double? baseWpm,
+    double? referenceLetterCount,
+    double? lengthScaleStrength,
+    Duration? clausePause,
+    Duration? sentencePause,
+    Duration? paragraphPause,
+    Duration? minDisplay,
+    Duration? maxDisplay,
+  }) => PacingConfig(
+    kind: kind ?? this.kind,
+    baseWpm: baseWpm ?? this.baseWpm,
+    referenceLetterCount: referenceLetterCount ?? this.referenceLetterCount,
+    lengthScaleStrength: lengthScaleStrength ?? this.lengthScaleStrength,
+    clausePause: clausePause ?? this.clausePause,
+    sentencePause: sentencePause ?? this.sentencePause,
+    paragraphPause: paragraphPause ?? this.paragraphPause,
+    minDisplay: minDisplay ?? this.minDisplay,
+    maxDisplay: maxDisplay ?? this.maxDisplay,
+  );
+
   Map<String, dynamic> toJson() => {
     'kind': kind.name,
     'baseWpm': baseWpm,
