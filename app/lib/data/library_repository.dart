@@ -349,8 +349,17 @@ class LibraryRepository {
   /// Never lands in [ReadingProfile.builtInIdPrefix], so a fork cannot shadow
   /// a preset.
   static String newProfileId() {
-    final entropy = Random.secure().nextInt(1 << 32).toRadixString(16);
-    return 'p.${DateTime.now().toUtc().millisecondsSinceEpoch}.$entropy';
+    final random = Random.secure();
+
+    // Two 16-bit draws combined by multiplication, rather than one
+    // nextInt(1 << 32). A shift is a 32-bit operation under dart2js, so
+    // `1 << 32` is 0 there and nextInt rejects a max of zero — the same trap
+    // that broke the block-id hash on web. Multiplication stays exact: the
+    // result is below 2^32, well inside what a JS double represents exactly.
+    final entropy = random.nextInt(0x10000) * 0x10000 + random.nextInt(0x10000);
+
+    return 'p.${DateTime.now().toUtc().millisecondsSinceEpoch}'
+        '.${entropy.toRadixString(16).padLeft(8, '0')}';
   }
 
   /// Built-in presets first, then the reader's own profiles by name.
@@ -367,19 +376,36 @@ class LibraryRepository {
       ..where((p) => p.deleted.equals(false))
       ..orderBy([(p) => OrderingTerm.asc(p.name)]);
 
-    return query.watch().map(
-      (rows) => [
-        ...Presets.all,
-        for (final row in rows)
-          if (!row.id.startsWith(ReadingProfile.builtInIdPrefix))
-            _toProfile(row),
-      ],
-    );
+    return query.watch().map(_visible);
   }
 
-  /// A one-shot read of [watchProfiles], for callers that do not need to
-  /// follow changes.
-  Future<List<ReadingProfile>> allProfiles() => watchProfiles().first;
+  /// Presets first, then the reader's own.
+  ///
+  /// A stored row inside the built-in namespace is skipped. Both write paths
+  /// refuse to create one, but being wrong costs the reader a duplicate entry
+  /// in their list while the guard costs a string comparison.
+  List<ReadingProfile> _visible(List<StoredProfile> rows) => [
+    ...Presets.all,
+    for (final row in rows)
+      if (!row.id.startsWith(ReadingProfile.builtInIdPrefix)) _toProfile(row),
+  ];
+
+  /// The same list as [watchProfiles], read once.
+  ///
+  /// A direct query rather than `watchProfiles().first`. Building a query
+  /// stream to read a value once sets up and tears down a subscription for
+  /// nothing, and it makes the read wait on a timer: drift schedules one when
+  /// a query stream is cancelled, and under `testWidgets` timers only fire
+  /// while the tester is pumping, so an await outside a pump never returns.
+  Future<List<ReadingProfile>> allProfiles() async {
+    final rows =
+        await (_db.select(_db.storedProfiles)
+              ..where((p) => p.deleted.equals(false))
+              ..orderBy([(p) => OrderingTerm.asc(p.name)]))
+            .get();
+
+    return _visible(rows);
+  }
 
   ReadingProfile _toProfile(StoredProfile row) => ReadingProfile(
     id: row.id,

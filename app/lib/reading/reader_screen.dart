@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
+import '../data/library_repository.dart';
 import 'library_book.dart';
+import 'profile_presentation.dart';
 import 'rsvp_view.dart';
 
 /// Where the reader stopped.
@@ -25,8 +27,17 @@ class ReadingResult {
 /// Pops with a [ReadingResult] so the library can record and sync it.
 class ReaderScreen extends StatefulWidget {
   final LibraryBook book;
+  final LibraryRepository repository;
 
-  const ReaderScreen({super.key, required this.book});
+  /// Supplies a clock stamp. Pass `syncEngine.issueStamp`.
+  final Future<String> Function() issueStamp;
+
+  const ReaderScreen({
+    super.key,
+    required this.book,
+    required this.repository,
+    required this.issueStamp,
+  });
 
   @override
   State<ReaderScreen> createState() => _ReaderScreenState();
@@ -37,6 +48,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
   StreamSubscription<PlaybackUpdate>? _sub;
   PlaybackUpdate? _update;
 
+  /// Standard until the stored choice loads. The session is built
+  /// synchronously in [initState] and reading can begin before a database
+  /// read returns, so the profile is swapped in rather than waited for.
   ReadingProfile _profile = Presets.standard;
 
   @override
@@ -49,6 +63,18 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
     _sub = _session.updates.listen((u) {
       if (mounted) setState(() => _update = u);
+    });
+
+    _restoreProfile();
+  }
+
+  Future<void> _restoreProfile() async {
+    final profile = await widget.repository.activeProfile();
+    if (!mounted || profile.id == _profile.id) return;
+
+    setState(() {
+      _profile = profile;
+      _session.profile = profile;
     });
   }
 
@@ -83,40 +109,61 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
+  /// Switches profile mid-book.
+  ///
+  /// Lists what is actually on this device rather than the built-in presets
+  /// alone, so a profile made in settings or synced from another device can
+  /// be chosen here. Making and editing profiles lives in settings; this is
+  /// only a switcher.
   Future<void> _pickProfile() async {
     _session.pause();
 
     final chosen = await showModalBottomSheet<ReadingProfile>(
       context: context,
       builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final preset in Presets.all)
-              ListTile(
-                title: Text(preset.name),
-                subtitle: Text(_describe(preset)),
-                selected: preset.id == _profile.id,
-                onTap: () => Navigator.of(context).pop(preset),
-              ),
-          ],
+        child: StreamBuilder<List<ReadingProfile>>(
+          stream: widget.repository.watchProfiles(),
+          builder: (context, snapshot) {
+            final profiles = snapshot.data;
+            if (profiles == null) {
+              return const Padding(
+                padding: EdgeInsets.all(32),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+
+            return ListView(
+              shrinkWrap: true,
+              children: [
+                for (final profile in profiles)
+                  ListTile(
+                    title: Text(profile.name),
+                    subtitle: Text(describeProfile(profile)),
+                    selected: profile.id == _profile.id,
+                    onTap: () => Navigator.of(context).pop(profile),
+                  ),
+              ],
+            );
+          },
         ),
       ),
     );
 
     if (chosen == null || !mounted) return;
+
     setState(() {
       _profile = chosen;
       _session.profile = chosen;
     });
-  }
 
-  static String _describe(ReadingProfile p) => switch (p.pacing.kind) {
-    PacingModelKind.elicited => 'You advance each word',
-    PacingModelKind.lengthScaled =>
-      'Longer words held longer, ${p.pacing.baseWpm.round()} wpm',
-    PacingModelKind.constant => '${p.pacing.baseWpm.round()} words a minute',
-  };
+    // Remembered on this device only. Which profile is in use is not synced:
+    // a phone read outdoors and a desktop in a dim room can want different
+    // ones, and a shared pointer would have each undo the other.
+    await widget.repository.setActiveProfile(
+      chosen.id,
+      hlc: await widget.issueStamp(),
+    );
+  }
 
   void _close() => Navigator.of(context).pop(_result);
 

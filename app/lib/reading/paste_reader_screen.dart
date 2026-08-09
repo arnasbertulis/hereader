@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
+import '../data/library_repository.dart';
 import 'library_book.dart';
 import 'reader_screen.dart';
 
@@ -8,7 +9,19 @@ import 'reader_screen.dart';
 /// quickest way to try the engine against arbitrary text, including languages
 /// the tokenizer has not been tuned for.
 class PasteReaderScreen extends StatefulWidget {
-  const PasteReaderScreen({super.key});
+  /// Threaded through to the reader rather than left out.
+  ///
+  /// Nothing here touches storage, but the reading surface does: a reader who
+  /// needs 48pt light-on-dark needs it for pasted text too, and the profile
+  /// they pick mid-read should be remembered like any other.
+  final LibraryRepository repository;
+  final Future<String> Function() issueStamp;
+
+  const PasteReaderScreen({
+    super.key,
+    required this.repository,
+    required this.issueStamp,
+  });
 
   @override
   State<PasteReaderScreen> createState() => _PasteReaderScreenState();
@@ -32,10 +45,16 @@ class _PasteReaderScreenState extends State<PasteReaderScreen> {
 
     if (text.isEmpty) return;
 
+    // The result is discarded on purpose. Pasted text has no book row to
+    // reference, so a position saved against it would fail the foreign key,
+    // and a position in text that exists only in this session is not worth
+    // syncing anyway.
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ReaderScreen(
           book: LibraryBook(id: 'pasted', title: 'Pasted text', text: text),
+          repository: widget.repository,
+          issueStamp: widget.issueStamp,
         ),
       ),
     );
