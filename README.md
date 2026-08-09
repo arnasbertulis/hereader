@@ -4,7 +4,7 @@
 
 A configurable reading surface. Text is presented one word at a time in a fixed position, instead of as a page you scan with your eyes.
 
-**Status: in active development.** Books can be imported and read, and a reading position follows the reader between devices. Live at **[https://204-168-240-12.sslip.io](https://204-168-240-12.sslip.io)** — open it directly in a browser, or see [Current state](#current-state) for what works today.
+**Status: in active development.** Books can be imported and read, reading settings can be adjusted and saved, and both a reading position and the settings themselves follow the reader between devices. Live at **[https://204-168-240-12.sslip.io](https://204-168-240-12.sslip.io)** — open it directly in a browser, or see [Current state](#current-state) for what works today.
 
 ---
 
@@ -54,9 +54,11 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 - [x] Front matter detection, so a book opens on its text rather than its licence page
 - [x] Reading surface: word anchored per profile, punctuation gaps, keyboard control, reduce-motion support
 - [x] Library: import, list, open, remove, and resume where you left off after a restart
+- [x] Settings: copy a preset to make a profile of your own, then change pacing, type size, spacing, position on screen, contrast polarity, background colour and the rest, with a live preview and a contrast warning
 - [x] Local persistence with drift, including an outbox for changes waiting to sync — native SQLite on Android and Windows, WASM SQLite over OPFS on web
 - [x] Sync service: registration, login, token refresh, an append-only event log with per-user sequence numbers, idempotent pushes, hybrid logical clock ordering, and per-entity conflict resolution
 - [x] Sync client: hybrid logical clocks in Dart, tokens in the platform keystore, transparent token refresh, an outbox drainer, and sign-in that is offered rather than required
+- [x] Profiles sync: a profile made, changed or deleted on one device reaches the others, with deletion travelling as a tombstone so an offline device cannot resurrect it
 - [x] A sheet asking the reader which position they meant when two devices diverge
 - [x] Positions synced for a book not yet imported on this device are held locally and applied the moment the book is imported, rather than crashing sync or being lost
 - [x] Test suite across all of the above, including a real Project Gutenberg book as a golden fixture, effective words per minute over real prose, virtual-clock playback timing, sync ordering and divergence against a real Postgres, and the sync client against a fake service
@@ -65,9 +67,9 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 
 **Not started**
 
-- [ ] Settings screen, so profiles can be edited rather than only chosen
 - [ ] Chapter navigation
 - [ ] CD pipeline — deploys are currently a manual `git pull` and rebuild on the server
+- [ ] Tests on a browser as well as the VM. Two bugs so far have been integer arithmetic that is exact on the Dart VM and wrong under `dart2js`, and neither was caught by the suite
 
 ---
 
@@ -101,6 +103,16 @@ Recorded in [`docs/adr/0005-sync-event-log.md`](docs/adr/0005-sync-event-log.md)
 
 **Book files are stored; parsed text is not.** Parsed output is derived data, and a parser change invalidates every cached copy. Keeping the source file means the parser stays the single source of truth and a normalisation improvement applies to books already in the library. Recorded in [`docs/adr/0004-store-book-files.md`](docs/adr/0004-store-book-files.md).
 
+**Presets are code, and editing one makes a copy.** Each preset is tied to a specific finding in the evidence notes, so a preset edited past recognition would carry a name that no longer describes it, with no tested starting point left to return to. Editing a preset forks it. That also means a preset improved in a later release cannot collide with a reader's modified version of the old one, and it keeps presets out of sync entirely: they are code, identical on every device, and nothing stores or transmits them.
+
+**Whether a profile is built in is derived from its id, not stored.** A stored flag would be a second source of truth for one fact, and a profile arriving through sync could set it — a payload claiming to be a preset would render as a profile the reader can neither edit nor delete. The `builtin.` namespace is the signal, and nothing on the wire can claim it.
+
+**Profiles merge whole, not field by field.** Two devices editing the same profile while apart means one edit is discarded rather than reconciled. Pacing fields are a single coherent tuning rather than independent scalars, so a field-by-field merge could leave the reader with a configuration neither device ever chose. A discarded change is visible the moment they open settings and costs seconds to redo; an incoherent one is not obviously wrong at all.
+
+**Which profile is in use does not sync.** The profiles themselves follow the reader between devices. The pointer at the active one is device-local: a phone read outdoors and a desktop in a dim room can reasonably want different profiles, and a shared pointer would have each device pulling the other's choice out from under it. A pointer at a profile deleted elsewhere falls back to a named preset rather than to whatever happens to be first in the list, which would shift as profiles come and go and read as the app reassigning settings at random.
+
+**A deletion is recorded on the event, not only on the resolved state.** The service keeps both an append-only log and a resolved value per entity. Clients pull the log. A deletion stored only in the resolved state arrives elsewhere as an ordinary write carrying the entity's last payload and the deletion's stamp, so every pulling device writes it back as live while the deleting device keeps its own tombstone — two devices permanently disagreeing with nothing logged. Found by reading the wire contract before a cross-device test, not by a failing test.
+
 **The service issues its own tokens.** Not delegating to Firebase or Google as the token issuer means a social login can be added later purely as an identity source, without reworking how the API authenticates. Access and refresh tokens carry a type claim; without it a refresh token would work as an access token and quietly extend every session to the refresh window.
 
 **Tokens live in the platform keystore, not the app database.** A refresh token is a two-month credential: anyone who reads it can act as the reader until it expires. The database holds book files and reading positions, which are private but are not credentials, and it is readable by anything with the device's filesystem. On the web there is no keystore, which is one reason to treat that target as the least trusted.
@@ -108,6 +120,10 @@ Recorded in [`docs/adr/0005-sync-event-log.md`](docs/adr/0005-sync-event-log.md)
 **The divergence hint is used by the service and ignored by the reader.** A position carries a token index so the service can judge how far apart two devices are without holding a copy of the book. It cannot verify that number. The service uses it for a threshold, where a wrong value costs a prompt that was not needed or misses one that was. The app does not show it: both candidates are resolved against this device's own copy, because a sheet promising 30% through and then landing the reader at 4% is worse than no sheet at all.
 
 **A position for a book not yet imported is held, not dropped.** Book files never leave the device, so a position can arrive on a device that has not imported the matching book — every web client's first sign-in, since books never transfer. Dropping the event would lose the position permanently, since the sequence number moves past it regardless. It is held in a local table with no foreign key to books, and applied once the book is imported, in the same transaction as the import. Recorded in [`docs/adr/0007-pending-positions.md`](docs/adr/0007-pending-positions.md).
+
+**Settings deserialisation degrades rather than throws.** A profile can arrive from a build with different constraints. The constructors assert on ranges, which is right for catching a bug in app code and wrong at the wire boundary: a throw there is counted as a skipped event and the sequence number moves past it, so the change is never retried. Values outside range move to the nearest bound instead.
+
+**The contrast warning informs and does not block.** The colour picker shows a WCAG ratio and says plainly when it is too low to read comfortably, then lets the reader proceed. Someone with light sensitivity may want low contrast deliberately, and overriding that in an app whose whole premise is configurability would be worse than a warning they can ignore. The point is that nobody arrives at dark grey on black without being told.
 
 **Front matter is skipped, never removed.** Dropping blocks would shift every block id and invalidate saved positions, and a wrong guess would delete real text with no way back. Detection only reports a suggested opening index, so the reader can rewind into the licence page if they want it.
 
@@ -171,11 +187,19 @@ Flyway applies the schema on first start. `GET /api/health` reports whether
 the service can reach its database, not merely whether the process is alive.
 
 **Directly with Maven**, for backend development without rebuilding a
-container on every change. Requires JDK 25 and a Postgres:
+container on every change. Requires JDK 25 and a Postgres.
+
+Note the container name. `compose.yaml` claims `hereader-db` for its own
+database, which does not publish a port to the host (see ADR 0006), so a
+development container sharing that name would be replaced by one nothing on
+your machine can reach — running, correctly named, and unusable. Tests need
+their own:
 
 ```bash
-docker run --name hereader-db -e POSTGRES_PASSWORD=dev \
-  -e POSTGRES_DB=hereader -p 5432:5432 -d postgres:17
+docker run --name hereader-test-db \
+  -e POSTGRES_PASSWORD=dev \
+  -e POSTGRES_DB=hereader_test \
+  -p 5432:5432 -d postgres:17
 ```
 
 The service refuses to start without a signing secret, deliberately: a
@@ -188,13 +212,8 @@ export JWT_SECRET=$(head -c 48 /dev/urandom | base64)   # any 32+ byte string
 ```
 
 ```bash
-./mvnw verify   # tests need a hereader_test database
+./mvnw verify   # tests need the hereader_test database above
 ```
-
-Note that the `db` service in the deployed `compose.yaml` does not publish
-its port to the host, by design (see ADR 0006), so integration tests must run
-against a separate Postgres container with its port actually published — not
-against a running deployment stack.
 
 ### The reading app
 
@@ -241,12 +260,18 @@ flutter build web --dart-define=HEREADER_API=https://204-168-240-12.sslip.io/api
 ## Known limitations
 
 - Books do not transfer between devices. Reading positions sync, but the file itself has to be imported on each device.
+- A different edition of the same book produces different block identifiers, so a position saved against one edition will not resolve against another. The app says the place could not be found and opens from the start rather than guessing. A content fingerprint on the book record would let it say which of the two it was, and is not implemented.
 - Opening a book waits on a sync attempt so the reader never starts from a position that is about to change. A slow connection therefore delays opening, bounded by a fifteen second request timeout.
 - A rejected batch counts the attempt against every event in it, not just the one the service objected to. Coarse, but the alternative is pushing events one at a time.
 - Position divergence is judged from a token index the client supplies. The service cannot verify it, and a wrong value causes a prompt that was not needed or misses one that was. The locator itself remains authoritative, and the app resolves both candidates locally rather than trusting the hint.
 - Duplicate events consume a sequence number that is then skipped, so the log has gaps and `lastSeq` overstates how many events exist. Harmless, since clients ask for everything after a number rather than counting.
 - The event log grows without bound. Compaction is not implemented and is not needed at the scale this will see.
-- Profiles arrive from other devices but are not applied, because editing them needs a settings screen that does not exist yet.
+- Two devices editing the same profile while apart resolve by last write wins over the whole profile, so one set of edits is discarded rather than merged. Deliberate, and explained above, but it is a real loss when it happens.
+- Preference sync runs one way. The client applies preferences arriving from other devices and never sends its own, so ADR 0005 currently describes more than the code does.
+- Text colour follows the contrast polarity and is not separately adjustable; only the background can be tinted. A separate ink colour would need another field on the profile and a change to what travels over the wire.
+- The settings preview draws the sample word directly rather than through the reading surface, so it shows size, spacing, colour and position but not the fixation highlight or the fade between words.
+- Showing more than one word per advance, and presentation modes other than a single fixed word, exist in the data model and are not implemented, so neither is offered in settings.
+- Automated tests run on the Dart VM only. Two bugs so far have been integer arithmetic that is exact there and wrong under `dart2js` — a 64-bit hash, and a random draw with a bit shift — and the suite caught neither. Running it on a browser as well would.
 - Every book open re-parses the file, which takes a few hundred milliseconds for a novel. Caching parsed blocks keyed by parser version is the fix if this becomes a problem.
 - Book bytes live in a database column. Fine for text, less comfortable for a heavily illustrated volume of tens of megabytes.
 - A reading position is saved when the reader closes a book, not periodically. Killing the app mid-chapter loses the place.
@@ -256,7 +281,6 @@ flutter build web --dart-define=HEREADER_API=https://204-168-240-12.sslip.io/api
 - The abbreviation list is English-only, while the numeric suffix list defaults to Lithuanian and metric units. Both are constructor parameters on `Tokenizer`, so a per-language set can be supplied, but nothing selects one automatically yet.
 - A date that genuinely ends a sentence, such as `įvyko 2005 m.`, loses its sentence pause, because the unit is treated as an abbreviation rather than a terminator. Same ambiguity as `e.g.`, and unsolvable without more context than the tokenizer carries.
 - Length-scaled pacing normalises against a fixed reference word length, so the configured words-per-minute is only accurate on average. Text whose mean word length differs sharply from English will read faster or slower than the setting says.
-- Chunk sizes above one token are rejected. Showing several words per advance requires pacing to decide over a group rather than a token, which the engine does not do yet.
 - Pausing mid-word restarts that word's full duration on resume rather than preserving the remainder. The difference is a few hundred milliseconds and was not judged worth the bookkeeping.
 - The optimal recognition point highlight is offered as a preference with no evidence behind it. None of the studies above tested it.
 - iOS is untested. The codebase targets it, but building and signing requires macOS hardware.
@@ -271,9 +295,9 @@ flutter build web --dart-define=HEREADER_API=https://204-168-240-12.sslip.io/api
 
 ## Roadmap
 
-1. Settings screen, so profiles can be edited rather than only chosen
-2. Chapter navigation from the book's own table of contents
-3. Bookmarks and highlights over the same sync event log
+1. Chapter navigation from the book's own table of contents
+2. Bookmarks and highlights over the same sync event log
+3. Exporting and importing a profile as a file, so one can be shared with someone who does not share an account
 4. Book transfer between devices, either over the local network or through the platform share sheet. Relaying files through the service is deliberately excluded: it would make this a system that transmits copyrighted content, which storing books on-device exists to avoid.
 5. Public domain catalogue via OPDS feeds, with server-side ingestion
 6. Google sign-in as an additional identity source
