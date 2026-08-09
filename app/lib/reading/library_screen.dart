@@ -9,6 +9,7 @@ import '../sync/sync_engine.dart';
 import 'library_book.dart';
 import 'paste_reader_screen.dart';
 import 'reader_screen.dart';
+import 'settings_screen.dart';
 import 'dart:async';
 
 class LibraryScreen extends StatefulWidget {
@@ -121,7 +122,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
       if (!mounted) return;
 
       final result = await Navigator.of(context).push<ReadingResult>(
-        MaterialPageRoute(builder: (_) => ReaderScreen(book: book)),
+        MaterialPageRoute(
+          builder: (_) => ReaderScreen(
+            book: book,
+            // The reader needs these to list the profiles actually on this
+            // device and to remember which one was picked.
+            repository: _repo,
+            issueStamp: widget.sync.issueStamp,
+          ),
+        ),
       );
 
       if (result == null) return;
@@ -172,6 +181,28 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (signedIn == true) widget.sync.syncNow();
   }
 
+  void _openSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SettingsScreen(
+          repository: _repo,
+          issueStamp: widget.sync.issueStamp,
+        ),
+      ),
+    );
+  }
+
+  void _openPaste() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PasteReaderScreen(
+          repository: _repo,
+          issueStamp: widget.sync.issueStamp,
+        ),
+      ),
+    );
+  }
+
   Future<void> _confirmRemove(BookSummary summary) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -211,13 +242,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         actions: [
           _SyncButton(sync: widget.sync, api: widget.api, onSignIn: _signIn),
           IconButton(
-            onPressed: _busy
-                ? null
-                : () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const PasteReaderScreen(),
-                    ),
-                  ),
+            onPressed: _busy ? null : _openPaste,
             icon: const Icon(Icons.content_paste),
             tooltip: 'Read pasted text',
           ),
@@ -225,6 +250,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
             onPressed: _busy ? null : _import,
             icon: const Icon(Icons.add),
             tooltip: 'Add a book',
+          ),
+          IconButton(
+            onPressed: _busy ? null : _openSettings,
+            icon: const Icon(Icons.tune),
+            tooltip: 'Reading profiles',
           ),
         ],
       ),
