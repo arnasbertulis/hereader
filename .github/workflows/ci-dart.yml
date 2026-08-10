@@ -30,5 +30,18 @@ jobs:
       - name: Analyze
         run: dart analyze --fatal-infos
 
-      - name: Run tests
+      - name: Run tests (VM)
         run: dart test
+
+      # dart2js semantics differ from the VM in ways the run above cannot
+      # see: `int` is a JS double, exact only to 2^53, and `<<` is a 32-bit
+      # operation, so `1 << 32` is 0. Both shipped bugs came from this.
+      #
+      # epub_golden_test.dart is annotated @TestOn('vm') — it reads its
+      # fixture through dart:io and a browser has no filesystem.
+      # block_id_test.dart carries the hash coverage on both platforms.
+      #
+      # Chrome ships preinstalled on ubuntu-latest and dart test runs it
+      # headless, so this needs no extra setup.
+      - name: Run tests (Chrome)
+        run: dart test -p chrome

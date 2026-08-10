@@ -29,3 +29,18 @@ jobs:
 
       - name: Run tests
         run: flutter test
+
+      # Not `flutter test --platform chrome`. The suite constructs its
+      # database through package:drift/native.dart, which reaches dart:ffi
+      # and cannot compile to JS at all, so running these tests in a browser
+      # is not a configuration problem to solve but a rewrite of every
+      # database test onto drift's WASM setup.
+      #
+      # Building instead covers the compile-time half of the risk, and does
+      # it against the exact artifact that gets served in production: the
+      # 64-bit block-id hash failed here, not in a test, because web
+      # compilers reject integer literals they cannot represent exactly.
+      # Deploys are a manual scp of this folder, so a build that only ever
+      # ran on a developer's machine was the last check before production.
+      - name: Build web
+        run: flutter build web
