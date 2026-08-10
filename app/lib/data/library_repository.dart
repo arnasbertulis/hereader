@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:drift/drift.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
@@ -338,29 +337,6 @@ class LibraryRepository {
   }
 
   // -- profiles ------------------------------------------------------
-
-  /// An id for a newly forked profile.
-  ///
-  /// The id travels with the sync event log, so two devices forking the same
-  /// preset while offline from each other must not produce the same one. A
-  /// millisecond plus 32 random bits is enough: a collision needs both the
-  /// same millisecond and the same draw.
-  ///
-  /// Never lands in [ReadingProfile.builtInIdPrefix], so a fork cannot shadow
-  /// a preset.
-  static String newProfileId() {
-    final random = Random.secure();
-
-    // Two 16-bit draws combined by multiplication, rather than one
-    // nextInt(1 << 32). A shift is a 32-bit operation under dart2js, so
-    // `1 << 32` is 0 there and nextInt rejects a max of zero — the same trap
-    // that broke the block-id hash on web. Multiplication stays exact: the
-    // result is below 2^32, well inside what a JS double represents exactly.
-    final entropy = random.nextInt(0x10000) * 0x10000 + random.nextInt(0x10000);
-
-    return 'p.${DateTime.now().toUtc().millisecondsSinceEpoch}'
-        '.${entropy.toRadixString(16).padLeft(8, '0')}';
-  }
 
   /// Built-in presets first, then the reader's own profiles by name.
   ///
