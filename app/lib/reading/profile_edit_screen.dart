@@ -68,7 +68,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
   Future<void> _makeCopy() async {
     final messenger = ScaffoldMessenger.of(context);
-    final copy = _draft.fork(id: LibraryRepository.newProfileId());
+    final copy = _draft.fork(id: ReadingProfile.newId());
 
     await widget.repository.saveProfile(copy, hlc: await widget.issueStamp());
     if (!mounted) return;

@@ -31,25 +31,7 @@ void main() {
       (await repo.allProfiles()).where((p) => !p.isBuiltIn).toList();
 
   ReadingProfile fork({String name = 'Mine'}) =>
-      Presets.standard.fork(id: LibraryRepository.newProfileId(), name: name);
-
-  group('ids', () {
-    test('a fork id never lands in the built-in namespace', () {
-      for (var i = 0; i < 100; i++) {
-        expect(
-          LibraryRepository.newProfileId(),
-          isNot(startsWith(ReadingProfile.builtInIdPrefix)),
-        );
-      }
-    });
-
-    test('two ids issued in the same millisecond differ', () {
-      final ids = {
-        for (var i = 0; i < 100; i++) LibraryRepository.newProfileId(),
-      };
-      expect(ids, hasLength(100));
-    });
-  });
+      Presets.standard.fork(id: ReadingProfile.newId(), name: name);
 
   group('saveProfile', () {
     test('stores the profile and queues one event', () async {

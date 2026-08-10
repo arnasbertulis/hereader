@@ -63,7 +63,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _duplicate(ReadingProfile source) async {
-    final copy = source.fork(id: LibraryRepository.newProfileId());
+    final copy = source.fork(id: ReadingProfile.newId());
     await widget.repository.saveProfile(copy, hlc: await widget.issueStamp());
     if (!mounted) return;
     await _edit(copy);

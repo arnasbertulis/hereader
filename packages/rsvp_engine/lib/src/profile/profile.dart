@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import '../json_coerce.dart';
 import '../pacing/pacing_config.dart';
 
@@ -168,6 +170,34 @@ class ReadingProfile {
   /// would show twice in the reader's list, and an inbound event could
   /// replace a preset the app guarantees is always available.
   static const builtInIdPrefix = 'builtin.';
+
+  /// An id for a newly forked profile.
+  ///
+  /// Lives here rather than in the app because the rule it has to satisfy
+  /// lives here: [builtInIdPrefix] defines the namespace an id must stay out
+  /// of, so the two belong together. Arithmetic whose correctness depends on
+  /// the compilation target is core logic, and core logic sits in this
+  /// package, where the suite runs against dart2js as well as the VM.
+  ///
+  /// The id travels with the sync event log, so two devices forking the same
+  /// preset while offline from each other must not produce the same one. A
+  /// millisecond plus 32 random bits is enough: a collision needs both the
+  /// same millisecond and the same draw.
+  ///
+  /// Never lands in [builtInIdPrefix], so a fork cannot shadow a preset.
+  static String newId() {
+    final random = Random.secure();
+
+    // Two 16-bit draws combined by multiplication, rather than one
+    // nextInt(1 << 32). A shift is a 32-bit operation under dart2js, so
+    // `1 << 32` is 0 there and nextInt rejects a max of zero — the same trap
+    // that broke the block-id hash on web. Multiplication stays exact: the
+    // result is below 2^32, well inside what a JS double represents exactly.
+    final entropy = random.nextInt(0x10000) * 0x10000 + random.nextInt(0x10000);
+
+    return 'p.${DateTime.now().toUtc().millisecondsSinceEpoch}'
+        '.${entropy.toRadixString(16).padLeft(8, '0')}';
+  }
 
   final String id;
   final String name;

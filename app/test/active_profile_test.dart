@@ -20,7 +20,7 @@ void main() {
   tearDown(() => db.close());
 
   ReadingProfile fork({String name = 'Mine'}) =>
-      Presets.standard.fork(id: LibraryRepository.newProfileId(), name: name);
+      Presets.standard.fork(id: ReadingProfile.newId(), name: name);
 
   group('active profile', () {
     test('defaults to Standard before the reader has chosen', () async {
