@@ -62,14 +62,14 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 - [x] A sheet asking the reader which position they meant when two devices diverge
 - [x] Positions synced for a book not yet imported on this device are held locally and applied the moment the book is imported, rather than crashing sync or being lost
 - [x] Test suite across all of the above, including a real Project Gutenberg book as a golden fixture, effective words per minute over real prose, virtual-clock playback timing, sync ordering and divergence against a real Postgres, and the sync client against a fake service
-- [x] CI running analyzer and tests on every push, across every package, the app, and the service
+- [x] CI running analyzer and tests on every push, across every package, the app, and the service, with the pure packages also run through `dart2js` in a browser and the web build compiled on every change
 - [x] Deployed: containerised service and web build behind Caddy on a Hetzner VPS, automatic HTTPS via an sslip.io hostname, with reading positions and profiles both verified syncing between Windows and web against the live service
 
 **Not started**
 
 - [ ] Chapter navigation
 - [ ] CD pipeline — deploys are currently a manual `git pull` and rebuild on the server
-- [ ] Tests on a browser as well as the VM. Two bugs so far have been integer arithmetic that is exact on the Dart VM and wrong under `dart2js`, and neither was caught by the suite
+- [ ] Running the app's own suite in a real browser. The pure packages run under `dart2js` in CI and the web build is compiled on every change, but the app's tests reach `dart:ffi` through drift and cannot execute on that target. See [`docs/adr/0009-web-platform-coverage.md`](docs/adr/0009-web-platform-coverage.md)
 
 ---
 
@@ -142,6 +142,8 @@ Recorded in [`docs/adr/0005-sync-event-log.md`](docs/adr/0005-sync-event-log.md)
 **Books imported by the reader never leave the device.** Parsing happens on-device. The service stores reading positions, preferences, and metadata only. This is a deliberate privacy and licensing decision, and it is why a book has to be imported on each device that reads it.
 
 **Block ids hash to 32 bits, not 64.** `dart2js` represents Dart `int` as a JS double, exact only up to 2^53, so a 64-bit FNV-1a hash's constants and arithmetic silently broke on the web target. 32 bits is nowhere near collision territory for one document's block count, and the multiplication step is decomposed into shifts so the arithmetic itself stays exact under JavaScript's number representation, not just the final result.
+
+**Arithmetic that depends on the compilation target lives in the pure packages.** `dart2js` represents `int` as a JS double and treats `<<` as a 32-bit operation, so hashing and bit manipulation can be exact on the Dart VM and wrong in a browser. The pure packages run their suites through `dart2js` in CI; the app's cannot, because they reach `dart:ffi` through drift. Profile id generation moved into `rsvp_engine` for that reason as much as for cohesion. Recorded in [`docs/adr/0009-web-platform-coverage.md`](docs/adr/0009-web-platform-coverage.md).
 
 **The app and service share one hostname in production.** The service runs under an `/api` context path and Caddy serves the compiled web build alongside it, so browser requests are same-origin rather than cross-origin. CORS is still configured, but only load-bearing for local development against a random Flutter dev-server port.
 
@@ -267,11 +269,11 @@ flutter build web --dart-define=HEREADER_API=https://204-168-240-12.sslip.io/api
 - Duplicate events consume a sequence number that is then skipped, so the log has gaps and `lastSeq` overstates how many events exist. Harmless, since clients ask for everything after a number rather than counting.
 - The event log grows without bound. Compaction is not implemented and is not needed at the scale this will see.
 - Two devices editing the same profile while apart resolve by last write wins over the whole profile, so one set of edits is discarded rather than merged. Deliberate, and explained above, but it is a real loss when it happens.
-- Preference sync runs one way. The client applies preferences arriving from other devices and never sends its own, so ADR 0005 currently describes more than the code does.
+- Preference sync runs one way. The client applies preferences arriving from other devices and never sends its own. Nothing currently needs the outbound path — sync bookkeeping and the active-profile pointer are both deliberately device-local — so this is unused capability rather than a gap, and ADR 0005 says so.
 - Text colour follows the contrast polarity and is not separately adjustable; only the background can be tinted. A separate ink colour would need another field on the profile and a change to what travels over the wire.
 - The settings preview draws the sample word directly rather than through the reading surface, so it shows size, spacing, colour and position but not the fixation highlight or the fade between words.
 - Showing more than one word per advance, and presentation modes other than a single fixed word, exist in the data model and are not implemented, so neither is offered in settings.
-- Automated tests run on the Dart VM only. Two bugs so far have been integer arithmetic that is exact there and wrong under `dart2js` — a 64-bit hash, and a random draw with a bit shift — and the suite caught neither. Running it on a browser as well would.
+- The app's own tests run on the Dart VM only, and cannot run anywhere else: they build their database through drift's native backend, which reaches `dart:ffi`. The pure packages do run under `dart2js` in a browser, and the web build is compiled on every change, so a compile-time web break cannot merge. A *runtime* `dart2js` bug in app code still can. Both bugs of that kind so far — a 64-bit hash, and a random draw with a bit shift — would now be caught, but only because the arithmetic in question lives in the pure packages, which is a rule rather than a guarantee.
 - Every book open re-parses the file, which takes a few hundred milliseconds for a novel. Caching parsed blocks keyed by parser version is the fix if this becomes a problem.
 - Book bytes live in a database column. Fine for text, less comfortable for a heavily illustrated volume of tens of megabytes.
 - A reading position is saved when the reader closes a book, not periodically. Killing the app mid-chapter loses the place.
