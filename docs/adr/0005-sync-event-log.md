@@ -74,7 +74,7 @@ document.
 
 | Entity | Rule | Why |
 |---|---|---|
-| Preference | Last write wins | A stale font size costs nothing. |
+| Preference | Last write wins (inbound-only today — see Consequences) | A stale font size costs nothing. |
 | Profile | Last write wins | Same, with more fields. |
 | Bookmark | Tombstone on delete | A row that vanished entirely would be resurrected by any device that was offline when the deletion happened. |
 | Reading position | Surfaced when divergence is large, last write wins otherwise | Being dropped in the wrong chapter is the failure a reader actually notices. |
@@ -131,6 +131,19 @@ For a single reader with two devices, most of this machinery is more than the
 problem requires. It is here because sync is the part of this project that is
 worth building carefully, and because the per-entity rules above are a real
 design judgment rather than a library call.
+
+**Preference sync is currently one-way.** The table above states the
+entity's conflict rule, not which direction is implemented. Only the
+inbound path exists today: `_applyPreference` writes what another device
+sent. `setPreference`'s `sync` parameter, added when profile editing
+landed, defaults to `false`, because nothing that currently goes through
+it — sync bookkeeping (`sync.last_seq`, `sync.last_hlc`,
+`sync.last_synced_at`) and the device-local active-profile pointer (ADR
+0008) — is meant to leave the device. There is no outstanding gap this
+creates: no preference today needs the outbound path. This is unused
+capability, not a bug, and is recorded here because both ADR 0008 and the
+README flagged the mismatch against this document without correcting it
+at the source.
 
 The divergence hint is for the service and not for the reader. Building the client made the distinction sharper than this document originally put it.
 
