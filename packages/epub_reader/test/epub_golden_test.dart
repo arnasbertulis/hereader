@@ -114,6 +114,62 @@ void main() {
       expect(hrefs.last, endsWith('1513-h-8.htm.xhtml'));
     });
 
+    group('the table of contents', () {
+      test('reads every entry the book declares', () {
+        // Observed output, like the block counts above: eleven top-level
+        // entries and twenty-four scenes beneath them.
+        expect(book.toc.length, 35);
+        expect(book.toc.where((e) => e.depth == 0).length, 11);
+        expect(book.toc.where((e) => e.depth == 1).length, 24);
+      });
+
+      test('starts and ends where the book does', () {
+        expect(book.toc.first.title, 'THE TRAGEDY OF ROMEO AND JULIET');
+        expect(book.toc.last.title, 'THE FULL PROJECT GUTENBERG™ LICENSE');
+      });
+
+      test('every entry lands on a block of its own', () {
+        // The regression this whole anchor map exists for. This book puts a
+        // whole act in one spine document, so without fragment resolution
+        // its scenes would all collapse onto that document's first block.
+        final ids = book.toc.map((e) => e.blockId).toList();
+
+        expect(ids.toSet().length, ids.length);
+      });
+
+      test('entries follow reading order', () {
+        final positions = <String, int>{
+          for (var i = 0; i < book.readingOrder.length; i++)
+            book.readingOrder[i].id: i,
+        };
+
+        final indices = book.toc.map((e) => positions[e.blockId]!).toList();
+        final sorted = [...indices]..sort();
+
+        expect(indices, sorted);
+      });
+
+      test('Act I\'s five scenes land on their own headings', () {
+        final byId = <String, String>{
+          for (final block in book.readingOrder) block.id: block.text,
+        };
+
+        final scenes = book.toc
+            .where((e) => e.depth == 1)
+            .take(5)
+            .map((e) => byId[e.blockId])
+            .toList();
+
+        expect(scenes, [
+          'SCENE I. A public place.',
+          'SCENE II. A Street.',
+          'SCENE III. Room in Capulet’s House.',
+          'SCENE IV. A Street.',
+          'SCENE V. A Hall in Capulet’s House.',
+        ]);
+      });
+    });
+
     test('parses in a reasonable time', () {
       // Observed around 240 ms. The ceiling is loose on purpose: this guards
       // against an accidental quadratic walk, not against normal variance.
