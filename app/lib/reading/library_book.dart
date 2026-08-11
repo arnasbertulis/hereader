@@ -2,6 +2,29 @@ import 'package:epub_reader/epub_reader.dart';
 import 'package:flutter/foundation.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
+/// A place in the book the reader can jump to by name.
+///
+/// A token index rather than a locator, because this is not a position that
+/// is stored or synced — it is resolved fresh every time the book is parsed
+/// and is only ever handed to [PlaybackSession.seekToIndex]. Persisting one
+/// would mean keeping a copy of the table of contents in the database and
+/// migrating it whenever normalization changed.
+class Chapter {
+  final String title;
+
+  /// Nesting in the book's own table of contents. Zero is top level.
+  final int depth;
+
+  /// First token of the chapter, in this parse of this book.
+  final int tokenIndex;
+
+  const Chapter({
+    required this.title,
+    required this.depth,
+    required this.tokenIndex,
+  });
+}
+
 /// A book the reader has imported.
 class LibraryBook {
   /// Stable across devices: the book's own identifier where it has one,
@@ -26,6 +49,13 @@ class LibraryBook {
   /// reader to undo; a marker the book itself provides need not be.
   final ContentStartReason contentStartReason;
 
+  /// The book's own table of contents, resolved to token indices.
+  ///
+  /// Empty when the book declares none, or when nothing it declares survives
+  /// resolution. Nothing is inferred from headings to fill the gap: see
+  /// ADR 0010.
+  final List<Chapter> chapters;
+
   const LibraryBook({
     required this.id,
     required this.title,
@@ -35,6 +65,7 @@ class LibraryBook {
     this.position,
     this.contentStartIndex = 0,
     this.contentStartReason = ContentStartReason.none,
+    this.chapters = const [],
   });
 
   LibraryBook withPosition(Locator? next) => LibraryBook(
@@ -46,6 +77,7 @@ class LibraryBook {
     position: next,
     contentStartIndex: contentStartIndex,
     contentStartReason: contentStartReason,
+    chapters: chapters,
   );
 
   /// True when front matter was skipped on a guess rather than on a marker
@@ -110,7 +142,52 @@ LibraryBook _parseBook(Uint8List bytes) {
     contentStartReason: startIndex == 0
         ? ContentStartReason.none
         : start.reason,
+    chapters: chaptersOf(book, text),
   );
+}
+
+/// Turns the parsed table of contents into something the reader can jump to.
+///
+/// The parser resolves each entry to a block; this resolves that block to a
+/// token, which is what playback moves in.
+///
+/// `TokenizedText.from` drops blocks that produce no tokens, so
+/// `startOfBlock` can return null for a block that genuinely exists — the
+/// same condition `contentStartIndex` already guards against above. Here the
+/// search walks forward to the first block that did produce tokens. Landing
+/// a line late is invisible to the reader; dropping the chapter is not.
+///
+/// Public because it is the one piece of this file worth testing on its own.
+/// Everything else here runs only behind [compute], which a widget test
+/// cannot reach without spawning an isolate and a real EPUB.
+List<Chapter> chaptersOf(EpubBook book, TokenizedText text) {
+  if (book.toc.isEmpty) return const [];
+
+  final blocks = book.readingOrder;
+
+  final blockPositions = <String, int>{
+    for (var i = 0; i < blocks.length; i++) blocks[i].id: i,
+  };
+
+  final chapters = <Chapter>[];
+
+  for (final entry in book.toc) {
+    final start = blockPositions[entry.blockId];
+    if (start == null) continue;
+
+    int? tokenIndex;
+    for (var i = start; i < blocks.length; i++) {
+      tokenIndex = text.startOfBlock(blocks[i].id);
+      if (tokenIndex != null) break;
+    }
+    if (tokenIndex == null) continue;
+
+    chapters.add(
+      Chapter(title: entry.title, depth: entry.depth, tokenIndex: tokenIndex),
+    );
+  }
+
+  return chapters;
 }
 
 /// Abbreviation handling is language-specific. Only the default set exists

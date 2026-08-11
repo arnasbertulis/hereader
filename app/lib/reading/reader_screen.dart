@@ -48,6 +48,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
   StreamSubscription<PlaybackUpdate>? _sub;
   PlaybackUpdate? _update;
 
+  /// Held so the chapter button can open the drawer and the back gesture can
+  /// ask whether it is open. The button sits inside the Scaffold's body, so
+  /// `Scaffold.of` would work for it alone, but the pop handler is built
+  /// above the Scaffold and cannot reach it that way.
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
+
   /// Standard until the stored choice loads. The session is built
   /// synchronously in [initState] and reading can begin before a database
   /// read returns, so the profile is swapped in rather than waited for.
@@ -92,6 +98,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
     return ReadingResult(locator: locator, tokenIndex: _session.index);
   }
 
+  List<Chapter> get _chapters => widget.book.chapters;
+
+  bool get _drawerOpen => _scaffoldKey.currentState?.isDrawerOpen ?? false;
+
   void _toggle() {
     if (_session.state == PlaybackState.playing ||
         _session.state == PlaybackState.awaitingAdvance) {
@@ -102,11 +112,63 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   void _onSurfaceTap() {
+    // The scrim swallows taps on the surface, but not key presses: the
+    // shortcuts are bound above the Scaffold and stay live while the panel
+    // is open. Advancing a word the reader cannot see, because they are
+    // choosing a chapter, is not what either key meant.
+    if (_drawerOpen) return;
+
     if (_session.state == PlaybackState.awaitingAdvance) {
       _session.advance();
     } else {
       _toggle();
     }
+  }
+
+  /// Runs [action] only while the reading surface has the reader's attention.
+  void _whenReading(VoidCallback action) {
+    if (_drawerOpen) return;
+    action();
+  }
+
+  /// Opens the chapter panel.
+  ///
+  /// Pauses first, as switching profile does. Leaving the stream running
+  /// behind the panel would have the reader return to a paragraph they never
+  /// saw, and the position saved on close would be that one.
+  void _openChapters() {
+    if (_chapters.isEmpty) return;
+
+    _session.pause();
+    _scaffoldKey.currentState?.openDrawer();
+  }
+
+  /// Jumps to a chapter and leaves the session paused there.
+  ///
+  /// [PlaybackSession.seekToIndex] pauses unless already playing, and it is
+  /// always paused here because opening the panel paused it. Landing mid
+  /// flight at 250 wpm in a place the reader has not seen would mean the
+  /// first words of the chapter go past before they have looked up.
+  void _goToChapter(Chapter chapter) {
+    _scaffoldKey.currentState?.closeDrawer();
+    _session.seekToIndex(chapter.tokenIndex);
+  }
+
+  /// Escape and the system back gesture close the panel before they close
+  /// the book.
+  ///
+  /// The route sets `canPop: false` so it can return a result, which means
+  /// the drawer's own back handling never runs: `ModalRoute` reports
+  /// `doNotPop` before the local history entry the drawer registers is
+  /// consulted. Without this, backing out of the chapter list would exit the
+  /// book.
+  void _closeOrDismiss() {
+    final scaffold = _scaffoldKey.currentState;
+    if (scaffold != null && scaffold.isDrawerOpen) {
+      scaffold.closeDrawer();
+      return;
+    }
+    _close();
   }
 
   /// Switches profile mid-book.
@@ -167,6 +229,18 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   void _close() => Navigator.of(context).pop(_result);
 
+  /// Which chapter the reader is inside: the last one that starts at or
+  /// before the current token. -1 before the first chapter begins, which is
+  /// where front matter sits.
+  int get _currentChapter {
+    var found = -1;
+    for (var i = 0; i < _chapters.length; i++) {
+      if (_chapters[i].tokenIndex > _session.index) break;
+      found = i;
+    }
+    return found;
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = _session.state;
@@ -175,19 +249,37 @@ class _ReaderScreenState extends State<ReaderScreen> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _close();
+        if (!didPop) _closeOrDismiss();
       },
       child: CallbackShortcuts(
         bindings: {
           const SingleActivator(LogicalKeyboardKey.space): _onSurfaceTap,
-          const SingleActivator(LogicalKeyboardKey.arrowRight):
-              _session.advance,
-          const SingleActivator(LogicalKeyboardKey.arrowLeft): _session.rewind,
-          const SingleActivator(LogicalKeyboardKey.escape): _close,
+          const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
+              _whenReading(_session.advance),
+          const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
+              _whenReading(_session.rewind),
+          const SingleActivator(LogicalKeyboardKey.keyC): _openChapters,
+          const SingleActivator(LogicalKeyboardKey.escape): _closeOrDismiss,
         },
         child: Focus(
           autofocus: true,
           child: Scaffold(
+            key: _scaffoldKey,
+            // No drawer at all when the book declares no chapters, so the
+            // edge of the screen does nothing rather than opening an empty
+            // panel.
+            drawer: _chapters.isEmpty
+                ? null
+                : _ChapterPanel(
+                    bookTitle: widget.book.title,
+                    chapters: _chapters,
+                    currentIndex: _currentChapter,
+                    onSelected: _goToChapter,
+                  ),
+            // The whole surface is a tap target, and an edge drag is easy to
+            // start by accident on a phone. Opening a panel mid-sentence
+            // that way would be the app interrupting the reader.
+            drawerEnableOpenDragGesture: false,
             body: GestureDetector(
               onTap: _onSurfaceTap,
               behavior: HitTestBehavior.opaque,
@@ -201,6 +293,22 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   ),
                   if (state == PlaybackState.finished)
                     const Center(child: Text('End of book')),
+                  if (showControls && _chapters.isNotEmpty)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      child: SafeArea(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: IconButton.filledTonal(
+                            onPressed: _openChapters,
+                            iconSize: 32,
+                            icon: const Icon(Icons.menu_book_outlined),
+                            tooltip: 'Chapters',
+                          ),
+                        ),
+                      ),
+                    ),
                   if (showControls)
                     Positioned(
                       left: 0,
@@ -219,6 +327,80 @@ class _ReaderScreenState extends State<ReaderScreen> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The book's own table of contents, as a panel.
+///
+/// Read-only and flat. Depth is shown as indentation rather than as
+/// collapsible sections: a reader looking for Act III Scene II wants to see
+/// it, not to expand Act III first.
+class _ChapterPanel extends StatelessWidget {
+  final String bookTitle;
+  final List<Chapter> chapters;
+  final int currentIndex;
+  final ValueChanged<Chapter> onSelected;
+
+  const _ChapterPanel({
+    required this.bookTitle,
+    required this.chapters,
+    required this.currentIndex,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(bookTitle, style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 4),
+                  Text(
+                    'From this book’s own table of contents',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView.builder(
+                itemCount: chapters.length,
+                itemBuilder: (context, i) {
+                  final chapter = chapters[i];
+
+                  return ListTile(
+                    // Indentation carries the nesting. Capped so a deeply
+                    // nested book does not push its titles off the panel.
+                    contentPadding: EdgeInsets.only(
+                      left: 16.0 + 16.0 * chapter.depth.clamp(0, 3),
+                      right: 16,
+                    ),
+                    title: Text(
+                      chapter.title,
+                      style: chapter.depth == 0
+                          ? theme.textTheme.titleSmall
+                          : theme.textTheme.bodyMedium,
+                    ),
+                    selected: i == currentIndex,
+                    onTap: () => onSelected(chapter),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
