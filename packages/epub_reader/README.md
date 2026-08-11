@@ -44,10 +44,13 @@ The normalizer can also be used directly on a single document, which is how it
 is tested:
 
 ```dart
-final blocks = const HtmlNormalizer().normalize(
+final document = const HtmlNormalizer().normalize(
   xhtmlSource,
   href: 'OEBPS/chapter1.xhtml',
 );
+
+document.blocks;   // readable text, in order
+document.anchors;  // fragment id -> index into blocks
 ```
 
 ## Blocks
@@ -80,6 +83,27 @@ leading blocks matching catalogue prefixes or short rights lines are skipped —
 a genuine guess, capped at fifteen percent of the book, and reported as
 `ContentStartReason.boilerplateHeuristic` so a caller can offer a way back.
 
+## Table of contents
+
+`EpubBook.toc` is the book's own table of contents, flattened to a list with a
+`depth` on each entry, and resolved to block ids rather than to hrefs.
+
+EPUB 3 declares it in a navigation document flagged `properties="nav"` in the
+manifest; EPUB 2 declares it in an NCX named by the spine's `toc` attribute.
+The newer form wins where a book carries both, which is most of them. Nothing
+is inferred when a book declares neither: a list derived from headings looks
+like a table of contents and is not one.
+
+Fragments matter and are resolved. Converters chunk a book by act rather than
+by scene, so several entries commonly point into the same spine document
+differing only after the `#`. `NormalizedDocument.anchors` records where each
+fragment falls in the block list, which is what stops those entries collapsing
+onto one destination.
+
+Reading it never throws. An entry pointing at a missing document, at one that
+produced no text, or at one the spine marks `linear="no"` is dropped, and a
+book with an unreadable navigation document is still a readable book.
+
 ## What is dropped
 
 Scripts, styles, tables, images, figures, MathML, and EPUB 3 navigation
@@ -108,8 +132,8 @@ same commit.
 
 ## Status
 
-Built: `Block`, `HtmlNormalizer`, `EpubParser`, front matter detection.
+Built: `Block`, `HtmlNormalizer`, `EpubParser`, front matter detection, table
+of contents parsing with fragment resolution.
 
-Not yet built: reading a book's own table of contents for chapter navigation,
-and using the OPF language tag to select a per-language tokenizer
+Not yet built: using the OPF language tag to select a per-language tokenizer
 configuration.
