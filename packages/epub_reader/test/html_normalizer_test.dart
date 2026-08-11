@@ -4,10 +4,14 @@ import 'package:epub_reader/epub_reader.dart';
 const _href = 'OEBPS/chapter1.xhtml';
 
 List<Block> _blocks(String body, {String href = _href}) =>
-    const HtmlNormalizer().normalize(
-      '<html><body>$body</body></html>',
-      href: href,
-    );
+    const HtmlNormalizer()
+        .normalize('<html><body>$body</body></html>', href: href)
+        .blocks;
+
+Map<String, int> _anchors(String body, {String href = _href}) =>
+    const HtmlNormalizer()
+        .normalize('<html><body>$body</body></html>', href: href)
+        .anchors;
 
 List<String> _texts(String body) => _blocks(body).map((b) => b.text).toList();
 
@@ -23,7 +27,7 @@ void main() {
 
     test('an empty document yields nothing', () {
       expect(_blocks(''), isEmpty);
-      expect(const HtmlNormalizer().normalize('', href: _href), isEmpty);
+      expect(const HtmlNormalizer().normalize('', href: _href).blocks, isEmpty);
     });
 
     test('blocks carry their href and index', () {
@@ -239,6 +243,52 @@ void main() {
   group('parser version', () {
     test('is recorded so offsets can be migrated', () {
       expect(kParserVersion, greaterThan(0));
+    });
+  });
+
+  group('fragment anchors', () {
+    test('an id on a block resolves to that block', () {
+      expect(_anchors('<p>One.</p><p id="two">Two.</p>')['two'], 1);
+    });
+
+    test('an id on a container resolves to its first block', () {
+      // The common shape in converted books: the fragment sits on the div
+      // that wraps a chapter, not on the chapter's heading.
+      expect(
+        _anchors(
+          '<p>Before.</p><div id="c"><h1>Title</h1><p>Body.</p></div>',
+        )['c'],
+        1,
+      );
+    });
+
+    test('an id on inline markup resolves to its containing block', () {
+      expect(_anchors('<p>One.</p><h1><a id="m"></a>Two</h1>')['m'], 1);
+    });
+
+    test('an id on a dropped block carries to the next one kept', () {
+      // The spacer produces no block, but a fragment pointing at it still
+      // has to land somewhere the reader can see.
+      expect(_anchors('<p>One.</p><p id="m"> </p><p>Three.</p>')['m'], 1);
+    });
+
+    test('the outermost claim on a block wins', () {
+      // A container and the heading inside it both resolve to the same
+      // block, and neither should displace the other.
+      final anchors = _anchors(
+        '<div id="outer"><h1 id="inner">Title</h1></div>',
+      );
+
+      expect(anchors['outer'], 0);
+      expect(anchors['inner'], 0);
+    });
+
+    test('an anchor with no block after it is not recorded', () {
+      expect(_anchors('<p>Real.</p><p id="m">x</p>'), isNot(contains('m')));
+    });
+
+    test('a document with no ids has no anchors', () {
+      expect(_anchors('<p>One.</p><p>Two.</p>'), isEmpty);
     });
   });
 }

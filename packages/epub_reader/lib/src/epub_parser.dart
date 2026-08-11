@@ -2,12 +2,21 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:html/dom.dart' as dom;
+import 'package:html/parser.dart' as html_parser;
 import 'package:xml/xml.dart';
 
 import 'epub_book.dart';
 import 'html_normalizer.dart';
+import 'toc.dart';
 
 const _containerPath = 'META-INF/container.xml';
+
+/// A table of contents entry before it has been matched to a document.
+///
+/// [href] is an archive path; [fragment] is the part after the `#`, empty
+/// when the entry names a whole document.
+typedef _RawEntry = ({String title, String href, String fragment, int depth});
 
 /// Reads an EPUB from bytes.
 ///
@@ -41,7 +50,11 @@ class EpubParser {
       throw const EpubException('The book contains no readable text.');
     }
 
-    return EpubBook(metadata: metadata, documents: documents);
+    return EpubBook(
+      metadata: metadata,
+      documents: documents,
+      toc: _readToc(archive, opf, manifest, opfDir, documents),
+    );
   }
 
   // -------------------------------------------------------------------
@@ -175,19 +188,256 @@ class EpubParser {
         continue;
       }
 
-      final blocks = normalizer.normalize(source, href: href);
-      if (blocks.isEmpty) continue;
+      final normalized = normalizer.normalize(source, href: href);
+      if (normalized.blocks.isEmpty) continue;
 
       documents.add(
         EpubDocument(
           href: href,
-          blocks: blocks,
+          blocks: normalized.blocks,
+          anchors: normalized.anchors,
           isLinear: ref.getAttribute('linear') != 'no',
         ),
       );
     }
 
     return documents;
+  }
+
+  // -- table of contents ----------------------------------------------
+
+  /// The book's own table of contents, resolved against what was actually
+  /// parsed.
+  ///
+  /// EPUB 3 puts it in a navigation document flagged `properties="nav"` in
+  /// the manifest; EPUB 2 puts it in an NCX named by the spine's `toc`
+  /// attribute. Books produced this decade usually carry both, so the newer
+  /// form is preferred and the older one is a fallback rather than a second
+  /// source to merge.
+  ///
+  /// Never throws. A book with an unreadable table of contents is still a
+  /// readable book, and losing chapter navigation is a smaller failure than
+  /// refusing to open it.
+  List<TocEntry> _readToc(
+    Archive archive,
+    XmlDocument opf,
+    Map<String, _ManifestItem> manifest,
+    String opfDir,
+    List<EpubDocument> documents,
+  ) {
+    try {
+      var raw = _readNav(archive, manifest, opfDir);
+      if (raw.isEmpty) raw = _readNcx(archive, opf, manifest, opfDir);
+
+      return _resolveEntries(raw, documents);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// EPUB 3 navigation document.
+  ///
+  /// The nav document is usually absent from the spine — it is navigation,
+  /// not a chapter — so it has to be found through the manifest rather than
+  /// among the documents already parsed.
+  ///
+  /// Parsed as HTML rather than XML. It is XHTML by specification, but the
+  /// same tolerance that makes the normalizer work on real books applies
+  /// here, and a stray unescaped ampersand should not cost a reader their
+  /// chapter list.
+  List<_RawEntry> _readNav(
+    Archive archive,
+    Map<String, _ManifestItem> manifest,
+    String opfDir,
+  ) {
+    String? navHref;
+    for (final item in manifest.values) {
+      if (_hasToken(item.properties, 'nav')) {
+        navHref = _resolve(opfDir, item.href);
+        break;
+      }
+    }
+    if (navHref == null) return const [];
+
+    final String source;
+    try {
+      source = _readString(archive, navHref);
+    } on EpubException {
+      return const [];
+    }
+
+    final body = html_parser.parse(source).body;
+    if (body == null) return const [];
+
+    final navs = <dom.Element>[];
+    _findElements(body, 'nav', navs);
+    if (navs.isEmpty) return const [];
+
+    var chosen = navs.first;
+    for (final candidate in navs) {
+      final type =
+          candidate.attributes['epub:type'] ??
+          candidate.attributes['type'] ??
+          '';
+      if (_hasToken(type, 'toc')) {
+        chosen = candidate;
+        break;
+      }
+    }
+
+    final entries = <_RawEntry>[];
+    final base = _dirname(navHref);
+
+    for (final child in chosen.children) {
+      if (child.localName == 'ol' || child.localName == 'ul') {
+        _readNavList(child, base, 0, entries);
+      }
+    }
+    return entries;
+  }
+
+  void _readNavList(
+    dom.Element list,
+    String base,
+    int depth,
+    List<_RawEntry> out,
+  ) {
+    for (final item in list.children) {
+      if (item.localName != 'li') continue;
+
+      for (final child in item.children) {
+        if (child.localName != 'a') continue;
+
+        final href = child.attributes['href'];
+        final title = _flatten(child);
+        if (href != null && href.isNotEmpty && title.isNotEmpty) {
+          out.add(_rawEntry(base, href, title, depth));
+        }
+        break;
+      }
+
+      // Nested lists are the child levels of this entry. Walked after the
+      // link so entries come out in reading order rather than by level.
+      for (final child in item.children) {
+        if (child.localName == 'ol' || child.localName == 'ul') {
+          _readNavList(child, base, depth + 1, out);
+        }
+      }
+    }
+  }
+
+  /// EPUB 2 NCX, used when there is no navigation document.
+  List<_RawEntry> _readNcx(
+    Archive archive,
+    XmlDocument opf,
+    Map<String, _ManifestItem> manifest,
+    String opfDir,
+  ) {
+    _ManifestItem? item;
+
+    final spine = opf.findAllElements('spine', namespaceUri: '*').firstOrNull;
+    final declared = spine?.getAttribute('toc');
+    if (declared != null) item = manifest[declared];
+
+    // A spine that names no NCX is common enough in EPUB 3 files that also
+    // ship one for backwards compatibility.
+    if (item == null) {
+      for (final candidate in manifest.values) {
+        if (candidate.mediaType.contains('dtbncx')) {
+          item = candidate;
+          break;
+        }
+      }
+    }
+    if (item == null) return const [];
+
+    final href = _resolve(opfDir, item.href);
+    final String source;
+    try {
+      source = _readString(archive, href);
+    } on EpubException {
+      return const [];
+    }
+
+    final XmlDocument ncx;
+    try {
+      ncx = XmlDocument.parse(source);
+    } on XmlException {
+      return const [];
+    }
+
+    final map = ncx.findAllElements('navMap', namespaceUri: '*').firstOrNull;
+    if (map == null) return const [];
+
+    final entries = <_RawEntry>[];
+    _readNavPoints(map, _dirname(href), 0, entries);
+    return entries;
+  }
+
+  void _readNavPoints(
+    XmlElement parent,
+    String base,
+    int depth,
+    List<_RawEntry> out,
+  ) {
+    for (final point in parent.findElements('navPoint', namespaceUri: '*')) {
+      String title = '';
+      for (final label in point.findElements('navLabel', namespaceUri: '*')) {
+        title = label.innerText.replaceAll(_space, ' ').trim();
+        break;
+      }
+
+      for (final content in point.findElements('content', namespaceUri: '*')) {
+        final src = content.getAttribute('src');
+        if (src != null && src.isNotEmpty && title.isNotEmpty) {
+          out.add(_rawEntry(base, src, title, depth));
+        }
+        break;
+      }
+
+      _readNavPoints(point, base, depth + 1, out);
+    }
+  }
+
+  /// Matches entries to blocks, dropping anything unreachable.
+  ///
+  /// An entry surviving with a block id nothing can resolve would render as
+  /// a chapter that silently does nothing when tapped, which is worse than
+  /// a chapter list that is one entry short.
+  List<TocEntry> _resolveEntries(
+    List<_RawEntry> raw,
+    List<EpubDocument> documents,
+  ) {
+    final byHref = <String, EpubDocument>{
+      for (final document in documents) document.href: document,
+    };
+
+    final entries = <TocEntry>[];
+
+    for (final entry in raw) {
+      final document = byHref[entry.href];
+
+      // Absent, or outside the reading flow. `readingOrder` skips non-linear
+      // documents, so an entry pointing into one names a block the reader
+      // can never reach by reading forward.
+      if (document == null || !document.isLinear) continue;
+      if (document.blocks.isEmpty) continue;
+
+      // An unknown fragment falls back to the top of the document rather
+      // than dropping the entry. The book says a chapter starts in this
+      // file; landing at its start is close, and losing the entry is not.
+      final index = entry.fragment.isEmpty
+          ? 0
+          : (document.anchors[entry.fragment] ?? 0);
+
+      final block = document.blocks[index.clamp(0, document.blocks.length - 1)];
+
+      entries.add(
+        TocEntry(title: entry.title, blockId: block.id, depth: entry.depth),
+      );
+    }
+
+    return entries;
   }
 
   String _readString(Archive archive, String path) {
@@ -223,6 +473,58 @@ class _ManifestItem {
     required this.mediaType,
     required this.properties,
   });
+}
+
+final _space = RegExp(r'\s+');
+
+/// Whitespace-separated attribute values, matched whole.
+///
+/// `properties="nav"` and `properties="scripted nav"` both declare a
+/// navigation document; `properties="navigation-aid"` does not, and a
+/// substring test would take it.
+bool _hasToken(String value, String token) =>
+    value.split(_space).contains(token);
+
+void _findElements(dom.Element? root, String tag, List<dom.Element> out) {
+  if (root == null) return;
+  if (root.localName == tag) out.add(root);
+  for (final child in root.children) {
+    _findElements(child, tag, out);
+  }
+}
+
+/// Text of an element with whitespace collapsed.
+///
+/// A navigation label often wraps its text in a span, so the text nodes have
+/// to be gathered rather than read off the element.
+String _flatten(dom.Node node) {
+  final buffer = StringBuffer();
+
+  void collect(dom.Node current) {
+    for (final child in current.nodes) {
+      if (child is dom.Text) {
+        buffer.write(child.text);
+      } else if (child is dom.Element) {
+        collect(child);
+      }
+    }
+  }
+
+  collect(node);
+  return buffer.toString().replaceAll(_space, ' ').trim();
+}
+
+_RawEntry _rawEntry(String base, String href, String title, int depth) {
+  final hash = href.indexOf('#');
+  final path = hash == -1 ? href : href.substring(0, hash);
+  final fragment = hash == -1 ? '' : _decode(href.substring(hash + 1));
+
+  return (
+    title: title,
+    href: _resolve(base, path),
+    fragment: fragment,
+    depth: depth,
+  );
 }
 
 String _decode(String value) {

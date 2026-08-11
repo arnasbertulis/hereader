@@ -1,4 +1,5 @@
 import 'block.dart';
+import 'toc.dart';
 
 /// Thrown when a file is not a usable EPUB. Typed so the app can show the
 /// reader something specific rather than a stack trace.
@@ -45,9 +46,17 @@ class EpubDocument {
 
   final List<Block> blocks;
 
+  /// Fragment identifier to index into [blocks].
+  ///
+  /// Kept per document rather than merged into one book-wide map, because
+  /// fragment ids are only unique within a document and two chapters in
+  /// different files may well share one.
+  final Map<String, int> anchors;
+
   const EpubDocument({
     required this.href,
     required this.blocks,
+    this.anchors = const {},
     this.isLinear = true,
   });
 }
@@ -58,7 +67,18 @@ class EpubBook {
   /// Spine order, including non-linear items.
   final List<EpubDocument> documents;
 
-  const EpubBook({required this.metadata, required this.documents});
+  /// The book's own table of contents, flattened and resolved to blocks.
+  ///
+  /// Empty when the book declares none, or when every entry it declares
+  /// points somewhere unreadable. Nothing is inferred to fill the gap: see
+  /// ADR 0010.
+  final List<TocEntry> toc;
+
+  const EpubBook({
+    required this.metadata,
+    required this.documents,
+    this.toc = const [],
+  });
 
   /// Every block in reading order, skipping non-linear documents.
   List<Block> get readingOrder => [

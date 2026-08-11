@@ -3,3 +3,4 @@ export 'src/block.dart';
 export 'src/epub_book.dart';
 export 'src/epub_parser.dart';
 export 'src/front_matter.dart';
+export 'src/toc.dart';

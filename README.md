@@ -54,6 +54,7 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 - [x] Front matter detection, so a book opens on its text rather than its licence page
 - [x] Reading surface: word anchored per profile, punctuation gaps, keyboard control, reduce-motion support
 - [x] Library: import, list, open, remove, and resume where you left off after a restart
+- [x] Chapter navigation: the book's own table of contents in a panel, from the EPUB 3 navigation document or the EPUB 2 NCX, resolved through fragment anchors so scenes sharing one file land in different places
 - [x] Settings: copy a preset to make a profile of your own, then change pacing, type size, spacing, position on screen, contrast polarity, background colour and the rest, with a live preview and a contrast warning
 - [x] Local persistence with drift, including an outbox for changes waiting to sync — native SQLite on Android and Windows, WASM SQLite over OPFS on web
 - [x] Sync service: registration, login, token refresh, an append-only event log with per-user sequence numbers, idempotent pushes, hybrid logical clock ordering, and per-entity conflict resolution
@@ -67,7 +68,6 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 
 **Not started**
 
-- [ ] Chapter navigation
 - [ ] CD pipeline — deploys are currently a manual `git pull` and rebuild on the server
 - [ ] Running the app's own suite in a real browser. The pure packages run under `dart2js` in CI and the web build is compiled on every change, but the app's tests reach `dart:ffi` through drift and cannot execute on that target. See [`docs/adr/0009-web-platform-coverage.md`](docs/adr/0009-web-platform-coverage.md)
 
@@ -126,6 +126,10 @@ Recorded in [`docs/adr/0005-sync-event-log.md`](docs/adr/0005-sync-event-log.md)
 **The contrast warning informs and does not block.** The colour picker shows a WCAG ratio and says plainly when it is too low to read comfortably, then lets the reader proceed. Someone with light sensitivity may want low contrast deliberately, and overriding that in an app whose whole premise is configurability would be worse than a warning they can ignore. The point is that nobody arrives at dark grey on black without being told.
 
 **Front matter is skipped, never removed.** Dropping blocks would shift every block id and invalidate saved positions, and a wrong guess would delete real text with no way back. Detection only reports a suggested opening index, so the reader can rewind into the licence page if they want it.
+
+**Chapter navigation reads the book's own table of contents, and nothing else.** A book that declares neither an EPUB 3 navigation document nor an EPUB 2 NCX gets no chapter list, because deriving one from heading blocks would produce running heads, section labels and the licence page's own title in an order the publisher never endorsed. A navigation panel is a promise about a book's structure, and a guessed promise is worse than an absent one. Recorded in [`docs/adr/0010-chapter-navigation.md`](docs/adr/0010-chapter-navigation.md).
+
+**Table of contents entries resolve through fragment anchors, not just hrefs.** Converters routinely chunk a book by act rather than by scene, so several entries point into one spine document differing only by the `#fragment`. Resolving to the document alone would land every scene of an act on that act's first word. The normalizer records where each fragment falls in the block list — on the block itself, on a container wrapping it, or on an empty inline anchor inside it — and an anchor on a block dropped for length carries forward to the next block kept.
 
 **Waiting for the reader is not the same as being paused.** Under reader-elicited pacing the session sits in `awaitingAdvance`, a distinct state from `paused`. Collapsing the two would make the pause button meaningless in that mode and would fire the profile's rewind on every single word.
 
@@ -292,20 +296,23 @@ flutter build web --dart-define=HEREADER_API=https://204-168-240-12.sslip.io/api
 - A position for a book not yet imported on a device is held locally rather than lost. It stays held forever if the reader never imports that book on that device; harmless, since each held position is a locator and two integers, and sign-out clears them.
 - The supporting research is small-sample and predates modern displays. Rubin and Turano tested 23 people in 1994; Arditi tested 15 in 1999. These are the best available comparisons, not large trials.
 - No study cited here measures reading comprehension. Every figure is a reading rate.
+- A book that declares no table of contents shows no chapter button. Both EPUB 2 and EPUB 3 require one, so this only affects malformed files, but the reader has no way to tell an absent list from an absent feature.
+- The chapter panel does not scroll to the current chapter when it opens. The current chapter is highlighted, so a reader deep in a long book has to scroll to find where they are.
+- A table of contents entry whose fragment names something the normalizer dropped lands at the start of its document rather than at the entry's own position.
+- Chapter titles are shown exactly as the book writes them, including publisher noise and inconsistent casing.
 
 ---
 
 ## Roadmap
 
-1. Chapter navigation from the book's own table of contents
-2. Bookmarks and highlights over the same sync event log
-3. Exporting and importing a profile as a file, so one can be shared with someone who does not share an account
-4. Book transfer between devices, either over the local network or through the platform share sheet. Relaying files through the service is deliberately excluded: it would make this a system that transmits copyrighted content, which storing books on-device exists to avoid.
-5. Public domain catalogue via OPDS feeds, with server-side ingestion
-6. Google sign-in as an additional identity source
-7. PDF support, which needs column detection, header and footer stripping, and reading-order reconstruction
-8. Continuous scrolling presentation, as a separate renderer rather than a toggle. Smooth scroll needs constant velocity, so honouring a per-token duration would make text surge and stall mid-sentence. Whether per-token pacing collapses into a single velocity, or that mode drops pacing entirely, is unresolved.
-9. CD pipeline, so a merge to `main` deploys automatically instead of requiring a manual SSH session
+1. Bookmarks and highlights over the same sync event log
+2. Exporting and importing a profile as a file, so one can be shared with someone who does not share an account
+3. Book transfer between devices, either over the local network or through the platform share sheet. Relaying files through the service is deliberately excluded: it would make this a system that transmits copyrighted content, which storing books on-device exists to avoid.
+4. Public domain catalogue via OPDS feeds, with server-side ingestion
+5. Google sign-in as an additional identity source
+6. PDF support, which needs column detection, header and footer stripping, and reading-order reconstruction
+7. Continuous scrolling presentation, as a separate renderer rather than a toggle. Smooth scroll needs constant velocity, so honouring a per-token duration would make text surge and stall mid-sentence. Whether per-token pacing collapses into a single velocity, or that mode drops pacing entirely, is unresolved.
+8. CD pipeline, so a merge to `main` deploys automatically instead of requiring a manual SSH session
 
 ---
 
