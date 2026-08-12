@@ -9,11 +9,15 @@ import 'database.dart';
 ///
 /// Loading blobs to draw a list would read every book into memory to render
 /// a few titles.
+///
+/// `language` is stored on the book row but not carried here. Per-language
+/// tokenizer settings are a real seam (ADR 0003) and the column exists for
+/// them, but nothing reads a summary's language today, and a field nothing
+/// reads reserves nothing.
 class BookSummary {
   final String id;
   final String title;
   final String? author;
-  final String? language;
   final int wordCount;
   final Locator? position;
   final DateTime importedAt;
@@ -24,7 +28,6 @@ class BookSummary {
     required this.wordCount,
     required this.importedAt,
     this.author,
-    this.language,
     this.position,
   });
 }
@@ -57,7 +60,6 @@ class LibraryRepository {
           id: book.id,
           title: book.title,
           author: book.author,
-          language: book.language,
           wordCount: book.wordCount,
           importedAt: book.importedAt,
           position: position == null
