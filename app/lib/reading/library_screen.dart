@@ -121,7 +121,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
       if (!mounted) return;
 
-      final result = await Navigator.of(context).push<ReadingResult>(
+      await Navigator.of(context).push<void>(
         MaterialPageRoute(
           builder: (_) => ReaderScreen(
             book: book,
@@ -129,32 +129,42 @@ class _LibraryScreenState extends State<LibraryScreen> {
             // device and to remember which one was picked.
             repository: _repo,
             issueStamp: widget.sync.issueStamp,
+            // The screen decides when a place is worth recording — ADR 0011
+            // — and this decides how. It is called throughout the session
+            // now, not once at the end.
+            onSave: (result) => _savePosition(summary.id, result),
           ),
         ),
       );
 
-      if (result == null) return;
-
-      await _repo.savePosition(
-        bookId: summary.id,
-        locator: result.locator,
-        // A real clock stamp, not a wall-clock string: the service rejects
-        // anything that does not parse, and ordering across devices depends
-        // on this being monotonic.
-        hlc: await widget.sync.issueStamp(),
-        // The service has no copy of the book, so it cannot work out how far
-        // apart two positions are without this hint.
-        tokenIndex: result.tokenIndex,
-      );
-
       // Positions are worth sending promptly: the reader may pick up
-      // another device in a minute.
+      // another device in a minute. Everything written while the book was
+      // open is already queued, coalesced down to the latest.
       widget.sync.syncNow();
     } on EpubException catch (e) {
       _report(e.message);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Writes a place the reader has reached.
+  ///
+  /// Called many times per sitting rather than once at the end. The
+  /// repository drops any queued event for the same book that has never been
+  /// sent, so the extra writes cost nothing on the wire.
+  Future<void> _savePosition(String bookId, ReadingResult result) async {
+    await _repo.savePosition(
+      bookId: bookId,
+      locator: result.locator,
+      // A real clock stamp, not a wall-clock string: the service rejects
+      // anything that does not parse, and ordering across devices depends
+      // on this being monotonic.
+      hlc: await widget.sync.issueStamp(),
+      // The service has no copy of the book, so it cannot work out how far
+      // apart two positions are without this hint.
+      tokenIndex: result.tokenIndex,
+    );
   }
 
   /// Waits for the reader to settle a divergence on [bookId].
