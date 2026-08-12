@@ -386,4 +386,36 @@ void main() {
       s.dispose();
     });
   });
+
+  group('current', () {
+    test('describes a session nobody has touched yet', () {
+      final tokens = [
+        const Token(text: 'Alpha', charOffset: 0),
+        const Token(text: 'beta', charOffset: 6),
+        const Token(text: 'gamma', charOffset: 11),
+      ];
+
+      final session = PlaybackSession(
+        tokens: tokens,
+        profile: Presets.standard,
+        startIndex: 1,
+      );
+      addTearDown(session.dispose);
+
+      // The stream has emitted nothing, because nothing has changed. A
+      // renderer with only the stream to go on draws a blank surface.
+      expect(session.current.token, tokens[1]);
+      expect(session.current.index, 1);
+      expect(session.current.state, PlaybackState.idle);
+      expect(session.current.inGap, isFalse);
+    });
+
+    test('carries no token when there is nothing to read', () {
+      final session = PlaybackSession(tokens: [], profile: Presets.standard);
+      addTearDown(session.dispose);
+
+      expect(session.current.state, PlaybackState.finished);
+      expect(session.current.token, isNull);
+    });
+  });
 }
