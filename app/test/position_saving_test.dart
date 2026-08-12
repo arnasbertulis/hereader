@@ -96,10 +96,7 @@ void main() {
       final events = await repo.pendingEvents();
 
       expect(events, hasLength(2));
-      expect(
-        events.map((e) => e.entityId).toSet(),
-        {'book-1', 'book-2'},
-      );
+      expect(events.map((e) => e.entityId).toSet(), {'book-1', 'book-2'});
     });
 
     test('does not reset an event that has already failed', () async {
@@ -203,7 +200,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1));
     });
 
-    testWidgets('writes nothing while the reader has not moved', (tester) async {
+    testWidgets('writes nothing while the reader has not moved', (
+      tester,
+    ) async {
       final saves = <ReadingResult>[];
 
       await tester.pumpWidget(

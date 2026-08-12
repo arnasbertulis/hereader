@@ -152,7 +152,7 @@ class LibraryRepository {
     );
   }
 
-/// Records where the reader stopped, and queues the change for sync.
+  /// Records where the reader stopped, and queues the change for sync.
   ///
   /// Both writes happen in one transaction: a position that reaches disk
   /// without an outbox entry would never sync, and an outbox entry without
@@ -223,15 +223,15 @@ class LibraryRepository {
   /// the next drain.
   ///
   /// Assumes it is already inside a transaction.
-  Future<void> _coalescePositionEvents(String bookId) => (_db.delete(
-    _db.outboxEvents,
-  )..where(
-    (e) =>
-        e.entityType.equals('position') &
-        e.entityId.equals(bookId) &
-        e.attempts.equals(0),
-  )).go();
-  
+  Future<void> _coalescePositionEvents(String bookId) =>
+      (_db.delete(_db.outboxEvents)..where(
+            (e) =>
+                e.entityType.equals('position') &
+                e.entityId.equals(bookId) &
+                e.attempts.equals(0),
+          ))
+          .go();
+
   /// Writes a position that came from another device.
   ///
   /// Deliberately does not enqueue an outbox event. The service already has
