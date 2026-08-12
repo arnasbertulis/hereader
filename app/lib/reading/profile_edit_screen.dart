@@ -529,13 +529,9 @@ class _PreviewState extends State<_Preview> {
 
   StreamSubscription<PlaybackUpdate>? _sub;
 
-  /// The session emits nothing until something happens to it, so the first
-  /// frame is built by hand rather than waited for.
-  late PlaybackUpdate _update = PlaybackUpdate(
-    state: PlaybackState.paused,
-    index: 0,
-    token: _text.tokens.first,
-  );
+  //// The session emits nothing until something happens to it, so the first
+  /// frame comes from the session's own description of itself.
+  late PlaybackUpdate _update = _session.current;
 
   @override
   void initState() {

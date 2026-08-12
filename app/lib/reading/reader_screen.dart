@@ -77,6 +77,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
   /// without a transaction, so a paused reader writes nothing at all.
   late int _lastSavedIndex;
 
+  /// Whether to tell the reader this book opened past a guess.
+  ///
+  /// Front matter detection returns an index and a reason. A marker the book
+  /// supplied needs no comment; a pattern match is capped at fifteen percent
+  /// of the file and can still take a dedication that reads like a rights
+  /// line, and a guess the reader was never shown is one they cannot correct.
+  bool _offerFrontMatter = false;
+
   /// Held so the chapter button can open the drawer and the back gesture can
   /// ask whether it is open. The button sits inside the Scaffold's body, so
   /// `Scaffold.of` would work for it alone, but the pop handler is built
@@ -97,6 +105,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
       startIndex: widget.book.resumeIndex,
     );
 
+    // Seeded rather than waited for. The stream carries changes, and a
+    // session nobody has touched has not changed, so a book opened at a
+    // stored position drew an empty surface until the reader pressed
+    // something. Caught by the front matter test, which asked what was on
+    // screen at open — nothing else ever had.
+    _update = _session.current;
+
     _lastState = _session.state;
 
     // Seeded from where the book opened, so glancing at a book and closing it
@@ -104,6 +119,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
     // did not resolve against this copy: the reader's place here is then
     // genuinely new information rather than a repeat of what is stored.
     _lastSavedIndex = widget.book.positionUnresolvable ? -1 : _session.index;
+
+    // Only on a first open. A reader resuming made this decision, or lived
+    // with it, sittings ago.
+    _offerFrontMatter =
+        widget.book.position == null && widget.book.skippedFrontMatterOnAGuess;
 
     _sub = _session.updates.listen((u) {
       if (!mounted) return;
@@ -116,7 +136,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
       if (stopped && _lastState != u.state) unawaited(_save());
       _lastState = u.state;
 
-      setState(() => _update = u);
+      setState(() {
+        _update = u;
+
+        // The offer is about the moment before reading starts. Once the
+        // reader has moved at all they have either taken it or answered it.
+        if (u.index != widget.book.contentStartIndex) {
+          _offerFrontMatter = false;
+        }
+      });
     });
 
     _saveTimer = Timer.periodic(_saveInterval, (_) => unawaited(_save()));
@@ -236,6 +264,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _scaffoldKey.currentState?.closeDrawer();
     _session.seekToIndex(chapter.tokenIndex);
   }
+
+  /// Takes the reader to the very start of the file, front matter included.
+  ///
+  /// Index 0 rather than a step backwards. The offer exists because the app
+  /// does not know where the text begins, so guessing how far back to go
+  /// would compound the first guess with a second. The start of the file is
+  /// the one position that is certainly right.
+  void _goToFrontMatter() => _session.seekToIndex(0);
 
   /// Escape and the system back gesture close the panel before they close
   /// the book.
@@ -409,13 +445,26 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       left: 0,
                       right: 0,
                       bottom: 0,
-                      child: _Controls(
-                        state: state,
-                        progress: widget.book.text.progressAt(_session.index),
-                        onClose: _closeOrDismiss,
-                        onRewind: () => _session.rewind(5),
-                        onToggle: _toggle,
-                        onProfile: _pickProfile,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_offerFrontMatter)
+                            _FrontMatterOffer(
+                              onAccept: _goToFrontMatter,
+                              onDismiss: () =>
+                                  setState(() => _offerFrontMatter = false),
+                            ),
+                          _Controls(
+                            state: state,
+                            progress: widget.book.text.progressAt(
+                              _session.index,
+                            ),
+                            onClose: _closeOrDismiss,
+                            onRewind: () => _session.rewind(5),
+                            onToggle: _toggle,
+                            onProfile: _pickProfile,
+                          ),
+                        ],
                       ),
                     ),
                 ],
@@ -497,6 +546,58 @@ class _ChapterPanel extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Says the opening position was a guess, and offers the start of the file.
+///
+/// Above the controls rather than over the text: it is a note about the book
+/// rather than part of it, and the reading surface is a tap target that a
+/// button sitting on it would compete with.
+///
+/// Deliberately plain — theme colours and two text buttons. What matters here
+/// is when it appears and where it sends the reader; the chrome is expected
+/// to be replaced.
+class _FrontMatterOffer extends StatelessWidget {
+  final VoidCallback onAccept;
+  final VoidCallback onDismiss;
+
+  const _FrontMatterOffer({required this.onAccept, required this.onDismiss});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      width: double.infinity,
+      color: theme.colorScheme.secondaryContainer,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'This opened past what looked like a title and licence page. '
+            'That was a guess, and nothing was removed.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSecondaryContainer,
+            ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                onPressed: onDismiss,
+                child: const Text('Carry on here'),
+              ),
+              TextButton(
+                onPressed: onAccept,
+                child: const Text('Start at the beginning'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
