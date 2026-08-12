@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
 import 'profile_presentation.dart';
+import 'rsvp_view.dart';
 
 /// Edits one reading profile.
 ///
@@ -477,47 +480,175 @@ class _PresetBanner extends StatelessWidget {
   }
 }
 
-/// A live sample of the profile.
+/// A live sample of the profile, drawn by the reading surface itself.
 ///
-/// Approximate rather than authoritative: this draws the word itself instead
-/// of going through the reading surface, so it shows size, spacing, colour
-/// and position but not the fixation highlight or the fade. If `rsvp_view`
-/// converts points to logical pixels, apply the same conversion here.
-class _Preview extends StatelessWidget {
+/// Not an approximation of `RsvpView` but an instance of it, which is the
+/// point: a preview that draws its own sample word will disagree with the
+/// real thing eventually, and this one did — it painted the polarity
+/// defaults from `profile_presentation.dart` while the reader saw a
+/// different set hardcoded in `rsvp_view.dart`, so the contrast readout
+/// below measured colours the app never put on screen.
+///
+/// It runs a real [PlaybackSession] over one fixed sentence rather than
+/// showing a still word. Pacing is most of what a profile decides, and the
+/// speed, pause and fade controls had no feedback at all: a reader set
+/// 250 wpm and found out what that meant by opening a book.
+///
+/// It starts paused. An accessibility app should not flash text at someone
+/// who is trying to read slider labels, and a preview that animates on its
+/// own would mean `pumpAndSettle` never settles in any test that opens this
+/// screen.
+class _Preview extends StatefulWidget {
   final ReadingProfile profile;
   const _Preview({required this.profile});
 
   @override
+  State<_Preview> createState() => _PreviewState();
+}
+
+class _PreviewState extends State<_Preview> {
+  /// Two sentences, a clause break, and words from two to seven letters, so
+  /// every pacing control has something to act on. Fixed rather than drawn
+  /// from the reader's library: a preview that changes with the book would
+  /// make two profiles impossible to compare.
+  static const _sample =
+      'Reading, one word at a time. The words come to you, so your eyes '
+      'need not go looking.';
+
+  late final TokenizedText _text = TokenizedText.from(const [
+    (id: 'preview', text: _sample),
+    // Offsets here belong to no normalizer, so parserVersion is 0 for the
+    // same reason the paste screen uses it: this text came from a string
+    // literal, not from a parsed book.
+  ], parserVersion: 0);
+
+  late final PlaybackSession _session = PlaybackSession(
+    tokens: _text.tokens,
+    profile: widget.profile,
+  );
+
+  StreamSubscription<PlaybackUpdate>? _sub;
+
+  /// The session emits nothing until something happens to it, so the first
+  /// frame is built by hand rather than waited for.
+  late PlaybackUpdate _update = PlaybackUpdate(
+    state: PlaybackState.paused,
+    index: 0,
+    token: _text.tokens.first,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+
+    _sub = _session.updates.listen((update) {
+      if (!mounted) return;
+
+      // Loops rather than stopping on the last word. A preview that runs out
+      // reads as something having gone wrong, and the reader is comparing
+      // settings rather than finishing a text. Safe to re-enter the session
+      // from here because the update stream is an asynchronous broadcast.
+      if (update.state == PlaybackState.finished) {
+        _session.seekToIndex(0);
+        _session.play();
+        return;
+      }
+
+      setState(() => _update = update);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _Preview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // Presentation reaches the surface as a prop and applies on the next
+    // frame regardless. This is for pacing, which the session owns.
+    if (!identical(oldWidget.profile, widget.profile)) {
+      _session.profile = widget.profile;
+    }
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    _session.dispose();
+    super.dispose();
+  }
+
+  /// Mirrors the reading surface: a tap advances when the profile says the
+  /// reader advances, and starts or stops the stream otherwise. Previewing
+  /// elicited pacing means pressing the thing yourself, which is the whole
+  /// content of that setting.
+  void _onTap() {
+    if (_session.state == PlaybackState.awaitingAdvance) {
+      _session.advance();
+      return;
+    }
+    _toggle();
+  }
+
+  void _toggle() {
+    if (_session.state == PlaybackState.playing ||
+        _session.state == PlaybackState.awaitingAdvance) {
+      _session.pause();
+    } else {
+      _session.play();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final presentation = profile.presentation;
+    final presentation = widget.profile.presentation;
     final surface = surfaceArgbFor(presentation);
     final ink = inkArgbFor(presentation.polarity);
 
+    final running =
+        _session.state == PlaybackState.playing ||
+        _session.state == PlaybackState.awaitingAdvance;
+    final awaiting = _session.state == PlaybackState.awaitingAdvance;
+
     return Column(
       children: [
-        ClipRect(
-          child: Container(
-            height: 200,
-            width: double.infinity,
-            color: colorOf(surface),
-            child: Align(
-              alignment: Alignment(
-                presentation.anchorX * 2 - 1,
-                presentation.anchorY * 2 - 1,
-              ),
-              child: Text(
-                'reading',
-                softWrap: false,
-                overflow: TextOverflow.visible,
-                style: TextStyle(
-                  color: colorOf(ink),
-                  fontSize: presentation.fontSizePt,
-                  fontFamily: presentation.fontFamily,
-                  letterSpacing:
-                      presentation.letterSpacingEm * presentation.fontSizePt,
+        SizedBox(
+          height: 200,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: _onTap,
+                  behavior: HitTestBehavior.opaque,
+                  // Clipped because the surface honours the profile's type
+                  // size, and 96pt has no reason to fit a 200px box.
+                  child: ClipRect(
+                    child: RsvpView(
+                      update: _update,
+                      presentation: presentation,
+                    ),
+                  ),
                 ),
               ),
-            ),
+              Positioned(
+                right: 8,
+                bottom: 8,
+                child: IconButton.filledTonal(
+                  onPressed: _toggle,
+                  icon: Icon(running ? Icons.pause : Icons.play_arrow),
+                  tooltip: running ? 'Stop the preview' : 'Preview reading',
+                ),
+              ),
+              if (awaiting)
+                Positioned(
+                  left: 16,
+                  bottom: 16,
+                  child: Text(
+                    'Tap the preview to advance',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: colorOf(ink)),
+                  ),
+                ),
+            ],
           ),
         ),
         _ContrastReadout(foregroundArgb: ink, backgroundArgb: surface),
@@ -530,6 +661,11 @@ class _Preview extends StatelessWidget {
 ///
 /// A reader with light sensitivity may want a low ratio deliberately. The
 /// point is that nobody arrives at dark grey on black without being told.
+///
+/// Judges the ink against the surface, and nothing else. The fixation letter
+/// has its own fixed colour that is not measured here: it is a marker rather
+/// than text, and a reader who cannot make it out loses a hint rather than a
+/// word. Worth revisiting if it ever becomes configurable.
 class _ContrastReadout extends StatelessWidget {
   final int foregroundArgb;
   final int backgroundArgb;
