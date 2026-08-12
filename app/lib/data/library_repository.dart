@@ -152,7 +152,7 @@ class LibraryRepository {
     );
   }
 
-  /// Records where the reader stopped, and queues the change for sync.
+/// Records where the reader stopped, and queues the change for sync.
   ///
   /// Both writes happen in one transaction: a position that reaches disk
   /// without an outbox entry would never sync, and an outbox entry without
@@ -162,6 +162,10 @@ class LibraryRepository {
   /// book this is. The service cannot derive that itself — it has no copy of
   /// the book — and uses it to judge whether two devices have genuinely
   /// diverged or are a few words apart.
+  ///
+  /// Called often. ADR 0011 has the reader screen write every fifteen seconds
+  /// as well as at every deliberate stop, which is why the queued event is
+  /// coalesced below rather than appended to.
   Future<void> savePosition({
     required String bookId,
     required Locator locator,
@@ -184,6 +188,8 @@ class LibraryRepository {
             ),
           );
 
+      await _coalescePositionEvents(bookId);
+
       await _enqueue(
         entityType: 'position',
         entityId: bookId,
@@ -194,6 +200,38 @@ class LibraryRepository {
     });
   }
 
+  /// Drops queued position events for [bookId] that have never been sent.
+  ///
+  /// The outbox is an append-only log for profiles and a latest-value queue
+  /// for positions, and that difference is about what the events mean rather
+  /// than about volume. A create, a rename and a deletion each carry
+  /// something no other profile event carries. A position event carries only
+  /// "the reader is here now": the service resolves to the latest, every
+  /// other device wants only where the reader ended up, and an intermediate
+  /// position has no consumer anywhere in the system.
+  ///
+  /// With this, how often a position is written stops mattering to how much
+  /// reaches the service. The queue holds one event per book regardless.
+  ///
+  /// `attempts == 0` is the guard, not an optimisation. An event that has
+  /// already failed keeps its row and its counter, so a poison event can
+  /// still be parked rather than having its count reset every time the reader
+  /// moves — which is the failure ADR 0007 built parking to prevent.
+  ///
+  /// A push already in flight holds the rows it read, so deleting one here
+  /// means markSent finds nothing for that id and the replacement goes out on
+  /// the next drain.
+  ///
+  /// Assumes it is already inside a transaction.
+  Future<void> _coalescePositionEvents(String bookId) => (_db.delete(
+    _db.outboxEvents,
+  )..where(
+    (e) =>
+        e.entityType.equals('position') &
+        e.entityId.equals(bookId) &
+        e.attempts.equals(0),
+  )).go();
+  
   /// Writes a position that came from another device.
   ///
   /// Deliberately does not enqueue an outbox event. The service already has
