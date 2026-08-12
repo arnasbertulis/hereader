@@ -17,13 +17,24 @@ import 'package:rsvp_engine/rsvp_engine.dart';
 /// Not pure black on pure white: maximum contrast is uncomfortable over a
 /// long session for many readers, and the difference in ratio is negligible.
 ///
-/// These must agree with what `rsvp_view.dart` actually paints. If that file
-/// carries its own copies, move them here and import rather than keeping two
-/// sets that can drift apart.
+/// These are the only definition. `rsvp_view.dart` reads them through
+/// [inkArgbFor] and [surfaceArgbFor] rather than carrying its own copies,
+/// which it did until this file's own comment turned out to be describing an
+/// arrangement that had already come apart: the surface painted 0xFF080808
+/// against a readout measuring 0xFF101010, so the WCAG figure in settings
+/// judged a colour pair the app never drew.
 const int lightSurfaceArgb = 0xFFFAFAFA;
 const int darkInkArgb = 0xFF121212;
 const int darkSurfaceArgb = 0xFF101010;
 const int lightInkArgb = 0xFFF5F5F5;
+
+/// The fixation letter, when a profile asks for one.
+///
+/// One colour for both polarities. It is a marker rather than text, and its
+/// job is to be findable at a glance rather than to be read, so it does not
+/// follow the ink. Not included in the contrast readout for the same reason:
+/// see the note in `_ContrastReadout`.
+const int orpArgb = 0xFFD23B2E;
 
 /// The text colour implied by a polarity.
 ///

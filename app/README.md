@@ -42,7 +42,12 @@ lib/
    ├─ library_screen.dart      Import, list, open, remove
    ├─ library_book.dart        Import pipeline and the in-memory book model
    ├─ reader_screen.dart       Full-screen reading surface
-   ├─ rsvp_view.dart           Draws one token at the profile's anchor
+   ├─ rsvp_view.dart           Draws one token at the profile's anchor. The
+   │                            only definition of what reading looks like;
+   │                            the settings preview draws through it
+   ├─ settings_screen.dart     Profile list, presets separated from forks
+   ├─ profile_edit_screen.dart One profile, with a live preview
+   ├─ profile_presentation.dart ARGB helpers, polarity colours, WCAG ratio
    ├─ sign_in_screen.dart      Sign in or register, always skippable
    └─ paste_reader_screen.dart Read arbitrary pasted text
 ```
@@ -107,7 +112,3 @@ One quirk worth knowing: drift schedules a zero-duration timer when a query
 stream is cancelled. If the widget tree is left to teardown, that timer is
 never pumped and the framework reports a leaked timer. Tests that build the
 library screen dispose the tree explicitly and pump with a duration.
-
-## Not built yet
-
-Settings screen and chapter navigation.

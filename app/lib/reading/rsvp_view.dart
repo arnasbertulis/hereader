@@ -1,27 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
+import 'profile_presentation.dart';
+
 /// Draws a single token at the profile's anchor point.
 ///
 /// Owns no timing and no state. Give it the latest [PlaybackUpdate] and it
 /// renders that frame; during a punctuation gap the update carries a null
 /// token and the surface goes blank.
+///
+/// The one place that decides what reading looks like. The settings preview
+/// draws through this rather than painting its own sample, so a profile
+/// cannot look one way while it is being configured and another way while it
+/// is being read — and, more concretely, so the contrast readout judges the
+/// colours this widget puts on screen. It measured a different pair until
+/// the preview was folded in here.
 class RsvpView extends StatelessWidget {
   final PlaybackUpdate? update;
   final PresentationConfig presentation;
 
   const RsvpView({super.key, required this.update, required this.presentation});
-
-  Color get _foreground => presentation.polarity == Polarity.lightOnDark
-      ? const Color(0xFFF2F2F2)
-      : const Color(0xFF0D0D0D);
-
-  Color get _background {
-    if (presentation.tintArgb != null) return Color(presentation.tintArgb!);
-    return presentation.polarity == Polarity.lightOnDark
-        ? const Color(0xFF080808)
-        : const Color(0xFFFCFCFC);
-  }
 
   /// Index of the letter to highlight. Preference only: no study behind it.
   int _orpIndex(String word) {
@@ -41,7 +39,7 @@ class RsvpView extends StatelessWidget {
       fontSize: presentation.fontSizePt,
       letterSpacing: presentation.fontSizePt * presentation.letterSpacingEm,
       height: 1.2,
-      color: _foreground,
+      color: colorOf(inkArgbFor(presentation.polarity)),
       fontFeatures: const [FontFeature.tabularFigures()],
     );
 
@@ -63,7 +61,7 @@ class RsvpView extends StatelessWidget {
             TextSpan(text: token.text.substring(0, i)),
             TextSpan(
               text: token.text[i],
-              style: const TextStyle(color: Color(0xFFD23B2E)),
+              style: TextStyle(color: colorOf(orpArgb)),
             ),
             TextSpan(text: token.text.substring(i + 1)),
           ],
@@ -84,7 +82,7 @@ class RsvpView extends StatelessWidget {
     final transition = reduceMotion ? 0 : presentation.transitionMs;
 
     return ColoredBox(
-      color: _background,
+      color: colorOf(surfaceArgbFor(presentation)),
       child: Align(
         // Anchor fractions map onto Alignment's -1..1 range.
         alignment: Alignment(
