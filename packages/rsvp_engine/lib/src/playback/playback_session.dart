@@ -87,6 +87,27 @@ class PlaybackSession {
 
   ReadingProfile get profile => _profile;
 
+  /// The frame a renderer should be showing right now.
+  ///
+  /// [updates] carries changes, and a session that has not been touched has
+  /// not changed, so nothing on the stream describes the state it opens in.
+  /// A broadcast controller also has no listeners at construction time, so
+  /// emitting from the constructor would not help.
+  ///
+  /// Without this a screen renders blank until the reader does something.
+  /// That is what a book resumed from a stored position looked like on open:
+  /// an empty reading surface with the word sitting one tap away.
+  ///
+  /// Mirrors what [_emit] would produce, including blanking the anchor during
+  /// a punctuation gap, so seeding a renderer with this and then listening
+  /// cannot show two different things for one state.
+  PlaybackUpdate get current => PlaybackUpdate(
+    state: _state,
+    index: _index,
+    token: _inGap ? null : currentToken,
+    inGap: _inGap,
+  );
+
   /// Swap the profile mid-session. Takes effect from the next token, or
   /// immediately if the session is not currently timing one.
   set profile(ReadingProfile next) {
