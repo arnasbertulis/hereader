@@ -24,7 +24,11 @@ class ReadingResult {
 
 /// Full-screen reading surface for a book.
 ///
-/// Pops with a [ReadingResult] so the library can record and sync it.
+/// Decides when a position is worth writing and hands it to [onSave]. How it
+/// is written — one transaction covering the position row and the outbox — is
+/// the repository's business and not this screen's. The route used to pop
+/// with a [ReadingResult] instead; two paths writing one fact is how they
+/// come apart, and only one of them could ever fire.
 class ReaderScreen extends StatefulWidget {
   final LibraryBook book;
   final LibraryRepository repository;
@@ -32,11 +36,20 @@ class ReaderScreen extends StatefulWidget {
   /// Supplies a clock stamp. Pass `syncEngine.issueStamp`.
   final Future<String> Function() issueStamp;
 
+  /// Called whenever the reader's place is worth recording: on every
+  /// deliberate stop, every fifteen seconds of movement between them, when
+  /// the app is hidden, and when the book closes. See ADR 0011.
+  ///
+  /// Pasted text passes one that does nothing. It has no book row, so a
+  /// position against it would fail the foreign key.
+  final Future<void> Function(ReadingResult) onSave;
+
   const ReaderScreen({
     super.key,
     required this.book,
     required this.repository,
     required this.issueStamp,
+    required this.onSave,
   });
 
   @override
@@ -47,6 +60,22 @@ class _ReaderScreenState extends State<ReaderScreen> {
   late final PlaybackSession _session;
   StreamSubscription<PlaybackUpdate>? _sub;
   PlaybackUpdate? _update;
+
+  /// Fires while the reader is moving. Sixty words at 250 wpm, so a crash
+  /// costs a sentence or two.
+  static const _saveInterval = Duration(seconds: 15);
+
+  Timer? _saveTimer;
+  AppLifecycleListener? _lifecycle;
+
+  /// Watched for transitions into a stopped state, which is what makes a
+  /// pause, a chapter jump and a profile switch all save without each one
+  /// having to remember to.
+  late PlaybackState _lastState;
+
+  /// The index already on disk. A tick that finds it unchanged returns
+  /// without a transaction, so a paused reader writes nothing at all.
+  late int _lastSavedIndex;
 
   /// Held so the chapter button can open the drawer and the back gesture can
   /// ask whether it is open. The button sits inside the Scaffold's body, so
@@ -67,9 +96,35 @@ class _ReaderScreenState extends State<ReaderScreen> {
       profile: _profile,
       startIndex: widget.book.resumeIndex,
     );
+
+    _lastState = _session.state;
+
+    // Seeded from where the book opened, so glancing at a book and closing it
+    // writes nothing and issues no stamp. The exception is a position that
+    // did not resolve against this copy: the reader's place here is then
+    // genuinely new information rather than a repeat of what is stored.
+    _lastSavedIndex = widget.book.positionUnresolvable ? -1 : _session.index;
+
     _sub = _session.updates.listen((u) {
-      if (mounted) setState(() => _update = u);
+      if (!mounted) return;
+
+      final stopped =
+          u.state == PlaybackState.paused || u.state == PlaybackState.finished;
+
+      // On the transition rather than on every update, so the second emit
+      // seekToIndex produces does not queue a second write.
+      if (stopped && _lastState != u.state) unawaited(_save());
+      _lastState = u.state;
+
+      setState(() => _update = u);
     });
+
+    _saveTimer = Timer.periodic(_saveInterval, (_) => unawaited(_save()));
+
+    // Playback kept running behind a backgrounded app or a switched browser
+    // tab, carrying the reader past text they never saw. That was merely
+    // annoying until this screen started writing the place down.
+    _lifecycle = AppLifecycleListener(onHide: _onHide, onPause: _onHide);
 
     _restoreProfile();
   }
@@ -86,6 +141,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   @override
   void dispose() {
+    _saveTimer?.cancel();
+    _lifecycle?.dispose();
     _sub?.cancel();
     _session.dispose();
     super.dispose();
@@ -96,6 +153,32 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (locator == null) return null;
 
     return ReadingResult(locator: locator, tokenIndex: _session.index);
+  }
+
+  /// Writes the current place, if it is not the one already written.
+  ///
+  /// The index is claimed before the await so an overlapping tick cannot
+  /// issue the same write twice, and released again on failure so a later
+  /// attempt still tries. A failed position write is not reported: the reader
+  /// is mid-chapter, the outbox is intact, and there is nothing useful for
+  /// them to do about it.
+  Future<void> _save() async {
+    final result = _result;
+    if (result == null || result.tokenIndex == _lastSavedIndex) return;
+
+    final previous = _lastSavedIndex;
+    _lastSavedIndex = result.tokenIndex;
+
+    try {
+      await widget.onSave(result);
+    } catch (_) {
+      _lastSavedIndex = previous;
+    }
+  }
+
+  void _onHide() {
+    _session.pause();
+    unawaited(_save());
   }
 
   List<Chapter> get _chapters => widget.book.chapters;
@@ -168,7 +251,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       scaffold.closeDrawer();
       return;
     }
-    _close();
+    unawaited(_close());
   }
 
   /// Switches profile mid-book.
@@ -227,7 +310,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
-  void _close() => Navigator.of(context).pop(_result);
+  /// Stops, records the place, and leaves.
+  ///
+  /// The write is awaited before popping. The library syncs on return, and
+  /// draining an outbox that has not been written to yet would send the
+  /// previous position and call it current.
+  Future<void> _close() async {
+    final navigator = Navigator.of(context);
+
+    _session.pause();
+    await _save();
+
+    if (mounted) navigator.pop();
+  }
 
   /// Which chapter the reader is inside: the last one that starts at or
   /// before the current token. -1 before the first chapter begins, which is
@@ -317,7 +412,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       child: _Controls(
                         state: state,
                         progress: widget.book.text.progressAt(_session.index),
-                        onClose: _close,
+                        onClose: _closeOrDismiss,
                         onRewind: () => _session.rewind(5),
                         onToggle: _toggle,
                         onProfile: _pickProfile,

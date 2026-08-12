@@ -71,10 +71,14 @@ data that a `kParserVersion` bump would invalidate, so the parser stays the
 single source of truth and books are re-parsed each time they open. See
 [ADR 0004](../docs/adr/0004-store-book-files.md).
 
-`ReaderScreen` pops with a `Locator`, which the library writes to the database
-in the same transaction as an outbox entry. A position on disk without a
-queued event would never sync; an event without a position would sync a change
-this device does not have.
+`ReaderScreen` decides when the reader's place is worth recording — every stop,
+every fifteen seconds of movement between them, and when the app is hidden —
+and hands it to a callback. The library writes it to the database in the same
+transaction as an outbox entry: a position on disk without a queued event would
+never sync; an event without a position would sync a change this device does
+not have. That transaction also drops any queued position event for the same
+book that has never been sent, so the cadence above costs nothing on the wire.
+See [ADR 0011](../docs/adr/0011-position-save-cadence.md).
 
 ## Sync
 

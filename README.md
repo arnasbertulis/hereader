@@ -155,6 +155,10 @@ Recorded in [`docs/adr/0005-sync-event-log.md`](docs/adr/0005-sync-event-log.md)
 
 **Deployment stores no application secrets in git.** `.env` holds the JWT signing secret and database credentials on both a developer's machine and the server, populated separately in each place and never committed. Recorded in [`docs/adr/0006-deployment-infrastructure.md`](docs/adr/0006-deployment-infrastructure.md), including the hosting comparison and the security hardening applied.
 
+**The outbox is a log for profiles and a latest-value queue for positions.** A queued position event that has never been sent is replaced when a newer one for the same book arrives, so writing the reader's place every fifteen seconds costs the service nothing: the queue holds one event per book whatever the cadence. This is a statement about what the events mean, not an optimisation. A profile create, rename and deletion are each a distinct fact and dropping one loses it; a position event says only "the reader is here now", and no consumer anywhere wants an intermediate one. Events that have already failed are left alone, so a poison event can still be parked. Recorded in [`docs/adr/0011-position-save-cadence.md`](docs/adr/0011-position-save-cadence.md).
+
+**Playback stops when the app is hidden.** Backgrounding the app or switching browser tabs pauses the reader rather than letting the stream run on. Coming back to a paragraph that went past unseen was merely annoying until the app started writing the place down every fifteen seconds, at which point that paragraph is what gets saved.
+
 ---
 
 ## Repository layout
@@ -283,7 +287,7 @@ flutter build web --dart-define=HEREADER_API=https://204-168-240-12.sslip.io/api
 - The app's own tests run on the Dart VM only, and cannot run anywhere else: they build their database through drift's native backend, which reaches `dart:ffi`. The pure packages do run under `dart2js` in a browser, and the web build is compiled on every change, so a compile-time web break cannot merge. A *runtime* `dart2js` bug in app code still can. Both bugs of that kind so far — a 64-bit hash, and a random draw with a bit shift — would now be caught, but only because the arithmetic in question lives in the pure packages, which is a rule rather than a guarantee.
 - Every book open re-parses the file, which takes a few hundred milliseconds for a novel. Caching parsed blocks keyed by parser version is the fix if this becomes a problem.
 - Book bytes live in a database column. Fine for text, less comfortable for a heavily illustrated volume of tens of megabytes.
-- A reading position is saved when the reader closes a book, not periodically. Killing the app mid-chapter loses the place.
+- A reading position is written every fifteen seconds while the reader is moving, and at every stop — pausing, jumping to a chapter, switching profile, backgrounding the app, closing the book. A hard kill can still lose up to fifteen seconds, about sixty words at 250 wpm. A browser tab closed outright may lose more: switching tabs fires a hidden state and saves, but a killed tab gets no callback at all.
 - Front matter detection uses an explicit marker where a book provides one, and pattern matching otherwise. The pattern path is a guess, capped at fifteen percent of a book and never destructive, but it can still skip a dedication that looks like a rights line.
 - Tables, images, figures and MathML are dropped rather than flattened. Reading a table cell one word at a time loses what made it a table.
 - The tokenizer reads `Chapter 3.` as a sentence end. Telling list numbering apart from sentence terminators needs context the current design does not carry.

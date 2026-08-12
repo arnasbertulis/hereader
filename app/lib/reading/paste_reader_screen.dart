@@ -45,16 +45,18 @@ class _PasteReaderScreenState extends State<PasteReaderScreen> {
 
     if (text.isEmpty) return;
 
-    // The result is discarded on purpose. Pasted text has no book row to
-    // reference, so a position saved against it would fail the foreign key,
-    // and a position in text that exists only in this session is not worth
-    // syncing anyway.
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ReaderScreen(
           book: LibraryBook(id: 'pasted', title: 'Pasted text', text: text),
           repository: widget.repository,
           issueStamp: widget.issueStamp,
+          // Nothing to save to. Pasted text has no book row, so a position
+          // against it would fail the foreign key, and a place in text that
+          // exists only in this session is not worth syncing anyway. Stated
+          // here rather than by discarding a value the screen returned,
+          // which is how the same fact used to be expressed.
+          onSave: (_) async {},
         ),
       ),
     );
