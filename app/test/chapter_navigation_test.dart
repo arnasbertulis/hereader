@@ -139,6 +139,7 @@ void main() {
         book: book,
         repository: LibraryRepository(database),
         issueStamp: _stamp,
+        onSave: (_) async {},
       ),
     );
 
