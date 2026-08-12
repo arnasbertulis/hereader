@@ -63,8 +63,13 @@ dart run build_runner build --delete-conflicting-outputs
 The picker returns bytes, never a path, because the web has no file behind the
 dialog and the bytes are what gets stored anyway.
 
-Parsing and tokenizing run through `compute()` on a background isolate. Both
-are CPU-bound and take long enough to drop frames on the UI isolate.
+Parsing and tokenizing run through `compute()`, which puts them on a
+background isolate on Android and Windows and *does not* on web: there,
+`compute()` calls the function directly and wraps the result in a Future.
+Both passes are CPU-bound and take a few hundred milliseconds on a novel, so
+on the web build importing or opening a book freezes the page for that long.
+Left as it is for now — a real web worker needs its own compiled entry point,
+and chunking the parser with yields would reshape it for one target.
 
 The EPUB bytes are stored; the parsed text is not. Parsed output is derived
 data that a `kParserVersion` bump would invalidate, so the parser stays the
