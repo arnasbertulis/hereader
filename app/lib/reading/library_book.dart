@@ -107,8 +107,20 @@ class LibraryBook {
   double get progress => position == null ? 0 : text.progressAt(resumeIndex);
 }
 
-/// Parsed on a background isolate. Top-level because [compute] cannot send a
+/// Parses and tokenizes a book. Top-level because [compute] cannot send a
 /// closure.
+///
+/// Off the UI isolate on Android and Windows only. `compute()` does not spawn
+/// an isolate on Flutter web: it calls the function directly and wraps the
+/// result in a Future, so on the one target with no second thread to fall
+/// back to, this blocks the thread that draws frames. Both expensive passes
+/// are in here — `mainLoop` in `epub_parser` and `tokenize` — and together
+/// they are a few hundred milliseconds on a novel.
+///
+/// Not worked around. A real web worker needs its own compiled entry point,
+/// and chunking the walk with yields would reshape the parser for one target;
+/// which of those is worth doing depends on how much of the web stall is
+/// actually parsing, which has not been measured in a profile build.
 LibraryBook _parseBook(Uint8List bytes) {
   final book = const EpubParser().parse(bytes);
   final blocks = book.readingOrder;
@@ -204,7 +216,11 @@ String _idFor(EpubMetadata metadata) {
 class BookImporter {
   const BookImporter();
 
-  /// Parses [bytes] off the UI isolate.
+/// Parses [bytes] off the UI isolate on native targets, and on it on web.
+  ///
+  /// See the note on [_parseBook]: `compute()` runs inline in a browser. The
+  /// asymmetry is deliberate to leave visible rather than hidden behind a
+  /// wrapper that claims to offload everywhere.
   ///
   /// Throws [EpubException] with a message suitable for showing the reader.
   Future<LibraryBook> import(Uint8List bytes) async {
