@@ -122,6 +122,11 @@ class StoredProfiles extends Table {
 }
 
 /// App-wide settings that are not part of a profile.
+///
+/// Sync bookkeeping lives here too — `sync.last_seq`, `sync.last_hlc`,
+/// `sync.last_synced_at` — under the same read and write path as anything
+/// else the app remembers. It is one row per key rather than one wide row,
+/// so a new piece of bookkeeping costs an insert rather than a migration.
 class Preferences extends Table {
   TextColumn get key => text()();
   TextColumn get value => text()();
@@ -188,19 +193,6 @@ class PositionConflicts extends Table {
   Set<Column> get primaryKey => {serverId};
 }
 
-/// Sync bookkeeping. One row, enforced by a fixed primary key.
-class SyncState extends Table {
-  IntColumn get id => integer().withDefault(const Constant(0))();
-
-  /// Highest server sequence number this device has pulled.
-  IntColumn get lastSeq => integer().withDefault(const Constant(0))();
-
-  DateTimeColumn get lastSyncAt => dateTime().nullable()();
-
-  @override
-  Set<Column> get primaryKey => {id};
-}
-
 @DriftDatabase(
   tables: [
     Books,
@@ -210,7 +202,6 @@ class SyncState extends Table {
     Preferences,
     OutboxEvents,
     PositionConflicts,
-    SyncState,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -233,19 +224,17 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) async {
       await m.createAll();
-      await into(
-        syncState,
-      ).insert(SyncStateCompanion.insert(), mode: InsertMode.insertOrIgnore);
     },
     onUpgrade: (m, from, to) async {
-      // Each step adds a table and touches nothing existing, so an install
-      // several versions behind runs them in order and keeps its books.
+      // An install several versions behind runs these in order and keeps its
+      // books. Every step through 4 only added something; version 5 is the
+      // first that takes anything away.
       if (from < 2) {
         await m.createTable(positionConflicts);
       }
@@ -258,6 +247,18 @@ class AppDatabase extends _$AppDatabase {
         // event is a write rather than a delete.
         await m.addColumn(storedProfiles, storedProfiles.deleted);
         await m.addColumn(outboxEvents, outboxEvents.deleted);
+      }
+      if (from < 5) {
+        // sync_state held a single row carrying last_seq and last_sync_at,
+        // and nothing ever read or wrote it: SyncEngine keeps both under
+        // Preferences ('sync.last_seq', 'sync.last_synced_at') instead,
+        // where the same read and write path serves every other setting.
+        //
+        // Dropped rather than merely undeclared. Leaving it on disk would
+        // put a table in every existing install that no schema mentions and
+        // no code explains, which is a worse artefact than the dead table
+        // this removes. Nothing references it, so the drop cannot cascade.
+        await m.deleteTable('sync_state');
       }
     },
     beforeOpen: (details) async {

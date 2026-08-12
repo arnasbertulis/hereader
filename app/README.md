@@ -30,7 +30,8 @@ only adds syncing a position and preferences between devices.
 lib/
 ├─ data/
 │  ├─ database.dart            Drift schema: books, positions, pending
-│  │                            positions, profiles, outbox
+│  │                            positions, profiles, preferences, outbox,
+│  │                            conflicts
 │  └─ library_repository.dart  The only file that knows drift exists
 ├─ sync/
 │  ├─ sync_engine.dart         Drains the outbox, applies remote events
