@@ -25,18 +25,19 @@ enum SyncStatus {
   failed,
 }
 
+/// What the app shows about sync.
+///
+/// Carries no pending-event count. It used to declare one that `_emit` never
+/// set, so anything reading it saw an empty outbox with a hundred events
+/// queued — a wrong answer rather than a missing one. Showing how much is
+/// waiting is worth doing; it should be added once, on purpose, rather than
+/// inherited as a field that already reads zero.
 class SyncState {
   final SyncStatus status;
-  final int pendingEvents;
   final DateTime? lastSyncedAt;
   final String? message;
 
-  const SyncState({
-    required this.status,
-    this.pendingEvents = 0,
-    this.lastSyncedAt,
-    this.message,
-  });
+  const SyncState({required this.status, this.lastSyncedAt, this.message});
 }
 
 /// Drains the outbox and applies what other devices wrote.

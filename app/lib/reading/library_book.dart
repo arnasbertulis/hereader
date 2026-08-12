@@ -103,8 +103,6 @@ class LibraryBook {
     if (position == null) return contentStartIndex;
     return text.indexOf(position!) ?? contentStartIndex;
   }
-
-  double get progress => position == null ? 0 : text.progressAt(resumeIndex);
 }
 
 /// Parses and tokenizes a book. Top-level because [compute] cannot send a
@@ -216,7 +214,7 @@ String _idFor(EpubMetadata metadata) {
 class BookImporter {
   const BookImporter();
 
-/// Parses [bytes] off the UI isolate on native targets, and on it on web.
+  /// Parses [bytes] off the UI isolate on native targets, and on it on web.
   ///
   /// See the note on [_parseBook]: `compute()` runs inline in a browser. The
   /// asymmetry is deliberate to leave visible rather than hidden behind a
