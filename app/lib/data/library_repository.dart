@@ -741,15 +741,6 @@ class LibraryRepository {
         .get();
   }
 
-  /// How many events are waiting, for the app to show.
-  Stream<int> watchPendingCount() {
-    final count = _db.outboxEvents.id.count();
-
-    return (_db.selectOnly(
-      _db.outboxEvents,
-    )..addColumns([count])).watchSingle().map((row) => row.read(count) ?? 0);
-  }
-
   Future<void> markSent(Iterable<int> ids) =>
       (_db.delete(_db.outboxEvents)..where((e) => e.id.isIn(ids))).go();
 
