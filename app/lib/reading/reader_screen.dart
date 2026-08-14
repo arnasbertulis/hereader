@@ -59,7 +59,15 @@ class ReaderScreen extends StatefulWidget {
 class _ReaderScreenState extends State<ReaderScreen> {
   late final PlaybackSession _session;
   StreamSubscription<PlaybackUpdate>? _sub;
-  PlaybackUpdate? _update;
+
+  /// The frame the reading surface is drawing.
+  ///
+  /// A notifier rather than a field behind `setState`, because a word
+  /// replacing another is the only thing that changes between two frames of
+  /// ordinary playback. Rebuilding this State rebuilt the Scaffold, the
+  /// chapter panel, the controls and everything between them four to nine
+  /// times a second in order to move one word.
+  final _current = ValueNotifier<PlaybackUpdate?>(null);
 
   /// Fires while the reader is moving. Sixty words at 250 wpm, so a crash
   /// costs a sentence or two.
@@ -110,7 +118,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     // stored position drew an empty surface until the reader pressed
     // something. Caught by the front matter test, which asked what was on
     // screen at open — nothing else ever had.
-    _update = _session.current;
+    _current.value = _session.current;
 
     _lastState = _session.state;
 
@@ -128,23 +136,42 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _sub = _session.updates.listen((u) {
       if (!mounted) return;
 
+      // Unconditional. This is what the reading surface draws from, and it
+      // is the only thing that changes while a stream of words is playing.
+      _current.value = u;
+
       final stopped =
           u.state == PlaybackState.paused || u.state == PlaybackState.finished;
 
       // On the transition rather than on every update, so the second emit
       // seekToIndex produces does not queue a second write.
       if (stopped && _lastState != u.state) unawaited(_save());
+
+      // The rest of the tree reads the index in exactly two places — the
+      // progress bar and the chapter panel's highlight — and both sit behind
+      // `showControls`, which is false only while playing. The panel cannot
+      // be open then either, because opening it pauses. So one word
+      // replacing another mid-stream changes nothing that is on screen.
+      //
+      // The test is on both states rather than on the transition: a rewind
+      // while paused emits without changing state, and the progress bar has
+      // to follow it. Under elicited pacing every token emits
+      // `awaitingAdvance`, so every token rebuilds — which is right, since
+      // the controls are visible throughout that mode.
+      final playingThroughout =
+          u.state == PlaybackState.playing &&
+          _lastState == PlaybackState.playing;
+
+      // The offer is about the moment before reading starts. Once the
+      // reader has moved at all they have either taken it or answered it.
+      final offer =
+          _offerFrontMatter && u.index == widget.book.contentStartIndex;
+
       _lastState = u.state;
 
-      setState(() {
-        _update = u;
+      if (playingThroughout && offer == _offerFrontMatter) return;
 
-        // The offer is about the moment before reading starts. Once the
-        // reader has moved at all they have either taken it or answered it.
-        if (u.index != widget.book.contentStartIndex) {
-          _offerFrontMatter = false;
-        }
-      });
+      setState(() => _offerFrontMatter = offer);
     });
 
     _saveTimer = Timer.periodic(_saveInterval, (_) => unawaited(_save()));
@@ -173,6 +200,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _lifecycle?.dispose();
     _sub?.cancel();
     _session.dispose();
+    _current.dispose();
     super.dispose();
   }
 
@@ -436,9 +464,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 child: Stack(
                   children: [
                     Positioned.fill(
-                      child: RsvpView(
-                        update: _update,
-                        presentation: _profile.presentation,
+                      // The only subtree that rebuilds per word. Everything
+                      // else in this Stack is invariant while playing.
+                      child: ValueListenableBuilder<PlaybackUpdate?>(
+                        valueListenable: _current,
+                        builder: (_, update, _) => RsvpView(
+                          update: update,
+                          presentation: _profile.presentation,
+                        ),
                       ),
                     ),
                     if (state == PlaybackState.finished)
