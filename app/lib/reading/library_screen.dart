@@ -341,7 +341,14 @@ class _SyncButton extends StatelessWidget {
             child: SizedBox(
               height: 20,
               width: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                // Every other arm of this switch is a button with a
+                // tooltip. This one replaces the button while a sync runs,
+                // so without a label the control disappears from the
+                // semantics tree entirely rather than changing state.
+                semanticsLabel: 'Syncing',
+              ),
             ),
           ),
           SyncStatus.offline => IconButton(

@@ -414,6 +414,18 @@ class _ReaderScreenState extends State<ReaderScreen> {
     return found;
   }
 
+  /// What tapping the surface does right now, for a screen reader.
+  ///
+  /// The surface is the app's primary control — play, pause, and advance
+  /// under elicited pacing — and was a bare `GestureDetector` with no role
+  /// and no label, so TalkBack found nothing on it at all.
+  String get _surfaceLabel => switch (_session.state) {
+    PlaybackState.playing => 'Pause reading',
+    PlaybackState.awaitingAdvance => 'Next word',
+    PlaybackState.finished => 'End of book',
+    _ => 'Start reading',
+  };
+
   @override
   Widget build(BuildContext context) {
     final state = _session.state;
@@ -461,6 +473,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
               body: GestureDetector(
                 onTap: _onSurfaceTap,
                 behavior: HitTestBehavior.opaque,
+                // The semantics for this tap live on the reading surface
+                // below, which is what the gesture is actually for. Left on
+                // here, the detector reports a single tappable region
+                // covering the whole screen, controls included.
+                excludeFromSemantics: true,
                 child: Stack(
                   children: [
                     Positioned.fill(
@@ -468,9 +485,31 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       // else in this Stack is invariant while playing.
                       child: ValueListenableBuilder<PlaybackUpdate?>(
                         valueListenable: _current,
-                        builder: (_, update, _) => RsvpView(
-                          update: update,
-                          presentation: _profile.presentation,
+                        builder: (_, update, _) => Semantics(
+                          button: true,
+                          // Replaces the word's own semantics rather than
+                          // adding to them: the surface is one control, and
+                          // a word announced separately from the button
+                          // would make it two.
+                          excludeSemantics: true,
+                          label: _surfaceLabel,
+                          // Offered only while the stream is stopped. A
+                          // reader using RSVP is reading with their eyes,
+                          // and speech four times a second would fight that
+                          // rather than serve it — anyone who needs speech
+                          // instead of sight is better served by the whole
+                          // book read aloud than by one word at a time.
+                          // Paused, advanced or rewound, the word on screen
+                          // is one fact worth having on focus, and each of
+                          // those is something the reader just did.
+                          value: state == PlaybackState.playing
+                              ? ''
+                              : (update?.token?.text ?? ''),
+                          onTap: _onSurfaceTap,
+                          child: RsvpView(
+                            update: update,
+                            presentation: _profile.presentation,
+                          ),
                         ),
                       ),
                     ),
@@ -687,7 +726,11 @@ class _Controls extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            LinearProgressIndicator(value: progress),
+            LinearProgressIndicator(
+              value: progress,
+              semanticsLabel: 'Progress through the book',
+              semanticsValue: '${(progress * 100).round()}%',
+            ),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
