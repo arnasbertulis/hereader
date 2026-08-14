@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:epub_reader/epub_reader.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -10,7 +12,6 @@ import 'library_book.dart';
 import 'paste_reader_screen.dart';
 import 'reader_screen.dart';
 import 'settings_screen.dart';
-import 'dart:async';
 
 class LibraryScreen extends StatefulWidget {
   final LibraryRepository repository;
@@ -140,7 +141,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       // Positions are worth sending promptly: the reader may pick up
       // another device in a minute. Everything written while the book was
       // open is already queued, coalesced down to the latest.
-      widget.sync.syncNow();
+      unawaited(widget.sync.syncNow());
     } on EpubException catch (e) {
       _report(e.message);
     } finally {
@@ -188,7 +189,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       MaterialPageRoute(builder: (_) => SignInScreen(api: widget.api)),
     );
 
-    if (signedIn == true) widget.sync.syncNow();
+    if (signedIn == true) unawaited(widget.sync.syncNow());
   }
 
   void _openSettings() {
