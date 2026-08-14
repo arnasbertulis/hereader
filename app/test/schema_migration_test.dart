@@ -1,11 +1,10 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:drift/native.dart';
-import 'package:flutter_test/flutter_test.dart';
-
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
+import 'package:drift/native.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 /// Every table the database currently holds, as SQLite reports them.
 Future<List<String>> _tableNames(AppDatabase db) async {

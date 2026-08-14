@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
-import 'package:test/test.dart';
 import 'package:epub_reader/epub_reader.dart';
+import 'package:test/test.dart';
 
 /// Builds an EPUB in memory, so every case here is a string literal rather
 /// than a committed binary and runs identically on the VM and in a browser.

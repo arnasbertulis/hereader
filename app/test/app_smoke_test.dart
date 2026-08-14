@@ -1,12 +1,8 @@
 import 'dart:typed_data';
 
-import 'package:drift/native.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
-
-import 'package:app/main.dart';
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
+import 'package:app/main.dart';
 import 'package:app/reading/library_screen.dart';
 import 'package:app/reading/paste_reader_screen.dart';
 import 'package:app/reading/profile_edit_screen.dart';
@@ -14,6 +10,9 @@ import 'package:app/reading/settings_screen.dart';
 import 'package:app/sync/api_client.dart';
 import 'package:app/sync/auth_store.dart';
 import 'package:app/sync/sync_engine.dart';
+import 'package:drift/native.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 /// Everything the app needs, wired against an in-memory database.
 ///

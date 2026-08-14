@@ -1,9 +1,8 @@
+import 'package:app/data/database.dart';
+import 'package:app/data/library_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
-
-import 'package:app/data/database.dart';
-import 'package:app/data/library_repository.dart';
 
 String stamp(int millis, {int counter = 0, String device = 'test-device'}) =>
     HlcStamp(millis: millis, counter: counter, deviceId: device).toString();

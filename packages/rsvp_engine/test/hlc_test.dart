@@ -1,5 +1,5 @@
-import 'package:test/test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
+import 'package:test/test.dart';
 
 /// A clock the test drives, so nothing sleeps and time can move backwards.
 class _FakeClock {

@@ -1,5 +1,5 @@
-import 'package:test/test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
+import 'package:test/test.dart';
 
 const _paragraph = '''
 The reader sees one word at a time, anchored in a fixed position on the
