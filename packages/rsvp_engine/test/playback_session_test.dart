@@ -1,6 +1,6 @@
 import 'package:fake_async/fake_async.dart';
-import 'package:test/test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
+import 'package:test/test.dart';
 
 /// "one two three four five." at 300 wpm is 200ms per token.
 List<Token> _tokens() => const [

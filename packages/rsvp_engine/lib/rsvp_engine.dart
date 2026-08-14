@@ -1,10 +1,10 @@
-export 'src/token.dart';
-export 'src/tokenizer.dart';
 export 'src/pacing/pacing_config.dart';
 export 'src/pacing/pacing_decision.dart';
 export 'src/pacing/pacing_model.dart';
-export 'src/profile/profile.dart';
-export 'src/profile/presets.dart';
 export 'src/playback/playback_session.dart';
-export 'src/text/tokenized_text.dart';
+export 'src/profile/presets.dart';
+export 'src/profile/profile.dart';
 export 'src/sync/hlc.dart';
+export 'src/text/tokenized_text.dart';
+export 'src/token.dart';
+export 'src/tokenizer.dart';

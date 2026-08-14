@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import 'package:test/test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
+import 'package:test/test.dart';
 
 /// These classes define no `==`, so round trips compare their JSON. If value
 /// equality is added later, these can compare objects directly.

@@ -1,5 +1,5 @@
-import 'package:test/test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
+import 'package:test/test.dart';
 
 /// Coverage for [ReadingProfile.newId], moved here with the function itself.
 ///

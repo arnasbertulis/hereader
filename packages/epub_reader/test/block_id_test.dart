@@ -1,5 +1,5 @@
-import 'package:test/test.dart';
 import 'package:epub_reader/epub_reader.dart';
+import 'package:test/test.dart';
 
 /// Direct coverage of the block-id hash, on every platform the package
 /// compiles for.

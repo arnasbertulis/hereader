@@ -1,5 +1,5 @@
-import 'package:test/test.dart';
 import 'package:epub_reader/epub_reader.dart';
+import 'package:test/test.dart';
 
 Block _b(String text, {int index = 0}) => Block(
   id: Block.makeId('a.xhtml', index),

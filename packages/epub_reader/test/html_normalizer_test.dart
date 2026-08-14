@@ -1,5 +1,5 @@
-import 'package:test/test.dart';
 import 'package:epub_reader/epub_reader.dart';
+import 'package:test/test.dart';
 
 const _href = 'OEBPS/chapter1.xhtml';
 

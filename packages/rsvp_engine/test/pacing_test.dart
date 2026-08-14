@@ -1,7 +1,7 @@
 // packages/rsvp_engine/test/pacing_test.dart
 
-import 'package:test/test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
+import 'package:test/test.dart';
 
 /// Minimal token builder for pacing tests.
 /// Adjust to match your actual Token constructor.

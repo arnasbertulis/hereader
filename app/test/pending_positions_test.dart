@@ -1,9 +1,9 @@
 import 'dart:typed_data';
 
-import 'package:drift/native.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
+import 'package:drift/native.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 /// A stamp in the wire format: `{millis:013d}-{counter:05d}-{deviceId}`.

@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
-import 'package:test/test.dart';
 import 'package:epub_reader/epub_reader.dart';
+import 'package:test/test.dart';
 
 Uint8List _epub({
   String opfPath = 'OEBPS/content.opf',

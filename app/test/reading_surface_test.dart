@@ -1,13 +1,12 @@
-import 'package:drift/native.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:rsvp_engine/rsvp_engine.dart';
-
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
 import 'package:app/reading/profile_edit_screen.dart';
 import 'package:app/reading/profile_presentation.dart';
 import 'package:app/reading/rsvp_view.dart';
+import 'package:drift/native.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:rsvp_engine/rsvp_engine.dart';
 
 Future<String> _stamp() async => '0000000000001-00000-test';
 

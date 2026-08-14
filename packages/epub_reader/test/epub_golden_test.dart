@@ -3,8 +3,8 @@ library;
 
 import 'dart:io';
 
-import 'package:test/test.dart';
 import 'package:epub_reader/epub_reader.dart';
+import 'package:test/test.dart';
 
 /// Regression test against a real book.
 ///
