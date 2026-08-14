@@ -350,6 +350,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               onChanged: (v) => _updatePresentation(
                 (p) => p.copyWith(transitionMs: v.round()),
               ),
+              warning: fadeWarning(_draft),
             ),
 
             SwitchListTile(
@@ -714,6 +715,10 @@ class _SettingSlider extends StatelessWidget {
   final int? divisions;
   final bool enabled;
   final String? help;
+
+  /// Shown below [help], in the error colour. For a value that is legal and
+  /// saveable but produces something the reader probably did not intend.
+  final String? warning;
   final ValueChanged<double> onChanged;
 
   const _SettingSlider({
@@ -726,6 +731,7 @@ class _SettingSlider extends StatelessWidget {
     this.divisions,
     this.enabled = true,
     this.help,
+    this.warning,
   });
 
   @override
@@ -765,6 +771,29 @@ class _SettingSlider extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
               child: Text(help!, style: theme.textTheme.bodySmall),
+            ),
+          if (warning != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.warning_amber,
+                    size: 16,
+                    color: theme.colorScheme.error,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      warning!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.error,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
         ],
       ),

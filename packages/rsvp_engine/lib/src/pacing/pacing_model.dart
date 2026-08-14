@@ -27,6 +27,25 @@ Duration _pauseFor(Token t, PacingConfig c) => switch (t.pauseAfter) {
   PauseAfter.paragraph => c.paragraphPause,
 };
 
+/// How long a word of reference length is held, before any punctuation
+/// pause.
+///
+/// Null under elicited pacing, where a word has no duration at all and waits
+/// for the reader instead — the same distinction `PacingDecision` draws
+/// between `Hold` and `AwaitAdvance` (ADR 0003).
+///
+/// Length-scaled pacing gives the same answer as constant, because a word of
+/// exactly `referenceLetterCount` letters scales by one. It is therefore a
+/// typical hold rather than a guaranteed one: shorter words are held for
+/// less.
+///
+/// Public because the settings screen has to say when another setting
+/// outlasts a word, and that is duration arithmetic rather than English.
+Duration? referenceDisplay(PacingConfig config) =>
+    config.kind == PacingModelKind.elicited
+    ? null
+    : _clamp(_baseDuration(config), config);
+
 class ConstantPacing extends PacingModel {
   const ConstantPacing();
 

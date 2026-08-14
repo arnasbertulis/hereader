@@ -215,6 +215,28 @@ ThemeData readerChromeTheme(PresentationConfig presentation) {
 
 // -- descriptions -------------------------------------------------------
 
+/// Says when the crossfade outlasts the word it is fading.
+///
+/// `AnimatedSwitcher` begins a new transition each time the word changes, so
+/// a fade longer than a word's time on screen leaves the outgoing word still
+/// visible when the next arrives. At a fixed anchor that is two words drawn
+/// on top of each other, which is the one thing single-word presentation
+/// exists to avoid.
+///
+/// Nothing acts on this. Warned about rather than clamped, as the contrast
+/// readout is: the value is not unsafe and a reader may want it, but nobody
+/// should arrive at overlapping words without being told.
+String? fadeWarning(ReadingProfile profile) {
+  final display = referenceDisplay(profile.pacing);
+  if (display == null) return null;
+
+  final fade = profile.presentation.transitionMs;
+  if (fade <= display.inMilliseconds) return null;
+
+  return 'Longer than the ${display.inMilliseconds} ms each word is shown, '
+      'so words will overlap as one fades into the next.';
+}
+
 /// One line summarising how a profile reads, for a list row.
 String describeProfile(ReadingProfile profile) => switch (profile.pacing.kind) {
   PacingModelKind.elicited => 'You advance each word',
