@@ -6,6 +6,7 @@ import 'data/database.dart';
 import 'data/library_repository.dart';
 import 'reading/library_screen.dart';
 import 'reading/profile_presentation.dart';
+import 'startup_failure.dart';
 import 'sync/api_client.dart';
 import 'sync/auth_store.dart';
 import 'sync/position_conflict_sheet.dart';
@@ -24,30 +25,63 @@ const _apiBase = String.fromEnvironment(
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await _start();
+}
 
-  final database = AppDatabase();
-  final repository = LibraryRepository(database);
+/// Builds the object graph and hands it to `runApp`.
+///
+/// Everything is awaited before the first frame because every write needs a
+/// clock stamp and a resolved session; an app that started without them
+/// would save positions that cannot be ordered. That means a failure has to
+/// be caught here, since there is no widget tree yet to catch it — and on
+/// the web an uncaught one draws nothing at all.
+///
+/// Separated from `main` so the failure screen can call it again.
+Future<void> _start() async {
+  AppDatabase? database;
 
-  final auth = AuthStore();
-  final api = ApiClient(baseUrl: Uri.parse(_apiBase), auth: auth);
+  try {
+    database = AppDatabase();
+    final repository = LibraryRepository(database);
 
-  final sync = SyncEngine(
-    repository: repository,
-    api: api,
-    auth: auth,
-    database: database,
-  );
+    final auth = AuthStore();
+    final api = ApiClient(baseUrl: Uri.parse(_apiBase), auth: auth);
 
-  // A stored session and the clock both have to be ready before anything
-  // writes, because every write needs a stamp.
-  await auth.restore();
-  await sync.start();
+    final sync = SyncEngine(
+      repository: repository,
+      api: api,
+      auth: auth,
+      database: database,
+    );
 
-  // Not awaited: a slow or unreachable server must not delay the library
-  // appearing. Reading works whether or not this succeeds.
-  unawaited(sync.syncNow());
+    // A stored session and the clock both have to be ready before anything
+    // writes, because every write needs a stamp.
+    await auth.restore();
+    await sync.start();
 
-  runApp(HereaderApp(repository: repository, sync: sync, api: api));
+    // Not awaited: a slow or unreachable server must not delay the library
+    // appearing. Reading works whether or not this succeeds.
+    unawaited(sync.syncNow());
+
+    runApp(HereaderApp(repository: repository, sync: sync, api: api));
+  } catch (error, stack) {
+    // Shown and printed: the screen carries the message for the reader, the
+    // console carries the trace for whoever they send it to.
+    debugPrint('Hereader failed to start: $error\n$stack');
+
+    if (database != null) {
+      try {
+        await database.close();
+      } catch (_) {
+        // A close that fails during a failed start has nothing to add. The
+        // first error is the one worth reporting.
+      }
+    }
+
+    // Closed above, because a retry that opened a second connection would
+    // fail for its own reason and hide the original.
+    runApp(StartupFailure(error: error, onRetry: () => unawaited(_start())));
+  }
 }
 
 class HereaderApp extends StatelessWidget {
