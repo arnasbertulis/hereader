@@ -118,4 +118,30 @@ void main() {
     final d = const LengthScaledPacing().decide(_tok('—'), c) as Hold;
     expect(d.display, c.minDisplay);
   });
+
+  group('referenceDisplay', () {
+    test('is the constant hold at the configured rate', () {
+      expect(
+        referenceDisplay(const PacingConfig(baseWpm: 300)),
+        const Duration(milliseconds: 200),
+      );
+    });
+
+    test('agrees with length-scaled pacing at the reference length', () {
+      const c = PacingConfig(kind: PacingModelKind.lengthScaled, baseWpm: 300);
+      expect(referenceDisplay(c), const Duration(milliseconds: 200));
+    });
+
+    test('is null under elicited pacing, which has no duration', () {
+      expect(
+        referenceDisplay(const PacingConfig(kind: PacingModelKind.elicited)),
+        isNull,
+      );
+    });
+
+    test('respects the clamp', () {
+      const c = PacingConfig(baseWpm: 6000, minDisplay: Duration(seconds: 1));
+      expect(referenceDisplay(c), const Duration(seconds: 1));
+    });
+  });
 }
