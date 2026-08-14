@@ -296,36 +296,50 @@ class _ReaderScreenState extends State<ReaderScreen> {
   /// alone, so a profile made in settings or synced from another device can
   /// be chosen here. Making and editing profiles lives in settings; this is
   /// only a switcher.
+  /// Switches profile mid-book.
+  ///
+  /// Lists what is actually on this device rather than the built-in presets
+  /// alone, so a profile made in settings or synced from another device can
+  /// be chosen here. Making and editing profiles lives in settings; this is
+  /// only a switcher.
   Future<void> _pickProfile() async {
     _session.pause();
 
     final chosen = await showModalBottomSheet<ReadingProfile>(
       context: context,
-      builder: (_) => SafeArea(
-        child: StreamBuilder<List<ReadingProfile>>(
-          stream: widget.repository.watchProfiles(),
-          builder: (context, snapshot) {
-            final profiles = snapshot.data;
-            if (profiles == null) {
-              return const Padding(
-                padding: EdgeInsets.all(32),
-                child: Center(child: CircularProgressIndicator()),
-              );
-            }
+      // A modal route is inserted at the Navigator, not below the widget
+      // that opened it, so it does not inherit the reader's chrome theme
+      // from the tree. Applied again here, because this sheet slides up over
+      // the reading surface and a light one over a dark surface is the
+      // problem this whole change exists to fix.
+      builder: (_) => Theme(
+        data: readerChromeTheme(_profile.presentation),
+        child: SafeArea(
+          child: StreamBuilder<List<ReadingProfile>>(
+            stream: widget.repository.watchProfiles(),
+            builder: (context, snapshot) {
+              final profiles = snapshot.data;
+              if (profiles == null) {
+                return const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
 
-            return ListView(
-              shrinkWrap: true,
-              children: [
-                for (final profile in profiles)
-                  ListTile(
-                    title: Text(profile.name),
-                    subtitle: Text(describeProfile(profile)),
-                    selected: profile.id == _profile.id,
-                    onTap: () => Navigator.of(context).pop(profile),
-                  ),
-              ],
-            );
-          },
+              return ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final profile in profiles)
+                    ListTile(
+                      title: Text(profile.name),
+                      subtitle: Text(describeProfile(profile)),
+                      selected: profile.id == _profile.id,
+                      onTap: () => Navigator.of(context).pop(profile),
+                    ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
@@ -394,80 +408,86 @@ class _ReaderScreenState extends State<ReaderScreen> {
         },
         child: Focus(
           autofocus: true,
-          child: Scaffold(
-            key: _scaffoldKey,
-            // No drawer at all when the book declares no chapters, so the
-            // edge of the screen does nothing rather than opening an empty
-            // panel.
-            drawer: _chapters.isEmpty
-                ? null
-                : _ChapterPanel(
-                    bookTitle: widget.book.title,
-                    chapters: _chapters,
-                    currentIndex: _currentChapter,
-                    onSelected: _goToChapter,
-                  ),
-            // The whole surface is a tap target, and an edge drag is easy to
-            // start by accident on a phone. Opening a panel mid-sentence
-            // that way would be the app interrupting the reader.
-            drawerEnableOpenDragGesture: false,
-            body: GestureDetector(
-              onTap: _onSurfaceTap,
-              behavior: HitTestBehavior.opaque,
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: RsvpView(
-                      update: _update,
-                      presentation: _profile.presentation,
+          // Everything below is drawn on the reading surface, so it follows
+          // the profile rather than the platform. Above the Scaffold so the
+          // chapter panel is included: it opens over the same surface.
+          child: Theme(
+            data: readerChromeTheme(_profile.presentation),
+            child: Scaffold(
+              key: _scaffoldKey,
+              // No drawer at all when the book declares no chapters, so the
+              // edge of the screen does nothing rather than opening an empty
+              // panel.
+              drawer: _chapters.isEmpty
+                  ? null
+                  : _ChapterPanel(
+                      bookTitle: widget.book.title,
+                      chapters: _chapters,
+                      currentIndex: _currentChapter,
+                      onSelected: _goToChapter,
                     ),
-                  ),
-                  if (state == PlaybackState.finished)
-                    const Center(child: Text('End of book')),
-                  if (showControls && _chapters.isNotEmpty)
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      child: SafeArea(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: IconButton.filledTonal(
-                            onPressed: _openChapters,
-                            iconSize: 32,
-                            icon: const Icon(Icons.menu_book_outlined),
-                            tooltip: 'Chapters',
+              // The whole surface is a tap target, and an edge drag is easy
+              // to start by accident on a phone. Opening a panel mid-sentence
+              // that way would be the app interrupting the reader.
+              drawerEnableOpenDragGesture: false,
+              body: GestureDetector(
+                onTap: _onSurfaceTap,
+                behavior: HitTestBehavior.opaque,
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: RsvpView(
+                        update: _update,
+                        presentation: _profile.presentation,
+                      ),
+                    ),
+                    if (state == PlaybackState.finished)
+                      const Center(child: Text('End of book')),
+                    if (showControls && _chapters.isNotEmpty)
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        child: SafeArea(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: IconButton.filledTonal(
+                              onPressed: _openChapters,
+                              iconSize: 32,
+                              icon: const Icon(Icons.menu_book_outlined),
+                              tooltip: 'Chapters',
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  if (showControls)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (_offerFrontMatter)
-                            _FrontMatterOffer(
-                              onAccept: _goToFrontMatter,
-                              onDismiss: () =>
-                                  setState(() => _offerFrontMatter = false),
+                    if (showControls)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_offerFrontMatter)
+                              _FrontMatterOffer(
+                                onAccept: _goToFrontMatter,
+                                onDismiss: () =>
+                                    setState(() => _offerFrontMatter = false),
+                              ),
+                            _Controls(
+                              state: state,
+                              progress: widget.book.text.progressAt(
+                                _session.index,
+                              ),
+                              onClose: _closeOrDismiss,
+                              onRewind: () => _session.rewind(5),
+                              onToggle: _toggle,
+                              onProfile: _pickProfile,
                             ),
-                          _Controls(
-                            state: state,
-                            progress: widget.book.text.progressAt(
-                              _session.index,
-                            ),
-                            onClose: _closeOrDismiss,
-                            onRewind: () => _session.rewind(5),
-                            onToggle: _toggle,
-                            onProfile: _pickProfile,
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

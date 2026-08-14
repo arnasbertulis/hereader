@@ -3,12 +3,13 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
-/// Turning a [ReadingProfile] into things a screen can show.
+/// Turning a [ReadingProfile] into things a screen can show, and the single
+/// home for colour in this app.
 ///
 /// The engine stores colours as ARGB integers so it stays free of Flutter.
 /// Everything that maps those to real colours, judges whether the result is
-/// legible, or writes a profile out in words belongs here rather than in a
-/// widget.
+/// legible, builds a theme from them, or writes a profile out in words
+/// belongs here rather than in a widget.
 
 // -- polarity defaults --------------------------------------------------
 
@@ -142,6 +143,75 @@ String contrastAdvice(ContrastRating rating) => switch (rating) {
   ContrastRating.low => 'Hard to read for many people with low vision.',
   ContrastRating.veryLow => 'The text may be effectively invisible.',
 };
+
+// -- chrome -------------------------------------------------------------
+
+/// The seed every Material colour in this app derives from.
+///
+/// Material's own baseline, kept deliberately. This change is about making
+/// chrome follow the reader's polarity; moving the hue at the same time
+/// would make the two indistinguishable in a screenshot. Choosing a real
+/// seed is the UI pass's job.
+const hereaderSeed = Color(0xFF6750A4);
+
+/// Ordinary app chrome — library, settings, sign-in — which follows the
+/// platform rather than any reading profile.
+///
+/// None of these screens sits on a reading surface, so there is nothing for
+/// them to match and the platform's own preference is the right signal.
+ThemeData appTheme(Brightness brightness) => ThemeData(
+  useMaterial3: true,
+  colorScheme: ColorScheme.fromSeed(
+    seedColor: hereaderSeed,
+    brightness: brightness,
+  ),
+);
+
+/// Whether controls drawn over this profile's reading surface should be
+/// light or dark.
+///
+/// Read from the surface's own luminance rather than from [Polarity].
+/// Polarity decides the ink, and a reader is free to tint the background
+/// until the two barely differ — [rateContrast] says so and deliberately
+/// does not block it. Chrome is a different question. It sits on the
+/// surface, it is not configurable, and its only job is to stay legible
+/// against whatever is behind it, so a dark tint under `darkOnLight` gets
+/// dark chrome even though the ink stays dark too.
+///
+/// 0.179 is where a colour's contrast against black equals its contrast
+/// against white under the WCAG formula, which is exactly the point at
+/// which the better choice of overlay flips.
+Brightness chromeBrightnessFor(PresentationConfig presentation) =>
+    relativeLuminance(surfaceArgbFor(presentation)) > 0.179
+    ? Brightness.light
+    : Brightness.dark;
+
+/// A theme for the controls the reader screen stacks on its surface.
+///
+/// The chapter button, the playback controls, the progress bar and the front
+/// matter offer are drawn directly on top of the text. Without this they take
+/// the app's theme, so both central field loss presets — `lightOnDark` — put
+/// a light panel and four light tonal buttons over a near-black surface,
+/// which is the opposite of what choosing reverse polarity asks for.
+///
+/// `scaffoldBackgroundColor` matches the profile so nothing shows through at
+/// the edges during a route transition. `colorScheme.surface` is left as the
+/// seed produced it: forcing the profile's tint in would carry `onSurface`
+/// along with it, and a saturated background would then render the panel's
+/// own text unreadable at exactly the tints a reader is most likely to pick
+/// deliberately.
+ThemeData readerChromeTheme(PresentationConfig presentation) {
+  final brightness = chromeBrightnessFor(presentation);
+
+  return ThemeData(
+    useMaterial3: true,
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: hereaderSeed,
+      brightness: brightness,
+    ),
+    scaffoldBackgroundColor: colorOf(surfaceArgbFor(presentation)),
+  );
+}
 
 // -- descriptions -------------------------------------------------------
 

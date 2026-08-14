@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'data/database.dart';
 import 'data/library_repository.dart';
 import 'reading/library_screen.dart';
+import 'reading/profile_presentation.dart';
 import 'sync/api_client.dart';
 import 'sync/auth_store.dart';
 import 'sync/position_conflict_sheet.dart';
@@ -69,7 +70,14 @@ class HereaderApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Hereader',
-      theme: ThemeData(useMaterial3: true),
+      // The library, settings and sign-in follow the platform. The reading
+      // surface does not: which polarity the text is drawn in is a per-profile
+      // setting, so the reader screen builds its own chrome theme from the
+      // active profile rather than inheriting either of these. See
+      // `readerChromeTheme`.
+      theme: appTheme(Brightness.light),
+      darkTheme: appTheme(Brightness.dark),
+      themeMode: ThemeMode.system,
       navigatorKey: _navigatorKey,
       // Above the app rather than inside a screen, so a divergence arriving
       // during a periodic sync is asked about wherever the reader is.
