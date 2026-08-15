@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
 import 'package:app/main.dart';
@@ -11,9 +9,11 @@ import 'package:app/sync/api_client.dart';
 import 'package:app/sync/auth_store.dart';
 import 'package:app/sync/sync_engine.dart';
 import 'package:app/theme/app_colors.dart';
+import 'package:app/theme/app_tokens.dart';
 import 'package:app/theme/appearance.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Everything the app needs, wired against an in-memory database.
@@ -292,25 +292,119 @@ void main() {
     await tester.pumpWidget(harness.app);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.tune));
+    // A pushed route, not a tab. What this covers is a GlobalKey identity
+    // change taking the Navigator's stack with it, and a tab never goes on
+    // that stack. Settings used to be pushed and is one of the tabs now, so
+    // the paste screen stands in.
+    await tester.tap(find.byIcon(Icons.content_paste));
     await tester.pumpAndSettle();
 
-    final settings = find.byType(SettingsScreen);
-    expect(settings, findsOneWidget);
+    final pasted = find.byType(PasteReaderScreen);
+    expect(pasted, findsOneWidget);
 
-    final before = _primaryOf(tester, settings);
+    final before = _primaryOf(tester, pasted);
 
     await harness.appearance.setAccent(AppAccents.rust.color);
     await tester.pumpAndSettle();
 
-    expect(_primaryOf(tester, settings), isNot(before));
+    expect(_primaryOf(tester, pasted), isNot(before));
 
     // HereaderApp held its navigator key as a field of a StatelessWidget,
     // which was safe only while nothing rebuilt it. An appearance change
     // rebuilds it now, and a fresh GlobalKey would hand the Navigator a new
     // identity and take every pushed route down with it — including a book
     // the reader is in the middle of.
-    expect(settings, findsOneWidget);
+    expect(pasted, findsOneWidget);
+
+    await _disposeTree(tester);
+  });
+
+  testWidgets('a tab change swaps the screen and keeps the other alive', (
+    tester,
+  ) async {
+    final harness = _Harness.create();
+    addTearDown(harness.close);
+
+    await tester.pumpWidget(harness.app);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.tune_outlined));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SettingsScreen), findsOneWidget);
+
+    // Offstage rather than disposed. The library holds a drift subscription
+    // and a scroll offset that a rebuilt subtree would lose, which is the
+    // whole reason the tabs sit in a stack.
+    expect(find.byType(LibraryScreen), findsNothing);
+    expect(find.byType(LibraryScreen, skipOffstage: false), findsOneWidget);
+
+    await _disposeTree(tester);
+  });
+
+  testWidgets('control and a digit reach a tab', (tester) async {
+    final harness = _Harness.create();
+    addTearDown(harness.close);
+
+    await tester.pumpWidget(harness.app);
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SettingsScreen), findsOneWidget);
+
+    await _disposeTree(tester);
+  });
+
+  testWidgets('a wide window navigates with the rail', (tester) async {
+    final harness = _Harness.create();
+    addTearDown(harness.close);
+    addTearDown(tester.view.reset);
+
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(400, 800);
+
+    await tester.pumpWidget(harness.app);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byType(NavigationRail), findsNothing);
+
+    tester.view.physicalSize = const Size(900, 800);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(NavigationRail), findsOneWidget);
+    expect(find.byType(NavigationBar), findsNothing);
+
+    await _disposeTree(tester);
+  });
+
+  testWidgets('the navigation bar grows with the reader text size', (
+    tester,
+  ) async {
+    final harness = _Harness.create();
+    addTearDown(harness.close);
+    addTearDown(tester.view.reset);
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(400, 800);
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+
+    await tester.pumpWidget(harness.app);
+    await tester.pumpAndSettle();
+
+    // The height is a base plus whatever the scaled label needs. Nothing
+    // clamps the scaler, so the bar has to absorb it rather than clip, and
+    // an overflow here is an exception rather than a quiet stripe.
+    expect(
+      tester.getSize(find.byType(NavigationBar)).height,
+      greaterThan(AppNav.barHeight),
+    );
+    expect(tester.takeException(), isNull);
 
     await _disposeTree(tester);
   });
