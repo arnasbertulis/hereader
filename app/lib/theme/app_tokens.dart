@@ -40,6 +40,18 @@ abstract final class AppMotion {
   static const Duration route = Duration(milliseconds: 180);
 }
 
+/// Navigation sizing.
+///
+/// The breakpoint is where a bar along the bottom stops being the right
+/// shape: at 640dp a rail costs horizontal room the layout has and buys back
+/// the vertical room a bar takes from a list. [barHeight] is shorter than
+/// Material's 80dp default and is a base rather than a fixed height, since
+/// nothing here caps the reader's text size.
+abstract final class AppNav {
+  static const double railBreakpoint = 640;
+  static const double barHeight = 64;
+}
+
 /// The one line weight surfaces are separated by, in place of elevation or
 /// shadow. See section 2 of the UI brief: shadows are also a performance
 /// cost, since blur rasterises on the main thread until COOP/COEP and
