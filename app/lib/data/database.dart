@@ -50,6 +50,20 @@ class ReadingPositions extends Table {
   IntColumn get charOffset => integer()();
   IntColumn get parserVersion => integer()();
 
+  /// How many tokens into the book this position is.
+  ///
+  /// A hint, not part of the locator. The tokenizer decides what counts as a
+  /// token, so this number moves when kParserVersion moves while the locator
+  /// stays valid, and nothing may navigate by it. The service compares it to
+  /// judge whether two devices have genuinely diverged, and a progress
+  /// readout can use it without re-parsing the book.
+  ///
+  /// Nullable and without a default, because null and zero say different
+  /// things: null is no recorded hint, which is every row written before this
+  /// column and every event from a client that predates it, while zero is the
+  /// first word of the book.
+  IntColumn get tokenIndex => integer().nullable()();
+
   /// Hybrid logical clock stamp from the device that wrote this. Orders
   /// writes across devices without trusting wall clocks.
   TextColumn get hlc => text()();
@@ -81,6 +95,11 @@ class PendingPositions extends Table {
   TextColumn get blockId => text()();
   IntColumn get charOffset => integer()();
   IntColumn get parserVersion => integer()();
+
+  /// Carried through the wait, so a book that arrives later arrives with the
+  /// reader's progress rather than with a place and no sense of how far in
+  /// it is.
+  IntColumn get tokenIndex => integer().nullable()();
 
   TextColumn get hlc => text()();
   DateTimeColumn get updatedAt => dateTime()();
@@ -224,7 +243,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -259,6 +278,13 @@ class AppDatabase extends _$AppDatabase {
         // no code explains, which is a worse artefact than the dead table
         // this removes. Nothing references it, so the drop cannot cascade.
         await m.deleteTable('sync_state');
+      }
+      if (from < 6) {
+        // No default and no backfill. Every row already on disk was written
+        // without a hint, and null records that; a default of zero would put
+        // every existing reader at the first word of their book.
+        await m.addColumn(readingPositions, readingPositions.tokenIndex);
+        await m.addColumn(pendingPositions, pendingPositions.tokenIndex);
       }
     },
     beforeOpen: (details) async {
