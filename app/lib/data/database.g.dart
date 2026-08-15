@@ -520,6 +520,17 @@ class $ReadingPositionsTable extends ReadingPositions
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _tokenIndexMeta = const VerificationMeta(
+    'tokenIndex',
+  );
+  @override
+  late final GeneratedColumn<int> tokenIndex = GeneratedColumn<int>(
+    'token_index',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _hlcMeta = const VerificationMeta('hlc');
   @override
   late final GeneratedColumn<String> hlc = GeneratedColumn<String>(
@@ -546,6 +557,7 @@ class $ReadingPositionsTable extends ReadingPositions
     blockId,
     charOffset,
     parserVersion,
+    tokenIndex,
     hlc,
     updatedAt,
   ];
@@ -596,6 +608,12 @@ class $ReadingPositionsTable extends ReadingPositions
     } else if (isInserting) {
       context.missing(_parserVersionMeta);
     }
+    if (data.containsKey('token_index')) {
+      context.handle(
+        _tokenIndexMeta,
+        tokenIndex.isAcceptableOrUnknown(data['token_index']!, _tokenIndexMeta),
+      );
+    }
     if (data.containsKey('hlc')) {
       context.handle(
         _hlcMeta,
@@ -637,6 +655,10 @@ class $ReadingPositionsTable extends ReadingPositions
         DriftSqlType.int,
         data['${effectivePrefix}parser_version'],
       )!,
+      tokenIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}token_index'],
+      ),
       hlc: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}hlc'],
@@ -662,6 +684,20 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
   final int charOffset;
   final int parserVersion;
 
+  /// How many tokens into the book this position is.
+  ///
+  /// A hint, not part of the locator. The tokenizer decides what counts as a
+  /// token, so this number moves when kParserVersion moves while the locator
+  /// stays valid, and nothing may navigate by it. The service compares it to
+  /// judge whether two devices have genuinely diverged, and a progress
+  /// readout can use it without re-parsing the book.
+  ///
+  /// Nullable and without a default, because null and zero say different
+  /// things: null is no recorded hint, which is every row written before this
+  /// column and every event from a client that predates it, while zero is the
+  /// first word of the book.
+  final int? tokenIndex;
+
   /// Hybrid logical clock stamp from the device that wrote this. Orders
   /// writes across devices without trusting wall clocks.
   final String hlc;
@@ -671,6 +707,7 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
     required this.blockId,
     required this.charOffset,
     required this.parserVersion,
+    this.tokenIndex,
     required this.hlc,
     required this.updatedAt,
   });
@@ -681,6 +718,9 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
     map['block_id'] = Variable<String>(blockId);
     map['char_offset'] = Variable<int>(charOffset);
     map['parser_version'] = Variable<int>(parserVersion);
+    if (!nullToAbsent || tokenIndex != null) {
+      map['token_index'] = Variable<int>(tokenIndex);
+    }
     map['hlc'] = Variable<String>(hlc);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -692,6 +732,9 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
       blockId: Value(blockId),
       charOffset: Value(charOffset),
       parserVersion: Value(parserVersion),
+      tokenIndex: tokenIndex == null && nullToAbsent
+          ? const Value.absent()
+          : Value(tokenIndex),
       hlc: Value(hlc),
       updatedAt: Value(updatedAt),
     );
@@ -707,6 +750,7 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
       blockId: serializer.fromJson<String>(json['blockId']),
       charOffset: serializer.fromJson<int>(json['charOffset']),
       parserVersion: serializer.fromJson<int>(json['parserVersion']),
+      tokenIndex: serializer.fromJson<int?>(json['tokenIndex']),
       hlc: serializer.fromJson<String>(json['hlc']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -719,6 +763,7 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
       'blockId': serializer.toJson<String>(blockId),
       'charOffset': serializer.toJson<int>(charOffset),
       'parserVersion': serializer.toJson<int>(parserVersion),
+      'tokenIndex': serializer.toJson<int?>(tokenIndex),
       'hlc': serializer.toJson<String>(hlc),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -729,6 +774,7 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
     String? blockId,
     int? charOffset,
     int? parserVersion,
+    Value<int?> tokenIndex = const Value.absent(),
     String? hlc,
     DateTime? updatedAt,
   }) => ReadingPosition(
@@ -736,6 +782,7 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
     blockId: blockId ?? this.blockId,
     charOffset: charOffset ?? this.charOffset,
     parserVersion: parserVersion ?? this.parserVersion,
+    tokenIndex: tokenIndex.present ? tokenIndex.value : this.tokenIndex,
     hlc: hlc ?? this.hlc,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -749,6 +796,9 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
       parserVersion: data.parserVersion.present
           ? data.parserVersion.value
           : this.parserVersion,
+      tokenIndex: data.tokenIndex.present
+          ? data.tokenIndex.value
+          : this.tokenIndex,
       hlc: data.hlc.present ? data.hlc.value : this.hlc,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -761,6 +811,7 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
           ..write('blockId: $blockId, ')
           ..write('charOffset: $charOffset, ')
           ..write('parserVersion: $parserVersion, ')
+          ..write('tokenIndex: $tokenIndex, ')
           ..write('hlc: $hlc, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -768,8 +819,15 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(bookId, blockId, charOffset, parserVersion, hlc, updatedAt);
+  int get hashCode => Object.hash(
+    bookId,
+    blockId,
+    charOffset,
+    parserVersion,
+    tokenIndex,
+    hlc,
+    updatedAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -778,6 +836,7 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
           other.blockId == this.blockId &&
           other.charOffset == this.charOffset &&
           other.parserVersion == this.parserVersion &&
+          other.tokenIndex == this.tokenIndex &&
           other.hlc == this.hlc &&
           other.updatedAt == this.updatedAt);
 }
@@ -787,6 +846,7 @@ class ReadingPositionsCompanion extends UpdateCompanion<ReadingPosition> {
   final Value<String> blockId;
   final Value<int> charOffset;
   final Value<int> parserVersion;
+  final Value<int?> tokenIndex;
   final Value<String> hlc;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -795,6 +855,7 @@ class ReadingPositionsCompanion extends UpdateCompanion<ReadingPosition> {
     this.blockId = const Value.absent(),
     this.charOffset = const Value.absent(),
     this.parserVersion = const Value.absent(),
+    this.tokenIndex = const Value.absent(),
     this.hlc = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -804,6 +865,7 @@ class ReadingPositionsCompanion extends UpdateCompanion<ReadingPosition> {
     required String blockId,
     required int charOffset,
     required int parserVersion,
+    this.tokenIndex = const Value.absent(),
     required String hlc,
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -818,6 +880,7 @@ class ReadingPositionsCompanion extends UpdateCompanion<ReadingPosition> {
     Expression<String>? blockId,
     Expression<int>? charOffset,
     Expression<int>? parserVersion,
+    Expression<int>? tokenIndex,
     Expression<String>? hlc,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -827,6 +890,7 @@ class ReadingPositionsCompanion extends UpdateCompanion<ReadingPosition> {
       if (blockId != null) 'block_id': blockId,
       if (charOffset != null) 'char_offset': charOffset,
       if (parserVersion != null) 'parser_version': parserVersion,
+      if (tokenIndex != null) 'token_index': tokenIndex,
       if (hlc != null) 'hlc': hlc,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -838,6 +902,7 @@ class ReadingPositionsCompanion extends UpdateCompanion<ReadingPosition> {
     Value<String>? blockId,
     Value<int>? charOffset,
     Value<int>? parserVersion,
+    Value<int?>? tokenIndex,
     Value<String>? hlc,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -847,6 +912,7 @@ class ReadingPositionsCompanion extends UpdateCompanion<ReadingPosition> {
       blockId: blockId ?? this.blockId,
       charOffset: charOffset ?? this.charOffset,
       parserVersion: parserVersion ?? this.parserVersion,
+      tokenIndex: tokenIndex ?? this.tokenIndex,
       hlc: hlc ?? this.hlc,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -868,6 +934,9 @@ class ReadingPositionsCompanion extends UpdateCompanion<ReadingPosition> {
     if (parserVersion.present) {
       map['parser_version'] = Variable<int>(parserVersion.value);
     }
+    if (tokenIndex.present) {
+      map['token_index'] = Variable<int>(tokenIndex.value);
+    }
     if (hlc.present) {
       map['hlc'] = Variable<String>(hlc.value);
     }
@@ -887,6 +956,7 @@ class ReadingPositionsCompanion extends UpdateCompanion<ReadingPosition> {
           ..write('blockId: $blockId, ')
           ..write('charOffset: $charOffset, ')
           ..write('parserVersion: $parserVersion, ')
+          ..write('tokenIndex: $tokenIndex, ')
           ..write('hlc: $hlc, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -943,6 +1013,17 @@ class $PendingPositionsTable extends PendingPositions
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _tokenIndexMeta = const VerificationMeta(
+    'tokenIndex',
+  );
+  @override
+  late final GeneratedColumn<int> tokenIndex = GeneratedColumn<int>(
+    'token_index',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _hlcMeta = const VerificationMeta('hlc');
   @override
   late final GeneratedColumn<String> hlc = GeneratedColumn<String>(
@@ -969,6 +1050,7 @@ class $PendingPositionsTable extends PendingPositions
     blockId,
     charOffset,
     parserVersion,
+    tokenIndex,
     hlc,
     updatedAt,
   ];
@@ -1019,6 +1101,12 @@ class $PendingPositionsTable extends PendingPositions
     } else if (isInserting) {
       context.missing(_parserVersionMeta);
     }
+    if (data.containsKey('token_index')) {
+      context.handle(
+        _tokenIndexMeta,
+        tokenIndex.isAcceptableOrUnknown(data['token_index']!, _tokenIndexMeta),
+      );
+    }
     if (data.containsKey('hlc')) {
       context.handle(
         _hlcMeta,
@@ -1060,6 +1148,10 @@ class $PendingPositionsTable extends PendingPositions
         DriftSqlType.int,
         data['${effectivePrefix}parser_version'],
       )!,
+      tokenIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}token_index'],
+      ),
       hlc: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}hlc'],
@@ -1082,6 +1174,11 @@ class PendingPosition extends DataClass implements Insertable<PendingPosition> {
   final String blockId;
   final int charOffset;
   final int parserVersion;
+
+  /// Carried through the wait, so a book that arrives later arrives with the
+  /// reader's progress rather than with a place and no sense of how far in
+  /// it is.
+  final int? tokenIndex;
   final String hlc;
   final DateTime updatedAt;
   const PendingPosition({
@@ -1089,6 +1186,7 @@ class PendingPosition extends DataClass implements Insertable<PendingPosition> {
     required this.blockId,
     required this.charOffset,
     required this.parserVersion,
+    this.tokenIndex,
     required this.hlc,
     required this.updatedAt,
   });
@@ -1099,6 +1197,9 @@ class PendingPosition extends DataClass implements Insertable<PendingPosition> {
     map['block_id'] = Variable<String>(blockId);
     map['char_offset'] = Variable<int>(charOffset);
     map['parser_version'] = Variable<int>(parserVersion);
+    if (!nullToAbsent || tokenIndex != null) {
+      map['token_index'] = Variable<int>(tokenIndex);
+    }
     map['hlc'] = Variable<String>(hlc);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -1110,6 +1211,9 @@ class PendingPosition extends DataClass implements Insertable<PendingPosition> {
       blockId: Value(blockId),
       charOffset: Value(charOffset),
       parserVersion: Value(parserVersion),
+      tokenIndex: tokenIndex == null && nullToAbsent
+          ? const Value.absent()
+          : Value(tokenIndex),
       hlc: Value(hlc),
       updatedAt: Value(updatedAt),
     );
@@ -1125,6 +1229,7 @@ class PendingPosition extends DataClass implements Insertable<PendingPosition> {
       blockId: serializer.fromJson<String>(json['blockId']),
       charOffset: serializer.fromJson<int>(json['charOffset']),
       parserVersion: serializer.fromJson<int>(json['parserVersion']),
+      tokenIndex: serializer.fromJson<int?>(json['tokenIndex']),
       hlc: serializer.fromJson<String>(json['hlc']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -1137,6 +1242,7 @@ class PendingPosition extends DataClass implements Insertable<PendingPosition> {
       'blockId': serializer.toJson<String>(blockId),
       'charOffset': serializer.toJson<int>(charOffset),
       'parserVersion': serializer.toJson<int>(parserVersion),
+      'tokenIndex': serializer.toJson<int?>(tokenIndex),
       'hlc': serializer.toJson<String>(hlc),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -1147,6 +1253,7 @@ class PendingPosition extends DataClass implements Insertable<PendingPosition> {
     String? blockId,
     int? charOffset,
     int? parserVersion,
+    Value<int?> tokenIndex = const Value.absent(),
     String? hlc,
     DateTime? updatedAt,
   }) => PendingPosition(
@@ -1154,6 +1261,7 @@ class PendingPosition extends DataClass implements Insertable<PendingPosition> {
     blockId: blockId ?? this.blockId,
     charOffset: charOffset ?? this.charOffset,
     parserVersion: parserVersion ?? this.parserVersion,
+    tokenIndex: tokenIndex.present ? tokenIndex.value : this.tokenIndex,
     hlc: hlc ?? this.hlc,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -1167,6 +1275,9 @@ class PendingPosition extends DataClass implements Insertable<PendingPosition> {
       parserVersion: data.parserVersion.present
           ? data.parserVersion.value
           : this.parserVersion,
+      tokenIndex: data.tokenIndex.present
+          ? data.tokenIndex.value
+          : this.tokenIndex,
       hlc: data.hlc.present ? data.hlc.value : this.hlc,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -1179,6 +1290,7 @@ class PendingPosition extends DataClass implements Insertable<PendingPosition> {
           ..write('blockId: $blockId, ')
           ..write('charOffset: $charOffset, ')
           ..write('parserVersion: $parserVersion, ')
+          ..write('tokenIndex: $tokenIndex, ')
           ..write('hlc: $hlc, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -1186,8 +1298,15 @@ class PendingPosition extends DataClass implements Insertable<PendingPosition> {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(bookId, blockId, charOffset, parserVersion, hlc, updatedAt);
+  int get hashCode => Object.hash(
+    bookId,
+    blockId,
+    charOffset,
+    parserVersion,
+    tokenIndex,
+    hlc,
+    updatedAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1196,6 +1315,7 @@ class PendingPosition extends DataClass implements Insertable<PendingPosition> {
           other.blockId == this.blockId &&
           other.charOffset == this.charOffset &&
           other.parserVersion == this.parserVersion &&
+          other.tokenIndex == this.tokenIndex &&
           other.hlc == this.hlc &&
           other.updatedAt == this.updatedAt);
 }
@@ -1205,6 +1325,7 @@ class PendingPositionsCompanion extends UpdateCompanion<PendingPosition> {
   final Value<String> blockId;
   final Value<int> charOffset;
   final Value<int> parserVersion;
+  final Value<int?> tokenIndex;
   final Value<String> hlc;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -1213,6 +1334,7 @@ class PendingPositionsCompanion extends UpdateCompanion<PendingPosition> {
     this.blockId = const Value.absent(),
     this.charOffset = const Value.absent(),
     this.parserVersion = const Value.absent(),
+    this.tokenIndex = const Value.absent(),
     this.hlc = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1222,6 +1344,7 @@ class PendingPositionsCompanion extends UpdateCompanion<PendingPosition> {
     required String blockId,
     required int charOffset,
     required int parserVersion,
+    this.tokenIndex = const Value.absent(),
     required String hlc,
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -1236,6 +1359,7 @@ class PendingPositionsCompanion extends UpdateCompanion<PendingPosition> {
     Expression<String>? blockId,
     Expression<int>? charOffset,
     Expression<int>? parserVersion,
+    Expression<int>? tokenIndex,
     Expression<String>? hlc,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -1245,6 +1369,7 @@ class PendingPositionsCompanion extends UpdateCompanion<PendingPosition> {
       if (blockId != null) 'block_id': blockId,
       if (charOffset != null) 'char_offset': charOffset,
       if (parserVersion != null) 'parser_version': parserVersion,
+      if (tokenIndex != null) 'token_index': tokenIndex,
       if (hlc != null) 'hlc': hlc,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -1256,6 +1381,7 @@ class PendingPositionsCompanion extends UpdateCompanion<PendingPosition> {
     Value<String>? blockId,
     Value<int>? charOffset,
     Value<int>? parserVersion,
+    Value<int?>? tokenIndex,
     Value<String>? hlc,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -1265,6 +1391,7 @@ class PendingPositionsCompanion extends UpdateCompanion<PendingPosition> {
       blockId: blockId ?? this.blockId,
       charOffset: charOffset ?? this.charOffset,
       parserVersion: parserVersion ?? this.parserVersion,
+      tokenIndex: tokenIndex ?? this.tokenIndex,
       hlc: hlc ?? this.hlc,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -1286,6 +1413,9 @@ class PendingPositionsCompanion extends UpdateCompanion<PendingPosition> {
     if (parserVersion.present) {
       map['parser_version'] = Variable<int>(parserVersion.value);
     }
+    if (tokenIndex.present) {
+      map['token_index'] = Variable<int>(tokenIndex.value);
+    }
     if (hlc.present) {
       map['hlc'] = Variable<String>(hlc.value);
     }
@@ -1305,6 +1435,7 @@ class PendingPositionsCompanion extends UpdateCompanion<PendingPosition> {
           ..write('blockId: $blockId, ')
           ..write('charOffset: $charOffset, ')
           ..write('parserVersion: $parserVersion, ')
+          ..write('tokenIndex: $tokenIndex, ')
           ..write('hlc: $hlc, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -3469,6 +3600,7 @@ typedef $$ReadingPositionsTableCreateCompanionBuilder =
       required String blockId,
       required int charOffset,
       required int parserVersion,
+      Value<int?> tokenIndex,
       required String hlc,
       required DateTime updatedAt,
       Value<int> rowid,
@@ -3479,6 +3611,7 @@ typedef $$ReadingPositionsTableUpdateCompanionBuilder =
       Value<String> blockId,
       Value<int> charOffset,
       Value<int> parserVersion,
+      Value<int?> tokenIndex,
       Value<String> hlc,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -3532,6 +3665,11 @@ class $$ReadingPositionsTableFilterComposer
 
   ColumnFilters<int> get parserVersion => $composableBuilder(
     column: $table.parserVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get tokenIndex => $composableBuilder(
+    column: $table.tokenIndex,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3593,6 +3731,11 @@ class $$ReadingPositionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get tokenIndex => $composableBuilder(
+    column: $table.tokenIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get hlc => $composableBuilder(
     column: $table.hlc,
     builder: (column) => ColumnOrderings(column),
@@ -3646,6 +3789,11 @@ class $$ReadingPositionsTableAnnotationComposer
 
   GeneratedColumn<int> get parserVersion => $composableBuilder(
     column: $table.parserVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get tokenIndex => $composableBuilder(
+    column: $table.tokenIndex,
     builder: (column) => column,
   );
 
@@ -3713,6 +3861,7 @@ class $$ReadingPositionsTableTableManager
                 Value<String> blockId = const Value.absent(),
                 Value<int> charOffset = const Value.absent(),
                 Value<int> parserVersion = const Value.absent(),
+                Value<int?> tokenIndex = const Value.absent(),
                 Value<String> hlc = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -3721,6 +3870,7 @@ class $$ReadingPositionsTableTableManager
                 blockId: blockId,
                 charOffset: charOffset,
                 parserVersion: parserVersion,
+                tokenIndex: tokenIndex,
                 hlc: hlc,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -3731,6 +3881,7 @@ class $$ReadingPositionsTableTableManager
                 required String blockId,
                 required int charOffset,
                 required int parserVersion,
+                Value<int?> tokenIndex = const Value.absent(),
                 required String hlc,
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -3739,6 +3890,7 @@ class $$ReadingPositionsTableTableManager
                 blockId: blockId,
                 charOffset: charOffset,
                 parserVersion: parserVersion,
+                tokenIndex: tokenIndex,
                 hlc: hlc,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -3818,6 +3970,7 @@ typedef $$PendingPositionsTableCreateCompanionBuilder =
       required String blockId,
       required int charOffset,
       required int parserVersion,
+      Value<int?> tokenIndex,
       required String hlc,
       required DateTime updatedAt,
       Value<int> rowid,
@@ -3828,6 +3981,7 @@ typedef $$PendingPositionsTableUpdateCompanionBuilder =
       Value<String> blockId,
       Value<int> charOffset,
       Value<int> parserVersion,
+      Value<int?> tokenIndex,
       Value<String> hlc,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -3859,6 +4013,11 @@ class $$PendingPositionsTableFilterComposer
 
   ColumnFilters<int> get parserVersion => $composableBuilder(
     column: $table.parserVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get tokenIndex => $composableBuilder(
+    column: $table.tokenIndex,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3902,6 +4061,11 @@ class $$PendingPositionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get tokenIndex => $composableBuilder(
+    column: $table.tokenIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get hlc => $composableBuilder(
     column: $table.hlc,
     builder: (column) => ColumnOrderings(column),
@@ -3935,6 +4099,11 @@ class $$PendingPositionsTableAnnotationComposer
 
   GeneratedColumn<int> get parserVersion => $composableBuilder(
     column: $table.parserVersion,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get tokenIndex => $composableBuilder(
+    column: $table.tokenIndex,
     builder: (column) => column,
   );
 
@@ -3986,6 +4155,7 @@ class $$PendingPositionsTableTableManager
                 Value<String> blockId = const Value.absent(),
                 Value<int> charOffset = const Value.absent(),
                 Value<int> parserVersion = const Value.absent(),
+                Value<int?> tokenIndex = const Value.absent(),
                 Value<String> hlc = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -3994,6 +4164,7 @@ class $$PendingPositionsTableTableManager
                 blockId: blockId,
                 charOffset: charOffset,
                 parserVersion: parserVersion,
+                tokenIndex: tokenIndex,
                 hlc: hlc,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -4004,6 +4175,7 @@ class $$PendingPositionsTableTableManager
                 required String blockId,
                 required int charOffset,
                 required int parserVersion,
+                Value<int?> tokenIndex = const Value.absent(),
                 required String hlc,
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -4012,6 +4184,7 @@ class $$PendingPositionsTableTableManager
                 blockId: blockId,
                 charOffset: charOffset,
                 parserVersion: parserVersion,
+                tokenIndex: tokenIndex,
                 hlc: hlc,
                 updatedAt: updatedAt,
                 rowid: rowid,

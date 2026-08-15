@@ -221,6 +221,12 @@ class LibraryRepository {
               blockId: locator.blockId,
               charOffset: locator.charOffset,
               parserVersion: locator.parserVersion,
+              // Written even when null, rather than left alone. The hint
+              // describes this position; carrying the previous one forward
+              // would pair a token index from where the reader used to be
+              // with a locator for where they are now, and the service
+              // measures divergence with it.
+              tokenIndex: Value(tokenIndex),
               hlc: hlc,
               updatedAt: now,
             ),
@@ -290,10 +296,16 @@ class LibraryRepository {
     required String bookId,
     required Locator locator,
     required String hlc,
+    int? tokenIndex,
   }) async {
     await _db.transaction(() async {
       if (!await hasBook(bookId)) {
-        await _holdPosition(bookId: bookId, locator: locator, hlc: hlc);
+        await _holdPosition(
+          bookId: bookId,
+          locator: locator,
+          hlc: hlc,
+          tokenIndex: tokenIndex,
+        );
         return;
       }
 
@@ -313,6 +325,7 @@ class LibraryRepository {
               blockId: locator.blockId,
               charOffset: locator.charOffset,
               parserVersion: locator.parserVersion,
+              tokenIndex: Value(tokenIndex),
               hlc: hlc,
               updatedAt: DateTime.now().toUtc(),
             ),
@@ -352,6 +365,7 @@ class LibraryRepository {
     required String bookId,
     required Locator locator,
     required String hlc,
+    int? tokenIndex,
   }) async {
     final held = await (_db.select(
       _db.pendingPositions,
@@ -367,6 +381,7 @@ class LibraryRepository {
             blockId: locator.blockId,
             charOffset: locator.charOffset,
             parserVersion: locator.parserVersion,
+            tokenIndex: Value(tokenIndex),
             hlc: hlc,
             updatedAt: DateTime.now().toUtc(),
           ),
@@ -401,6 +416,7 @@ class LibraryRepository {
               blockId: held.blockId,
               charOffset: held.charOffset,
               parserVersion: held.parserVersion,
+              tokenIndex: Value(held.tokenIndex),
               hlc: held.hlc,
               updatedAt: held.updatedAt,
             ),

@@ -311,6 +311,10 @@ class SyncEngine {
       bookId: event.entityId,
       locator: locator,
       hlc: event.hlc,
+      // Optional on the wire. A client older than the column sends a
+      // position without one, which is a value this device does not know
+      // rather than an event it cannot apply.
+      tokenIndex: (event.payload['tokenIndex'] as num?)?.toInt(),
     );
   }
 
@@ -381,6 +385,9 @@ class SyncEngine {
       bookId: bookId,
       locator: chosen,
       hlc: hlc,
+      // The reader picked this side, and the index that came with it is the
+      // one already going to the service on the line above.
+      tokenIndex: tokenIndex,
     );
 
     await repository.clearPositionConflict(serverId);
