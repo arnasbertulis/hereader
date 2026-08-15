@@ -1,3 +1,4 @@
+export 'src/color/contrast.dart';
 export 'src/pacing/pacing_config.dart';
 export 'src/pacing/pacing_decision.dart';
 export 'src/pacing/pacing_model.dart';

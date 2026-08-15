@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
@@ -54,30 +52,15 @@ int surfaceArgbFor(PresentationConfig presentation) =>
       Polarity.lightOnDark => darkSurfaceArgb,
     };
 
-// -- ARGB components ----------------------------------------------------
-
-/// Component reads and writes use division and modulo rather than shifts and
-/// masks.
-///
-/// Dart's `int` compiles to a JavaScript double on web, and this project has
-/// already lost a day to bit manipulation that was exact on the VM and not in
-/// a browser. Every value here stays below 2^32, so plain arithmetic is exact
-/// on both and needs no reasoning about operator width.
-
-int _unsigned(int argb) => argb < 0 ? argb + 0x100000000 : argb;
-
-int alphaOf(int argb) => (_unsigned(argb) ~/ 0x1000000) % 0x100;
-int redOf(int argb) => (_unsigned(argb) ~/ 0x10000) % 0x100;
-int greenOf(int argb) => (_unsigned(argb) ~/ 0x100) % 0x100;
-int blueOf(int argb) => _unsigned(argb) % 0x100;
-
-/// Builds an ARGB integer. Opaque unless told otherwise.
-///
-/// The colour picker always passes a full alpha: a translucent reading
-/// background would composite against whatever the platform happens to put
-/// behind it, which is not something a reader can predict or configure.
-int argbFrom(int red, int green, int blue, {int alpha = 0xFF}) =>
-    alpha * 0x1000000 + red * 0x10000 + green * 0x100 + blue;
+// -- ARGB formatting ------------------------------------------------------
+//
+// The component accessors (`alphaOf`, `redOf`, `greenOf`, `blueOf`,
+// `argbFrom`) and the WCAG contrast maths (`relativeLuminance`,
+// `contrastRatio`, `ContrastRating`, `rateContrast`) moved to
+// `package:rsvp_engine` in the UI pass: none of them touch Flutter, and
+// keeping them here put them on the one platform the CI browser run cannot
+// reach. See `contrast.dart` in rsvp_engine for the maths and its own
+// history comment.
 
 Color colorOf(int argb) =>
     Color.fromARGB(alphaOf(argb), redOf(argb), greenOf(argb), blueOf(argb));
@@ -86,49 +69,7 @@ Color colorOf(int argb) =>
 String hexOf(int argb) =>
     '#${(redOf(argb) * 0x10000 + greenOf(argb) * 0x100 + blueOf(argb)).toRadixString(16).padLeft(6, '0').toUpperCase()}';
 
-// -- contrast -----------------------------------------------------------
-
-double _linearised(int component) {
-  final c = component / 255.0;
-  return c <= 0.03928
-      ? c / 12.92
-      : math.pow((c + 0.055) / 1.055, 2.4).toDouble();
-}
-
-/// WCAG 2.1 relative luminance.
-double relativeLuminance(int argb) =>
-    0.2126 * _linearised(redOf(argb)) +
-    0.7152 * _linearised(greenOf(argb)) +
-    0.0722 * _linearised(blueOf(argb));
-
-/// WCAG 2.1 contrast ratio, from 1.0 (identical) to 21.0 (black on white).
-double contrastRatio(int foregroundArgb, int backgroundArgb) {
-  final a = relativeLuminance(foregroundArgb);
-  final b = relativeLuminance(backgroundArgb);
-
-  final lighter = math.max(a, b);
-  final darker = math.min(a, b);
-
-  return (lighter + 0.05) / (darker + 0.05);
-}
-
-enum ContrastRating { high, adequate, low, veryLow }
-
-/// Judges a ratio against the thresholds that matter for this app.
-///
-/// WCAG would call 3.0 a pass for text this size. That bar is set for people
-/// who can read a page; it is the wrong bar for the reader this app exists
-/// for, so the wording here treats 4.5 as the floor and only calls 7.0 good.
-///
-/// Nothing acts on this rating. A reader with light sensitivity may want a
-/// lower ratio deliberately, and overriding that in an app whose whole point
-/// is configurability would be worse than a warning they can ignore.
-ContrastRating rateContrast(double ratio) {
-  if (ratio >= 7.0) return ContrastRating.high;
-  if (ratio >= 4.5) return ContrastRating.adequate;
-  if (ratio >= 3.0) return ContrastRating.low;
-  return ContrastRating.veryLow;
-}
+// -- contrast wording -------------------------------------------------------
 
 String contrastLabel(ContrastRating rating) => switch (rating) {
   ContrastRating.high => 'High contrast',
@@ -145,27 +86,17 @@ String contrastAdvice(ContrastRating rating) => switch (rating) {
 };
 
 // -- chrome -------------------------------------------------------------
+//
+// `hereaderSeed` and `appTheme` moved to `app_theme.dart` in the UI pass:
+// ordinary app chrome now has a real, configurable accent (see the theme
+// pass's `buildScheme`), and that accent must never leak onto the reading
+// surface — a reader who tinted their background moss and set the app
+// accent to rust would otherwise see the two adjacent on the one screen
+// where the whole point is that they chose the colours.
 
-/// The seed every Material colour in this app derives from.
-///
-/// Material's own baseline, kept deliberately. This change is about making
-/// chrome follow the reader's polarity; moving the hue at the same time
-/// would make the two indistinguishable in a screenshot. Choosing a real
-/// seed is the UI pass's job.
-const hereaderSeed = Color(0xFF6750A4);
-
-/// Ordinary app chrome — library, settings, sign-in — which follows the
-/// platform rather than any reading profile.
-///
-/// None of these screens sits on a reading surface, so there is nothing for
-/// them to match and the platform's own preference is the right signal.
-ThemeData appTheme(Brightness brightness) => ThemeData(
-  useMaterial3: true,
-  colorScheme: ColorScheme.fromSeed(
-    seedColor: hereaderSeed,
-    brightness: brightness,
-  ),
-);
+/// The seed [readerChromeTheme] derives from. Fixed, and never the app's
+/// configurable accent, for the reason above.
+const readerChromeSeed = Color(0xFF6750A4);
 
 /// Whether controls drawn over this profile's reading surface should be
 /// light or dark.
@@ -206,7 +137,7 @@ ThemeData readerChromeTheme(PresentationConfig presentation) {
   return ThemeData(
     useMaterial3: true,
     colorScheme: ColorScheme.fromSeed(
-      seedColor: hereaderSeed,
+      seedColor: readerChromeSeed,
       brightness: brightness,
     ),
     scaffoldBackgroundColor: colorOf(surfaceArgbFor(presentation)),

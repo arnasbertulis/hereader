@@ -3,6 +3,7 @@ import 'package:app/data/library_repository.dart';
 import 'package:app/reading/library_book.dart';
 import 'package:app/reading/profile_presentation.dart';
 import 'package:app/reading/reader_screen.dart';
+import 'package:app/theme/app_theme.dart';
 import 'package:drift/native.dart';
 import 'package:epub_reader/epub_reader.dart';
 import 'package:flutter/material.dart';
@@ -62,7 +63,7 @@ void main() {
     tearDown(() => database.close());
 
     Widget reader(LibraryRepository repo) => MaterialApp(
-      theme: appTheme(Brightness.light),
+      theme: appTheme(brightness: Brightness.light),
       home: ReaderScreen(
         book: LibraryBook(
           id: 'b',
