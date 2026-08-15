@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'block.dart';
 import 'toc.dart';
 
@@ -74,10 +76,22 @@ class EpubBook {
   /// ADR 0010.
   final List<TocEntry> toc;
 
+  /// The declared cover image, exactly as the archive stored it.
+  ///
+  /// Null when the book declares no cover, or when it declares one the
+  /// archive does not contain. Both happen, and neither makes the book
+  /// unreadable, so neither is an error.
+  ///
+  /// Bytes rather than the href: the archive is open during the parse and
+  /// closed after it, so a caller holding only a path would have to unzip
+  /// the whole file again to follow it.
+  final Uint8List? coverBytes;
+
   const EpubBook({
     required this.metadata,
     required this.documents,
     this.toc = const [],
+    this.coverBytes,
   });
 
   /// Every block in reading order, skipping non-linear documents.

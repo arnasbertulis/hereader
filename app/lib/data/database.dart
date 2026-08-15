@@ -108,6 +108,30 @@ class PendingPositions extends Table {
   Set<Column> get primaryKey => {bookId};
 }
 
+/// Cover images, one per book that declares one.
+///
+/// A table rather than a column on Books. SQLite stores a row's columns
+/// together, and the Books row already carries the whole EPUB, so a cover
+/// there would be rewritten whenever anything about the book was written and
+/// read by any query that does not name its columns. Keeping it separate also
+/// means a book without a cover costs no row at all rather than a null blob.
+///
+/// Cascades from Books, so removing a book takes its cover the same way it
+/// takes its position.
+class BookCovers extends Table {
+  TextColumn get bookId =>
+      text().references(Books, #id, onDelete: KeyAction.cascade)();
+
+  /// The image exactly as the EPUB stored it, neither re-encoded nor
+  /// downscaled. Decoding at tile size is an argument at render time, and a
+  /// resize during import would spend the thing import has least of on web,
+  /// which is main-thread milliseconds.
+  BlobColumn get bytes => blob()();
+
+  @override
+  Set<Column> get primaryKey => {bookId};
+}
+
 /// Reading profiles, including forks of the built-in presets.
 ///
 /// Built-ins are not stored: they live in code and are merged in at read
@@ -217,6 +241,7 @@ class PositionConflicts extends Table {
     Books,
     ReadingPositions,
     PendingPositions,
+    BookCovers,
     StoredProfiles,
     Preferences,
     OutboxEvents,
@@ -243,7 +268,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -285,6 +310,13 @@ class AppDatabase extends _$AppDatabase {
         // every existing reader at the first word of their book.
         await m.addColumn(readingPositions, readingPositions.tokenIndex);
         await m.addColumn(pendingPositions, pendingPositions.tokenIndex);
+      }
+      if (from < 7) {
+        // Created empty. The covers of books already imported are still
+        // inside their stored EPUBs, and extracting them here would unzip
+        // and walk every book in the library during the first frame after an
+        // update.
+        await m.createTable(bookCovers);
       }
     },
     beforeOpen: (details) async {

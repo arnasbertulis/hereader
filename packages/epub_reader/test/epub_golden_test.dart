@@ -42,6 +42,18 @@ void main() {
       expect(book.metadata.coverHref, 'OEBPS/5578997006791554087_cover.jpg');
     });
 
+    test('reads the cover bytes for the href it found', () {
+      final cover = book.coverBytes;
+
+      expect(cover, isNotNull);
+
+      // JPEG's start-of-image marker. Asserting on the first two bytes rather
+      // than a length, because a wrong archive entry would still have a
+      // plausible length and this fixture's cover is the only JPEG in it.
+      expect(cover!.take(2), [0xFF, 0xD8]);
+      expect(cover.length, greaterThan(1000));
+    });
+
     test('drops the spine item that holds no text', () {
       // The spine lists ten items. The first wraps the cover image in SVG and
       // yields no blocks, so it is skipped.
