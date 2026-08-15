@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'app_shell.dart';
 import 'data/database.dart';
 import 'data/library_repository.dart';
-import 'reading/library_screen.dart';
 import 'startup_failure.dart';
 import 'sync/api_client.dart';
 import 'sync/auth_store.dart';
@@ -141,8 +141,8 @@ class _HereaderAppState extends State<HereaderApp> {
 
         return MaterialApp(
           title: 'Hereader',
-          // Home, the library, settings and sign-in follow the reader's
-          // stored choice, defaulting to the platform. The reading surface
+          // The shell, its tabs and sign-in follow the reader's stored
+          // choice, defaulting to the platform. The reading surface
           // does not: which polarity the text is drawn in is a per-profile
           // setting, so the reader screen builds its own chrome theme from
           // the active profile rather than inheriting any of these. See
@@ -183,7 +183,9 @@ class _HereaderAppState extends State<HereaderApp> {
             navigatorKey: _navigatorKey,
             child: child ?? const SizedBox.shrink(),
           ),
-          home: LibraryScreen(
+          // The shell, not a screen. Everything outside a book is a tab
+          // inside it, and the reader is pushed above it.
+          home: AppShell(
             repository: widget.repository,
             sync: widget.sync,
             api: widget.api,

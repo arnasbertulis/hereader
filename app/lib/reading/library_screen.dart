@@ -8,27 +8,20 @@ import '../data/library_repository.dart';
 import '../sync/api_client.dart';
 import '../sync/sign_in_screen.dart';
 import '../sync/sync_engine.dart';
-import '../theme/appearance.dart';
 import 'book_opener.dart';
 import 'library_book.dart';
 import 'paste_reader_screen.dart';
-import 'settings_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
   final LibraryRepository repository;
   final SyncEngine sync;
   final ApiClient api;
 
-  /// Passed through to the settings screen, which is where appearance is
-  /// changed until the navigation shell gives settings a tab of its own.
-  final AppearanceController appearance;
-
   const LibraryScreen({
     super.key,
     required this.repository,
     required this.sync,
     required this.api,
-    required this.appearance,
   });
 
   @override
@@ -105,18 +98,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (signedIn == true) unawaited(widget.sync.syncNow());
   }
 
-  void _openSettings() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => SettingsScreen(
-          repository: _repo,
-          issueStamp: widget.sync.issueStamp,
-          appearance: widget.appearance,
-        ),
-      ),
-    );
-  }
-
   void _openPaste() {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -175,11 +156,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
             onPressed: _busy ? null : _import,
             icon: const Icon(Icons.add),
             tooltip: 'Add a book',
-          ),
-          IconButton(
-            onPressed: _busy ? null : _openSettings,
-            icon: const Icon(Icons.tune),
-            tooltip: 'Reading profiles',
           ),
         ],
       ),
