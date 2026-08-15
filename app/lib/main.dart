@@ -11,6 +11,7 @@ import 'sync/auth_store.dart';
 import 'sync/position_conflict_sheet.dart';
 import 'sync/sync_engine.dart';
 import 'theme/app_theme.dart';
+import 'theme/appearance.dart';
 
 /// Where the sync service lives.
 ///
@@ -59,11 +60,28 @@ Future<void> _start() async {
     await auth.restore();
     await sync.start();
 
+    // Also before the first frame. Reading appearance after first paint
+    // means a white flash on a dark-theme device on every cold start, which
+    // is worse than usual for a reader who chose a dark theme because bright
+    // light is uncomfortable.
+    final appearance = AppearanceController(
+      repository: repository,
+      issueStamp: sync.issueStamp,
+    );
+    await appearance.restore();
+
     // Not awaited: a slow or unreachable server must not delay the library
     // appearing. Reading works whether or not this succeeds.
     unawaited(sync.syncNow());
 
-    runApp(HereaderApp(repository: repository, sync: sync, api: api));
+    runApp(
+      HereaderApp(
+        repository: repository,
+        sync: sync,
+        api: api,
+        appearance: appearance,
+      ),
+    );
   } catch (error, stack) {
     // Shown and printed: the screen carries the message for the reader, the
     // console carries the trace for whoever they send it to.
@@ -84,44 +102,95 @@ Future<void> _start() async {
   }
 }
 
-class HereaderApp extends StatelessWidget {
+class HereaderApp extends StatefulWidget {
   final LibraryRepository repository;
   final SyncEngine sync;
   final ApiClient api;
+  final AppearanceController appearance;
 
-  HereaderApp({
+  const HereaderApp({
     super.key,
     required this.repository,
     required this.sync,
     required this.api,
+    required this.appearance,
   });
 
+  @override
+  State<HereaderApp> createState() => _HereaderAppState();
+}
+
+/// Stateful so the navigator key survives a rebuild.
+///
+/// This was a `StatelessWidget` holding the `GlobalKey` as a field, which
+/// worked only because nothing ever rebuilt it. Appearance changes rebuild
+/// it now, and a fresh key on each rebuild would hand the `Navigator` a new
+/// identity and throw away every route under it — including the book the
+/// reader is in.
+class _HereaderAppState extends State<HereaderApp> {
   /// Lets the conflict watcher present a sheet over whatever route is
   /// showing, including the reading surface.
   final _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Hereader',
-      // The library, settings and sign-in follow the platform. The reading
-      // surface does not: which polarity the text is drawn in is a per-profile
-      // setting, so the reader screen builds its own chrome theme from the
-      // active profile rather than inheriting either of these. See
-      // `readerChromeTheme`.
-      theme: appTheme(brightness: Brightness.light),
-      darkTheme: appTheme(brightness: Brightness.dark),
-      themeMode: ThemeMode.system,
-      navigatorKey: _navigatorKey,
-      // Above the app rather than inside a screen, so a divergence arriving
-      // during a periodic sync is asked about wherever the reader is.
-      builder: (context, child) => ConflictWatcher(
-        repository: repository,
-        sync: sync,
-        navigatorKey: _navigatorKey,
-        child: child ?? const SizedBox.shrink(),
-      ),
-      home: LibraryScreen(repository: repository, sync: sync, api: api),
+    return ListenableBuilder(
+      listenable: widget.appearance,
+      builder: (context, _) {
+        final appearance = widget.appearance.settings;
+
+        return MaterialApp(
+          title: 'Hereader',
+          // Home, the library, settings and sign-in follow the reader's
+          // stored choice, defaulting to the platform. The reading surface
+          // does not: which polarity the text is drawn in is a per-profile
+          // setting, so the reader screen builds its own chrome theme from
+          // the active profile rather than inheriting any of these. See
+          // `readerChromeTheme`.
+          theme: appTheme(
+            brightness: Brightness.light,
+            accent: appearance.accent,
+            highContrast: appearance.highContrast,
+          ),
+          darkTheme: appTheme(
+            brightness: Brightness.dark,
+            accent: appearance.accent,
+            highContrast: appearance.highContrast,
+          ),
+          // Used by the framework when the platform itself reports a
+          // high-contrast preference, which is how a reader who set it at
+          // the operating system level gets it here without finding the
+          // switch. The app's own switch forces it on regardless, so the
+          // effective rule is either one.
+          highContrastTheme: appTheme(
+            brightness: Brightness.light,
+            accent: appearance.accent,
+            highContrast: true,
+          ),
+          highContrastDarkTheme: appTheme(
+            brightness: Brightness.dark,
+            accent: appearance.accent,
+            highContrast: true,
+          ),
+          themeMode: appearance.themeMode,
+          navigatorKey: _navigatorKey,
+          // Above the app rather than inside a screen, so a divergence
+          // arriving during a periodic sync is asked about wherever the
+          // reader is.
+          builder: (context, child) => ConflictWatcher(
+            repository: widget.repository,
+            sync: widget.sync,
+            navigatorKey: _navigatorKey,
+            child: child ?? const SizedBox.shrink(),
+          ),
+          home: LibraryScreen(
+            repository: widget.repository,
+            sync: widget.sync,
+            api: widget.api,
+            appearance: widget.appearance,
+          ),
+        );
+      },
     );
   }
 }

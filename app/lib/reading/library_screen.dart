@@ -8,6 +8,7 @@ import '../data/library_repository.dart';
 import '../sync/api_client.dart';
 import '../sync/sign_in_screen.dart';
 import '../sync/sync_engine.dart';
+import '../theme/appearance.dart';
 import 'library_book.dart';
 import 'paste_reader_screen.dart';
 import 'reader_screen.dart';
@@ -18,11 +19,16 @@ class LibraryScreen extends StatefulWidget {
   final SyncEngine sync;
   final ApiClient api;
 
+  /// Passed through to the settings screen, which is where appearance is
+  /// changed until the navigation shell gives settings a tab of its own.
+  final AppearanceController appearance;
+
   const LibraryScreen({
     super.key,
     required this.repository,
     required this.sync,
     required this.api,
+    required this.appearance,
   });
 
   @override
@@ -198,6 +204,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         builder: (_) => SettingsScreen(
           repository: _repo,
           issueStamp: widget.sync.issueStamp,
+          appearance: widget.appearance,
         ),
       ),
     );

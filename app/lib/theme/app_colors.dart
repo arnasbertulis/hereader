@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:rsvp_engine/rsvp_engine.dart';
 
 /// Neutral surface ramps and the accent list, and [buildScheme], which
 /// combines them into a [ColorScheme].
@@ -42,6 +43,19 @@ abstract final class AppAccents {
 
   static const all = [ink, teal, moss, amber, rust, crimson];
 }
+
+/// The mark drawn on top of a filled accent swatch.
+///
+/// Black or white by the accent's own luminance, using the same 0.179
+/// threshold as `chromeBrightnessFor`: that is the point where a colour's
+/// contrast against black equals its contrast against white, so it is where
+/// the better choice flips. The swatch is the one place the raw accent hex
+/// is painted rather than handed to `fromSeed`, and a selected swatch has to
+/// show a check rather than relying on colour alone.
+Color onAccent(Color accent) =>
+    relativeLuminance(accent.toARGB32()) > 0.179
+    ? const Color(0xFF000000)
+    : const Color(0xFFFFFFFF);
 
 /// The fixed neutral roles [buildScheme] overrides `fromSeed`'s output with.
 ///
@@ -118,6 +132,15 @@ class _Neutrals {
   );
 }
 
+/// `outline` is darker than the rest of the ramp implies, and deliberately.
+///
+/// It is not text; it draws the border of an outlined button, which WCAG
+/// 1.4.11 treats as information needed to identify a control and asks for
+/// 3:1 against what it sits on. The value this started at reached 3.05
+/// against `surface` and 2.52 against `surfaceContainerHighest`, so a button
+/// on a card missed the bar. Nothing here uses elevation, so that border is
+/// the only thing separating the control from the surface behind it.
+/// `app/test/app_theme_test.dart` measures it against every surface role.
 const _lightNeutrals = _Neutrals(
   surfaceContainerLowest: Color(0xFFFFFFFF),
   surface: Color(0xFFFBFBFC),
@@ -129,7 +152,7 @@ const _lightNeutrals = _Neutrals(
   surfaceDim: Color(0xFFDCDFE1),
   onSurface: Color(0xFF16181A),
   onSurfaceVariant: Color(0xFF5A6066),
-  outline: Color(0xFF8B9297),
+  outline: Color(0xFF787E82),
   outlineVariant: Color(0xFFD5D9DC),
   inverseSurface: Color(0xFF2B2F33),
   onInverseSurface: Color(0xFFF1F3F4),
