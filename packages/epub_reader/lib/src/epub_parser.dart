@@ -54,6 +54,10 @@ class EpubParser {
       metadata: metadata,
       documents: documents,
       toc: _readToc(archive, opf, manifest, opfDir, documents),
+      // Read here rather than by a second pass, because _readMetadata has
+      // already worked out which archive entry the cover is and the archive
+      // goes out of scope at the end of this method.
+      coverBytes: _readCover(archive, metadata.coverHref),
     );
   }
 
@@ -440,13 +444,33 @@ class EpubParser {
     return entries;
   }
 
+  /// The archive entry at [path], or null when nothing matches.
+  ///
+  /// Some writers store paths with a leading slash or in a different case
+  /// from the one the OPF gives, so an exact match is tried first and a
+  /// case-insensitive one after it.
+  ArchiveFile? _findFile(Archive archive, String path) =>
+      archive.files.where((f) => f.name == path).firstOrNull ??
+      archive.files
+          .where((f) => f.name.toLowerCase() == path.toLowerCase())
+          .firstOrNull;
+
+  /// The bytes of the declared cover, or null.
+  ///
+  /// Returns null rather than throwing the way [_readString] does. A spine
+  /// document the book cannot supply makes the book unreadable; a cover it
+  /// cannot supply makes it a book without a picture.
+  Uint8List? _readCover(Archive archive, String? href) {
+    if (href == null) return null;
+
+    final data = _findFile(archive, href)?.readBytes();
+    if (data == null || data.isEmpty) return null;
+
+    return Uint8List.fromList(data);
+  }
+
   String _readString(Archive archive, String path) {
-    final file =
-        archive.files.where((f) => f.name == path).firstOrNull ??
-        // Some writers store paths with a leading slash or different case.
-        archive.files
-            .where((f) => f.name.toLowerCase() == path.toLowerCase())
-            .firstOrNull;
+    final file = _findFile(archive, path);
 
     if (file == null) {
       throw EpubException('The archive is missing $path.');

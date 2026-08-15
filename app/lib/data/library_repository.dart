@@ -131,6 +131,7 @@ class LibraryRepository {
     required int wordCount,
     String? author,
     String? language,
+    Uint8List? coverBytes,
   }) async {
     await _db.transaction(() async {
       await _db
@@ -146,6 +147,21 @@ class LibraryRepository {
               language: Value(language),
             ),
           );
+
+      if (coverBytes != null) {
+        await _db
+            .into(_db.bookCovers)
+            .insertOnConflictUpdate(
+              BookCoversCompanion.insert(bookId: id, bytes: coverBytes),
+            );
+      } else {
+        // Re-importing an edition that no longer declares a cover should not
+        // leave the old picture attached to the new book. A book with no
+        // cover has no row.
+        await (_db.delete(
+          _db.bookCovers,
+        )..where((c) => c.bookId.equals(id))).go();
+      }
 
       await _drainPendingPosition(id);
     });

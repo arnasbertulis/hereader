@@ -56,6 +56,12 @@ class LibraryBook {
   /// ADR 0010.
   final List<Chapter> chapters;
 
+  /// The book's cover image, or null when it declares none.
+  ///
+  /// Carried out of the parse so the import that stores the book can store
+  /// the cover in the same transaction. Nothing draws it yet.
+  final Uint8List? coverBytes;
+
   const LibraryBook({
     required this.id,
     required this.title,
@@ -66,6 +72,7 @@ class LibraryBook {
     this.contentStartIndex = 0,
     this.contentStartReason = ContentStartReason.none,
     this.chapters = const [],
+    this.coverBytes,
   });
 
   LibraryBook withPosition(Locator? next) => LibraryBook(
@@ -78,6 +85,7 @@ class LibraryBook {
     contentStartIndex: contentStartIndex,
     contentStartReason: contentStartReason,
     chapters: chapters,
+    coverBytes: coverBytes,
   );
 
   /// True when front matter was skipped on a guess rather than on a marker
@@ -153,6 +161,7 @@ LibraryBook _parseBook(Uint8List bytes) {
         ? ContentStartReason.none
         : start.reason,
     chapters: chaptersOf(book, text),
+    coverBytes: book.coverBytes,
   );
 }
 

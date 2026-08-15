@@ -67,6 +67,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         language: book.language,
         bytes: bytes,
         wordCount: book.text.length,
+        coverBytes: book.coverBytes,
       );
     } on EpubException catch (e) {
       _report(e.message);
