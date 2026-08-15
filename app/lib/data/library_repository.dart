@@ -8,7 +8,9 @@ import 'database.dart';
 /// A book as the library list needs it: metadata without the bytes.
 ///
 /// Loading blobs to draw a list would read every book into memory to render
-/// a few titles.
+/// a few titles. [LibraryRepository.watchLibrary] names its columns rather
+/// than selecting rows so that stays true; it did not for a while, and the
+/// comment outlived the arrangement it described.
 ///
 /// `language` is stored on the book row but not carried here. Per-language
 /// tokenizer settings are a real seam (ADR 0003) and the column exists for
@@ -43,31 +45,65 @@ class LibraryRepository {
   // -- books ---------------------------------------------------------
 
   /// Library contents, most recently imported first, without book bytes.
+  ///
+  /// `selectOnly` with an explicit column list, not `select().join()`. A
+  /// joined select includes every column of every table it reads, and
+  /// `readTable` returns the whole row, so the earlier version pulled each
+  /// book's entire EPUB into memory to render its title and threw it away
+  /// again. Nothing was visibly wrong: the summaries were correct, and the
+  /// cost was a blob read per book per emission of a stream that fires on
+  /// every write to either table.
+  ///
+  /// The rule this leaves behind is narrow, because `bytes` is the only
+  /// column here that costs anything: a query over Books that is not about
+  /// the bytes names the columns it wants.
   Stream<List<BookSummary>> watchLibrary() {
-    final query = _db.select(_db.books).join([
-      leftOuterJoin(
-        _db.readingPositions,
-        _db.readingPositions.bookId.equalsExp(_db.books.id),
-      ),
-    ])..orderBy([OrderingTerm.desc(_db.books.importedAt)]);
+    final books = _db.books;
+    final positions = _db.readingPositions;
+
+    final query = _db.selectOnly(books)
+      ..join([
+        leftOuterJoin(
+          positions,
+          positions.bookId.equalsExp(books.id),
+          // The columns below are added by hand. Left at its default this
+          // would put every position column in the result, which is
+          // harmless, and would also make the select list something other
+          // than what this method asked for.
+          useColumns: false,
+        ),
+      ])
+      ..addColumns([
+        books.id,
+        books.title,
+        books.author,
+        books.wordCount,
+        books.importedAt,
+        positions.blockId,
+        positions.charOffset,
+        positions.parserVersion,
+      ])
+      ..orderBy([OrderingTerm.desc(books.importedAt)]);
 
     return query.watch().map(
       (rows) => rows.map((row) {
-        final book = row.readTable(_db.books);
-        final position = row.readTableOrNull(_db.readingPositions);
+        // A left outer join, so every position column is null together when
+        // the book has never been opened. Read one and branch on it rather
+        // than asserting on three.
+        final blockId = row.read(positions.blockId);
 
         return BookSummary(
-          id: book.id,
-          title: book.title,
-          author: book.author,
-          wordCount: book.wordCount,
-          importedAt: book.importedAt,
-          position: position == null
+          id: row.read(books.id)!,
+          title: row.read(books.title)!,
+          author: row.read(books.author),
+          wordCount: row.read(books.wordCount)!,
+          importedAt: row.read(books.importedAt)!,
+          position: blockId == null
               ? null
               : Locator(
-                  blockId: position.blockId,
-                  charOffset: position.charOffset,
-                  parserVersion: position.parserVersion,
+                  blockId: blockId,
+                  charOffset: row.read(positions.charOffset)!,
+                  parserVersion: row.read(positions.parserVersion)!,
                 ),
         );
       }).toList(),
