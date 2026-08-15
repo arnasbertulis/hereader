@@ -1,12 +1,12 @@
 {
-    "name": "app",
-    "short_name": "app",
+    "name": "hereader",
+    "short_name": "hereader",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#FBFBFC",
+    "theme_color": "#2F4858",
+    "description": "A configurable RSVP reading app for low-vision readers.",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {
