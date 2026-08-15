@@ -5,12 +5,12 @@ import 'package:flutter/material.dart';
 import 'data/database.dart';
 import 'data/library_repository.dart';
 import 'reading/library_screen.dart';
-import 'reading/profile_presentation.dart';
 import 'startup_failure.dart';
 import 'sync/api_client.dart';
 import 'sync/auth_store.dart';
 import 'sync/position_conflict_sheet.dart';
 import 'sync/sync_engine.dart';
+import 'theme/app_theme.dart';
 
 /// Where the sync service lives.
 ///
@@ -109,8 +109,8 @@ class HereaderApp extends StatelessWidget {
       // setting, so the reader screen builds its own chrome theme from the
       // active profile rather than inheriting either of these. See
       // `readerChromeTheme`.
-      theme: appTheme(Brightness.light),
-      darkTheme: appTheme(Brightness.dark),
+      theme: appTheme(brightness: Brightness.light),
+      darkTheme: appTheme(brightness: Brightness.dark),
       themeMode: ThemeMode.system,
       navigatorKey: _navigatorKey,
       // Above the app rather than inside a screen, so a divergence arriving

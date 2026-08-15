@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import 'reading/profile_presentation.dart';
+import 'theme/app_theme.dart';
 
 /// Shown when the app cannot finish starting.
 ///
@@ -24,8 +24,12 @@ class StartupFailure extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Hereader',
-      theme: appTheme(Brightness.light),
-      darkTheme: appTheme(Brightness.dark),
+      // Fixed at the default accent deliberately: this screen renders from
+      // the catch in _start(), before appearance preferences (PR 4) exist
+      // to read, and has to be able to render even when the database read
+      // that would supply a stored preference is what failed.
+      theme: appTheme(brightness: Brightness.light),
+      darkTheme: appTheme(brightness: Brightness.dark),
       themeMode: ThemeMode.system,
       home: Builder(
         builder: (context) {
