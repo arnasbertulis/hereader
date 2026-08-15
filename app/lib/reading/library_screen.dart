@@ -9,9 +9,9 @@ import '../sync/api_client.dart';
 import '../sync/sign_in_screen.dart';
 import '../sync/sync_engine.dart';
 import '../theme/appearance.dart';
+import 'book_opener.dart';
 import 'library_book.dart';
 import 'paste_reader_screen.dart';
-import 'reader_screen.dart';
 import 'settings_screen.dart';
 
 class LibraryScreen extends StatefulWidget {
@@ -38,7 +38,17 @@ class LibraryScreen extends StatefulWidget {
 class _LibraryScreenState extends State<LibraryScreen> {
   bool _busy = false;
 
+  /// The one path into the reader. Home's continue card takes the same
+  /// object rather than its own copy of the sequence.
+  late final BookOpener _opener;
+
   LibraryRepository get _repo => widget.repository;
+
+  @override
+  void initState() {
+    super.initState();
+    _opener = BookOpener(repository: widget.repository, sync: widget.sync);
+  }
 
   Future<void> _import() async {
     final result = await FilePicker.pickFiles(
@@ -72,121 +82,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
+  /// Shows the library's busy state around the shared open path.
+  ///
+  /// The screen keeps the flag because it decides what busy looks like here:
+  /// the whole list is replaced by a spinner, which is right for a list and
+  /// wrong for a single card.
   Future<void> _open(BookSummary summary) async {
     setState(() => _busy = true);
 
     try {
-      // Sync before opening rather than only checking: a divergence may
-      // exist that this device has not heard about yet, and reading from a
-      // stale position before discovering it is the failure this whole
-      // design exists to avoid. Offline is fine — syncNow reports and
-      // returns rather than throwing, so reading never depends on a network.
-      await widget.sync.syncNow();
-
-      final conflicts = await _repo.watchConflicts().first;
-
-      if (conflicts.any((c) => c.bookId == summary.id)) {
-        // The watcher is already showing the sheet. Wait for the answer
-        // rather than sending the reader back to tap again, which would
-        // repeat the sync that just ran.
-        final settled = await _waitForConflict(summary.id);
-
-        if (!settled) {
-          // Resolving failed, most likely because the network dropped
-          // mid-choice. Better to say so than to hold the reader in a
-          // spinner indefinitely.
-          _report('Could not settle where to carry on. Try again.');
-          return;
-        }
-        if (!mounted) return;
-      }
-
-      final bytes = await _repo.bytesOf(summary.id);
-      if (bytes == null) {
-        _report('That book is not on this device.');
-        return;
-      }
-
-      // Re-parsed rather than cached: the parser is the single source of
-      // truth for block ids and offsets, so a normalizer change applies to
-      // books already in the library instead of invalidating them.
-      final parsed = await const BookImporter().import(bytes);
-
-      // Read fresh rather than trusting the summary, which was captured
-      // when the list was last built. A conflict settled moments ago would
-      // otherwise be ignored and the reader sent to the old position.
-      final stored = await _repo.positionOf(summary.id);
-      final book = parsed.withPosition(stored);
-
-      if (book.positionUnresolvable) {
-        // Silently restarting looks identical to losing the reader's place.
-        _report(
-          'Your saved place in this book could not be found, so it opens '
-          'from the start.',
-        );
-      }
-
-      if (!mounted) return;
-
-      await Navigator.of(context).push<void>(
-        MaterialPageRoute(
-          builder: (_) => ReaderScreen(
-            book: book,
-            // The reader needs these to list the profiles actually on this
-            // device and to remember which one was picked.
-            repository: _repo,
-            issueStamp: widget.sync.issueStamp,
-            // The screen decides when a place is worth recording — ADR 0011
-            // — and this decides how. It is called throughout the session
-            // now, not once at the end.
-            onSave: (result) => _savePosition(summary.id, result),
-          ),
-        ),
-      );
-
-      // Positions are worth sending promptly: the reader may pick up
-      // another device in a minute. Everything written while the book was
-      // open is already queued, coalesced down to the latest.
-      unawaited(widget.sync.syncNow());
-    } on EpubException catch (e) {
-      _report(e.message);
+      await _opener.open(context, summary.id);
     } finally {
       if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  /// Writes a place the reader has reached.
-  ///
-  /// Called many times per sitting rather than once at the end. The
-  /// repository drops any queued event for the same book that has never been
-  /// sent, so the extra writes cost nothing on the wire.
-  Future<void> _savePosition(String bookId, ReadingResult result) async {
-    await _repo.savePosition(
-      bookId: bookId,
-      locator: result.locator,
-      // A real clock stamp, not a wall-clock string: the service rejects
-      // anything that does not parse, and ordering across devices depends
-      // on this being monotonic.
-      hlc: await widget.sync.issueStamp(),
-      // The service has no copy of the book, so it cannot work out how far
-      // apart two positions are without this hint.
-      tokenIndex: result.tokenIndex,
-    );
-  }
-
-  /// Waits for the reader to settle a divergence on [bookId].
-  ///
-  /// Bounded, because the sheet cannot be dismissed: if resolving fails the
-  /// reader would otherwise be held in a spinner with no way out.
-  Future<bool> _waitForConflict(String bookId) async {
-    try {
-      await _repo
-          .watchConflicts()
-          .firstWhere((list) => !list.any((c) => c.bookId == bookId))
-          .timeout(const Duration(minutes: 2));
-      return true;
-    } on TimeoutException {
-      return false;
     }
   }
 
