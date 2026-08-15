@@ -28,6 +28,10 @@ Future<List<String>> _tableNames(AppDatabase db) async {
 /// a database built from the current schema already had what the step was
 /// about to add. A step that only takes something away hides that.
 Future<void> _revertTo(AppDatabase db, int version) async {
+  if (version < 7) {
+    await db.customStatement('drop table book_covers');
+  }
+
   if (version < 6) {
     await db.customStatement(
       'alter table reading_positions drop column token_index',
@@ -150,6 +154,44 @@ void main() {
 
     final after = await upgraded.select(upgraded.readingPositions).getSingle();
     expect(after.tokenIndex, 812);
+  });
+
+  test('upgrading from version 6 makes room for covers', () async {
+    final legacy = AppDatabase(NativeDatabase(file));
+
+    await LibraryRepository(legacy).addBook(
+      id: 'book-1',
+      title: 'Romeo and Juliet',
+      author: 'William Shakespeare',
+      bytes: Uint8List.fromList([1, 2, 3]),
+      wordCount: 25000,
+    );
+
+    await _revertTo(legacy, 6);
+    await legacy.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+
+    expect(await _tableNames(upgraded), contains('book_covers'));
+
+    // Empty, and the book that was already here is untouched. The upgrade
+    // does not go looking inside stored EPUBs for pictures.
+    expect(await upgraded.select(upgraded.bookCovers).get(), isEmpty);
+    expect(await upgraded.select(upgraded.books).get(), hasLength(1));
+
+    // Writable, and keyed to a book that exists. A create table that ran
+    // against nothing would leave the assertions above true.
+    await LibraryRepository(upgraded).addBook(
+      id: 'book-1',
+      title: 'Romeo and Juliet',
+      bytes: Uint8List.fromList([1, 2, 3]),
+      wordCount: 25000,
+      coverBytes: Uint8List.fromList([9, 9, 9]),
+    );
+
+    final covers = await upgraded.select(upgraded.bookCovers).get();
+    expect(covers.single.bytes, [9, 9, 9]);
   });
 
   test('a fresh database is never given sync_state', () async {
