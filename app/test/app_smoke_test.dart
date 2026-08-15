@@ -10,6 +10,8 @@ import 'package:app/reading/settings_screen.dart';
 import 'package:app/sync/api_client.dart';
 import 'package:app/sync/auth_store.dart';
 import 'package:app/sync/sync_engine.dart';
+import 'package:app/theme/app_colors.dart';
+import 'package:app/theme/appearance.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,6 +26,7 @@ class _Harness {
   final AuthStore auth;
   final ApiClient api;
   final SyncEngine sync;
+  final AppearanceController appearance;
 
   _Harness._({
     required this.database,
@@ -31,6 +34,7 @@ class _Harness {
     required this.auth,
     required this.api,
     required this.sync,
+    required this.appearance,
   });
 
   factory _Harness.create() {
@@ -50,12 +54,24 @@ class _Harness {
         auth: auth,
         database: database,
       ),
+      // Takes `_stamp` rather than `sync.issueStamp`, since no test starts
+      // the engine and issuing a stamp without a clock is a StateError.
+      appearance: AppearanceController(
+        repository: repository,
+        issueStamp: _stamp,
+      ),
     );
   }
 
-  Widget get app => HereaderApp(repository: repository, sync: sync, api: api);
+  Widget get app => HereaderApp(
+    repository: repository,
+    sync: sync,
+    api: api,
+    appearance: appearance,
+  );
 
   Future<void> close() async {
+    appearance.dispose();
     sync.dispose();
     api.dispose();
     auth.dispose();
@@ -69,6 +85,11 @@ class _Harness {
 /// which is what lets a widget test supply this instead of standing up a
 /// clock, an auth store and a device id it has no use for.
 Future<String> _stamp() async => '0000000000001-00000-test';
+
+/// The accent currently in force, read from inside the tree rather than
+/// from the controller, so this measures what the app is painting.
+Color _primaryOf(WidgetTester tester, Finder screen) =>
+    Theme.of(tester.element(screen)).colorScheme.primary;
 
 /// Disposes the widget tree inside the test body.
 ///
@@ -174,6 +195,7 @@ void main() {
         home: SettingsScreen(
           repository: harness.repository,
           issueStamp: _stamp,
+          appearance: harness.appearance,
         ),
       ),
     );
@@ -198,6 +220,7 @@ void main() {
         home: SettingsScreen(
           repository: harness.repository,
           issueStamp: _stamp,
+          appearance: harness.appearance,
         ),
       ),
     );
@@ -237,6 +260,7 @@ void main() {
         home: SettingsScreen(
           repository: harness.repository,
           issueStamp: _stamp,
+          appearance: harness.appearance,
         ),
       ),
     );
@@ -255,6 +279,38 @@ void main() {
         .where((p) => !p.isBuiltIn)
         .toList();
     expect(mine, isEmpty);
+
+    await _disposeTree(tester);
+  });
+
+  testWidgets('an appearance change rethemes and keeps the route', (
+    tester,
+  ) async {
+    final harness = _Harness.create();
+    addTearDown(harness.close);
+
+    await tester.pumpWidget(harness.app);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.tune));
+    await tester.pumpAndSettle();
+
+    final settings = find.byType(SettingsScreen);
+    expect(settings, findsOneWidget);
+
+    final before = _primaryOf(tester, settings);
+
+    await harness.appearance.setAccent(AppAccents.rust.color);
+    await tester.pumpAndSettle();
+
+    expect(_primaryOf(tester, settings), isNot(before));
+
+    // HereaderApp held its navigator key as a field of a StatelessWidget,
+    // which was safe only while nothing rebuilt it. An appearance change
+    // rebuilds it now, and a fresh GlobalKey would hand the Navigator a new
+    // identity and take every pushed route down with it — including a book
+    // the reader is in the middle of.
+    expect(settings, findsOneWidget);
 
     await _disposeTree(tester);
   });
