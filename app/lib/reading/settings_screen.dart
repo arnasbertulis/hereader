@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
+import '../theme/appearance.dart';
+import 'appearance_screen.dart';
 import 'profile_edit_screen.dart';
 import 'profile_presentation.dart';
 
@@ -26,10 +28,18 @@ class SettingsScreen extends StatefulWidget {
   /// one.
   final Future<String> Function() issueStamp;
 
+  /// Handed to [AppearanceScreen], which is reached from the row at the top
+  /// of this list. Appearance is not a reading profile and does not belong
+  /// on a screen called Reading profiles; it sits here because this is the
+  /// only settings surface the app has until the navigation shell lands,
+  /// and the row moves to a settings index then.
+  final AppearanceController appearance;
+
   const SettingsScreen({
     super.key,
     required this.repository,
     required this.issueStamp,
+    required this.appearance,
   });
 
   @override
@@ -144,6 +154,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           return ListView(
             children: [
+              const _SectionHeader('The app'),
+              ListTile(
+                leading: const Icon(Icons.palette_outlined),
+                title: const Text('Appearance'),
+                subtitle: const Text(
+                  'Light or dark, accent colour, and high contrast for the '
+                  'app around your books.',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        AppearanceScreen(controller: widget.appearance),
+                  ),
+                ),
+              ),
+
               const _SectionHeader('Your profiles'),
               if (mine.isEmpty)
                 const Padding(

@@ -38,6 +38,13 @@ lib/
 │  ├─ api_client.dart          Calls the sync service, refreshes tokens
 │  └─ auth_store.dart          Session storage: keystore on native, local
 │                               storage on web
+├─ theme/
+│  ├─ app_colors.dart         Neutral ramps, the accent list, buildScheme
+│  ├─ app_tokens.dart         Spacing, radii, durations, hairline widths
+│  ├─ app_typography.dart     The type scale
+│  ├─ app_theme.dart          ThemeData and every component theme
+│  └─ appearance.dart         Theme mode, accent and high contrast: stored,
+│                              read before the first frame, notified from
 └─ reading/
    ├─ library_screen.dart      Import, list, open, remove
    ├─ library_book.dart        Import pipeline and the in-memory book model
@@ -46,11 +53,20 @@ lib/
    │                            only definition of what reading looks like;
    │                            the settings preview draws through it
    ├─ settings_screen.dart     Profile list, presets separated from forks
+   ├─ appearance_screen.dart   Theme, accent and contrast for app chrome
    ├─ profile_edit_screen.dart One profile, with a live preview
-   ├─ profile_presentation.dart ARGB helpers, polarity colours, WCAG ratio
+   ├─ profile_presentation.dart Polarity colours, reader chrome theme. The
+   │                            ARGB helpers and WCAG maths it used to hold
+   │                            live in rsvp_engine, so they run in a browser
    ├─ sign_in_screen.dart      Sign in or register, always skippable
    └─ paste_reader_screen.dart Read arbitrary pasted text
 ```
+
+App chrome and the reading surface are themed separately and on purpose.
+`theme/` builds the app around the books from a neutral ramp plus one
+accent the reader picks; the reading surface takes its colours from the
+active reading profile, and `readerChromeTheme` seeds from its own fixed
+neutral so the app accent cannot reach it.
 
 After changing `data/database.dart`, regenerate:
 

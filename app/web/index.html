@@ -31,6 +31,31 @@
 
   <title>hereader</title>
   <link rel="manifest" href="manifest.json">
+
+  <!--
+    The colour behind the loader, before Flutter has painted anything.
+
+    Without this the browser paints white while the engine, the WASM SQLite
+    module and the OPFS handle come up, so a dark-theme device flashes white
+    on every cold start. It does not fix a start that hangs — the startup
+    failure screen is what says something went wrong — but it stops a slow
+    one from looking like a dead page.
+
+    Follows the browser's own preference rather than the reader's stored
+    theme: that setting lives in OPFS, behind the engine this markup is
+    waiting for. A reader who chose Light on a dark-preference device still
+    sees a dark loader for a moment.
+
+    Both values are `surface` from `app/lib/theme/app_colors.dart`.
+    `app/test/web_shell_colors_test.dart` fails if they drift apart.
+  -->
+  <meta name="color-scheme" content="light dark">
+  <style>
+    html, body { margin: 0; padding: 0; background-color: #FBFBFC; }
+    @media (prefers-color-scheme: dark) {
+      html, body { background-color: #121416; }
+    }
+  </style>
 </head>
 <body>
   <!--

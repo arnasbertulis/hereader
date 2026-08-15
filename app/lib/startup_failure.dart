@@ -24,10 +24,11 @@ class StartupFailure extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Hereader',
-      // Fixed at the default accent deliberately: this screen renders from
-      // the catch in _start(), before appearance preferences (PR 4) exist
-      // to read, and has to be able to render even when the database read
-      // that would supply a stored preference is what failed.
+      // Fixed at the default accent and platform brightness deliberately.
+      // The reader's stored appearance is read inside the try this screen
+      // is the catch for, and a database that will not open is the failure
+      // it was written for, so the one screen that has to render is the one
+      // that reads nothing.
       theme: appTheme(brightness: Brightness.light),
       darkTheme: appTheme(brightness: Brightness.dark),
       themeMode: ThemeMode.system,
