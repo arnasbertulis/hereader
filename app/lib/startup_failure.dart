@@ -18,11 +18,7 @@ class StartupFailure extends StatelessWidget {
   final Object error;
   final VoidCallback onRetry;
 
-  const StartupFailure({
-    super.key,
-    required this.error,
-    required this.onRetry,
-  });
+  const StartupFailure({super.key, required this.error, required this.onRetry});
 
   @override
   Widget build(BuildContext context) {
