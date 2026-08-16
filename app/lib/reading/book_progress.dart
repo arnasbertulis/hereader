@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
 import '../theme/app_tokens.dart';
@@ -35,6 +36,39 @@ String semanticsForBook(BookSummary book) {
   }
 
   return <String>[book.title, ?book.author, place].join(', ');
+}
+
+/// How much of the book is left, in the reader's own pacing.
+///
+/// One line for the tile on Home, and null when nothing can honestly be
+/// said: a book whose `wordCount` predates the column reports zero, and
+/// elicited pacing has no duration at all, so the caller falls back to
+/// [progressOf]'s words rather than printing a figure nobody can stand
+/// behind.
+///
+/// A book never opened is estimated whole. `tokenIndex` is null there, and
+/// zero tokens read is what that means for this question, unlike the
+/// question [progressOf] answers.
+String? remainingLabel(BookSummary book, PacingConfig pacing) {
+  if (book.wordCount <= 0) return null;
+
+  final remaining = book.wordCount - (book.tokenIndex ?? 0);
+  if (remaining <= 0) return null;
+
+  final left = remainingReadingTime(
+    remainingTokens: remaining,
+    config: pacing,
+  );
+  if (left == null) return '$remaining words left';
+
+  final minutes = left.inMinutes;
+  if (minutes < 1) return 'Under a minute left';
+  if (minutes < 60) return '$minutes min left';
+
+  final hours = minutes ~/ 60;
+  final rest = minutes % 60;
+
+  return rest == 0 ? '$hours h left' : '$hours h $rest min left';
 }
 
 /// The bar and the percentage, or the words that stand in for them.

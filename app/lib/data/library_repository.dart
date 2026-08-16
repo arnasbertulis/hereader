@@ -789,6 +789,34 @@ class LibraryRepository {
     return Presets.standard;
   }
 
+  /// [activeProfile], re-read whenever the answer could have changed.
+  ///
+  /// The pointer is a preference and the profile it names is a row, so a
+  /// stream over either one alone goes stale on the other: choosing a
+  /// different profile writes the preference, and editing the active
+  /// profile's pacing writes the row. The join is here for the tables it
+  /// names rather than for the columns it selects — drift invalidates a
+  /// query stream when any table it reads is written — and the row itself
+  /// is discarded, because a built-in preset has no row to return.
+  ///
+  /// Emits on any write to either table rather than only on a change to
+  /// this profile. Both reads behind it are indexed lookups, and a filter
+  /// would need an equality [ReadingProfile] does not define.
+  Stream<ReadingProfile> watchActiveProfile() {
+    final pointer = _db.select(_db.preferences)
+      ..where((p) => p.key.equals(activeProfileKey));
+
+    final query = pointer.join([
+      leftOuterJoin(
+        _db.storedProfiles,
+        _db.storedProfiles.id.equalsExp(_db.preferences.value),
+        useColumns: false,
+      ),
+    ]);
+
+    return query.watch().asyncMap((_) => activeProfile());
+  }
+
   Future<void> _clearActiveProfile() => (_db.delete(
     _db.preferences,
   )..where((p) => p.key.equals(activeProfileKey))).go();

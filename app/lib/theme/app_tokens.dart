@@ -52,11 +52,53 @@ abstract final class AppNav {
   static const double barHeight = 64;
 }
 
-/// The one line weight surfaces are separated by, in place of elevation or
-/// shadow. See section 2 of the UI brief: shadows are also a performance
-/// cost, since blur rasterises on the main thread until COOP/COEP and
-/// `--wasm` ship.
+/// The one line weight surfaces are separated by, in place of elevation.
+/// See section 2 of the UI brief. [AppShadow] is the single exception and
+/// says why.
 abstract final class AppHairline {
   static const double width = 1;
   static const double widthHighContrast = 2;
+}
+
+/// The one shadow in the app, under Home's continue tile.
+///
+/// Everything else separates surfaces with a hairline, for the reason
+/// [AppHairline] gives. This is the exception because that tile is the only
+/// element in the app that sits alone in open space with nothing to align
+/// to, and a line under an object that is not against anything does not
+/// seat it.
+///
+/// The cost is real but small: a `BoxShadow` on a rounded rectangle takes
+/// Skia's blurred-shape path rather than rasterising a layer, which is what
+/// makes `BackdropFilter` the thing worth avoiding on this target. One
+/// shadow, on one widget, on one screen.
+///
+/// Two opacities rather than one colour. A shadow is a hole in the light,
+/// and a dark surface has less light to take away, so the same alpha that
+/// reads as a soft edge on a light background is invisible on a dark one.
+///
+/// Two layers rather than one, and both offset down far enough to clear the
+/// tile's top edge. Light in this app comes from above, so the top of an
+/// object catches it and casts nothing, the sides catch the blur alone, and
+/// the bottom takes the offset and the blur together. A shadow drawn evenly
+/// around all four edges is a glow, and it reads as one.
+///
+/// The ambient layer is wide and soft and does the seating. The contact
+/// layer is tight and sits just under the bottom edge, which is what makes
+/// an object look like it is resting on something rather than hovering over
+/// it.
+abstract final class AppShadow {
+  static const double ambientBlur = 40;
+  static const double ambientSpread = -8;
+  static const double ambientDy = 18;
+
+  static const double contactBlur = 14;
+  static const double contactSpread = -4;
+  static const double contactDy = 8;
+
+  static const double ambientOpacityLight = 0.26;
+  static const double ambientOpacityDark = 0.72;
+
+  static const double contactOpacityLight = 0.20;
+  static const double contactOpacityDark = 0.55;
 }

@@ -5,10 +5,9 @@ import 'package:epub_reader/epub_reader.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import 'package:rsvp_engine/rsvp_engine.dart';
+
 import '../data/library_repository.dart';
-import '../sync/api_client.dart';
-import '../sync/sign_in_screen.dart';
-import '../sync/sync_button.dart';
 import '../sync/sync_engine.dart';
 import '../theme/app_tokens.dart';
 import 'book_cover.dart';
@@ -18,16 +17,30 @@ import 'library_book.dart';
 import 'paste_reader_screen.dart';
 
 /// How many books the recent row shows, beyond the one in the continue card.
-const int _recentCount = 6;
+const int _recentCount = 4;
 
-/// Cover width in the recent row. Narrower than a library tile: this row
-/// exists to get the reader back into a book they were in, not to browse.
-const double _recentCoverWidth = 96;
+/// Widest the column of content gets. Past this the screen stops growing
+/// and centres, because a 1600px-wide continue tile is a banner.
+const double _maxContentWidth = 720;
 
-/// Unscaled height of the title line under a recent cover, plus its gap.
-/// Scaled with the reader's text size, since a fixed row height clips the
-/// moment text grows.
-const double _recentTextHeight = 44;
+/// Width of the continue tile.
+///
+/// Fixed rather than a share of the screen. The cover runs the tile's full
+/// width and is half again as tall, so every pixel of width costs one and a
+/// half of height, and a tile that tracked a desktop window would be a
+/// hero image.
+const double _continueTileMaxWidth = 252;
+
+/// Height of the progress bar along the tile's bottom edge.
+const double _continueBarHeight = 4;
+
+/// Identifies the continue tile for tests.
+///
+/// The tile carries one action and no button label, so a test asking which
+/// book Home picked has nothing else to hold. Matching on 'Continue' was
+/// doing that by accident: the label answers whether the book was started,
+/// not which book is in the tile.
+const Key homeContinueTileKey = Key('home-continue-tile');
 
 /// The first screen, and the one that answers "where was I".
 ///
@@ -38,7 +51,11 @@ const double _recentTextHeight = 44;
 class HomeScreen extends StatefulWidget {
   final LibraryRepository repository;
   final SyncEngine sync;
-  final ApiClient api;
+
+  /// Switches to the Library tab. Home shows four recent books and no
+  /// scroll, so the fifth has to go somewhere, and the screen that lists
+  /// every book already exists.
+  final VoidCallback onSeeAll;
 
   /// Stamps anything the paste screen writes. Taken as a function rather
   /// than reached through [sync], so a widget test can supply one without
@@ -49,7 +66,7 @@ class HomeScreen extends StatefulWidget {
     super.key,
     required this.repository,
     required this.sync,
-    required this.api,
+    required this.onSeeAll,
     required this.issueStamp,
   });
 
@@ -70,10 +87,36 @@ class _HomeScreenState extends State<HomeScreen> {
 
   LibraryRepository get _repo => widget.repository;
 
+  /// Pacing of the profile the reader has active, for the time estimate.
+  ///
+  /// Watched rather than read once. The profile is changed in two places
+  /// this screen never hears from otherwise: the sheet on the reading
+  /// screen, and Settings, which is a sibling tab kept alive beside this
+  /// one. A figure in minutes drawn from a profile the reader has just
+  /// replaced is wrong in the one way an estimate must not be, which is
+  /// quietly.
+  ///
+  /// Null until the first emission, and the tile falls back to the words
+  /// `progressOf` supplies for that frame rather than showing a figure it
+  /// would immediately correct.
+  PacingConfig? _pacing;
+
+  StreamSubscription<ReadingProfile>? _profile;
+
   @override
   void initState() {
     super.initState();
     _opener = BookOpener(repository: widget.repository, sync: widget.sync);
+
+    _profile = _repo.watchActiveProfile().listen((profile) {
+      if (mounted) setState(() => _pacing = profile.pacing);
+    });
+  }
+
+  @override
+  void dispose() {
+    _profile?.cancel();
+    super.dispose();
   }
 
   Future<Uint8List?> _coverOf(String bookId) =>
@@ -138,18 +181,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _signIn() async {
-    final signedIn = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => SignInScreen(api: widget.api)),
-    );
-
-    if (signedIn == true) unawaited(widget.sync.syncNow());
-
-    // The account strip reads `isSignedIn` directly rather than a stream, so
-    // it needs telling that the answer changed.
-    if (mounted) setState(() {});
-  }
-
   void _report(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(
@@ -160,66 +191,115 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('hereader'),
-        actions: [
-          SyncButton(sync: widget.sync, api: widget.api, onSignIn: _signIn),
-        ],
-      ),
-      body: StreamBuilder<List<BookSummary>>(
-        stream: _repo.watchLibrary(),
-        builder: (context, snapshot) {
-          final books = snapshot.data;
-          if (books == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      // No app bar and no controls in the corners. The navigation names
+      // this tab, and the two icons that were up here were a sync readout
+      // nobody opens Home to check and a paste entry the Library's own add
+      // menu takes over.
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Expanded(
+              child: StreamBuilder<List<BookSummary>>(
+                stream: _repo.watchLibrary(),
+                builder: (context, snapshot) {
+                  final books = snapshot.data;
+                  if (books == null) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
 
-          final recent = byLastRead(books);
+                  final recent = byLastRead(books);
 
-          return ListView(
-            padding: EdgeInsets.symmetric(
-              horizontal: _screenPadding(context),
-              vertical: AppSpacing.lg,
-            ),
-            children: [
-              if (recent.isEmpty)
-                _NothingOpenYet(
-                  onImport: _busy ? null : _import,
-                  onPaste: _busy ? null : _openPaste,
-                )
-              else ...[
-                const _SectionLabel('Continue reading'),
-                const SizedBox(height: AppSpacing.sm),
-                _ContinueCard(
-                  book: recent.first,
-                  cover: _coverOf(recent.first.id),
-                  busy: _busy,
-                  onOpen: _busy ? null : _open,
-                ),
-                // Between here and Recent sits the stats strip section 7.1
-                // reserves. Nothing renders there until there are stats
-                // worth reading; a box explaining what will eventually
-                // arrive is the placeholder that section rules out.
-                if (recent.length > 1) ...[
-                  const SizedBox(height: AppSpacing.xxl),
-                  const _SectionLabel('Recent'),
-                  const SizedBox(height: AppSpacing.sm),
-                  _RecentRow(
-                    books: recent.skip(1).take(_recentCount).toList(),
-                    coverOf: _coverOf,
-                    onOpen: _busy ? null : _open,
-                  ),
-                ],
-              ],
-              const SizedBox(height: AppSpacing.xxl),
-              _AccountStrip(
-                signedIn: widget.api.auth.isSignedIn,
-                onSignIn: _signIn,
-                onSyncNow: widget.sync.syncNow,
+                  if (recent.isEmpty) {
+                    // Centred rather than laid out from the top. There is
+                    // one thing on this screen and no reason for it to sit
+                    // under an edge with the rest of the window empty.
+                    // Still scrollable: nothing clamps the reader's text
+                    // size, so two buttons and a sentence can outgrow a
+                    // short window.
+                    return Center(
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.all(_screenPadding(context)),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            maxWidth: _maxContentWidth,
+                          ),
+                          child: _NothingOpenYet(
+                            onImport: _busy ? null : _import,
+                            onPaste: _busy ? null : _openPaste,
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  return Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: _maxContentWidth,
+                      ),
+                      child: ListView(
+                        // Well off the top. The tile is the only thing up
+                        // there and it reads as pinned to the status bar
+                        // without this.
+                        padding: EdgeInsets.fromLTRB(
+                          _screenPadding(context),
+                          AppSpacing.xxxl,
+                          _screenPadding(context),
+                          AppSpacing.md,
+                        ),
+                        children: [
+                          _ContinueSection(
+                            book: recent.first,
+                            cover: _coverOf(recent.first.id),
+                            pacing: _pacing,
+                            busy: _busy,
+                            onOpen: _busy ? null : _open,
+                          ),
+                          // Between here and Recent sits the stats strip
+                          // section 7.1 reserves. Nothing renders there
+                          // until there are stats worth reading; a box
+                          // explaining what will eventually arrive is the
+                          // placeholder that section rules out.
+                          if (recent.length > 1) ...[
+                            const SizedBox(height: AppSpacing.xxl),
+                            Row(
+                              children: [
+                                const Expanded(
+                                  child: _SectionLabel('Recently read'),
+                                ),
+                                // Appears only when there is a book the row
+                                // cannot show. An arrow that is always
+                                // there promises more than four whether or
+                                // not there are more.
+                                if (recent.length > _recentCount + 1)
+                                  IconButton(
+                                    onPressed: widget.onSeeAll,
+                                    icon: const Icon(Icons.arrow_forward),
+                                    tooltip: 'All books',
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: AppSpacing.sm),
+                            _RecentRow(
+                              books: recent
+                                  .skip(1)
+                                  .take(_recentCount)
+                                  .toList(),
+                              coverOf: _coverOf,
+                              onOpen: _busy ? null : _open,
+                            ),
+                          ],
+                          const SizedBox(height: AppSpacing.xxl),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
-            ],
-          );
-        },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -269,20 +349,68 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
-/// The book the reader is in, with the way back into it.
+/// The tile, held to one width.
 ///
-/// The card itself does not take a tap. A card that opens the book with a
-/// button on it that also opens the book gives one action two targets, and
-/// the outer one swallows the reader's aim for the inner.
-class _ContinueCard extends StatelessWidget {
+/// No heading over it. The tile shows a cover, a title, an author, where
+/// the reader is and how much is left, which is the section's subject
+/// stated five times already.
+class _ContinueSection extends StatelessWidget {
   final BookSummary book;
   final Future<Uint8List?> cover;
+  final PacingConfig? pacing;
   final bool busy;
   final ValueChanged<BookSummary>? onOpen;
 
-  const _ContinueCard({
+  const _ContinueSection({
     required this.book,
     required this.cover,
+    required this.pacing,
+    required this.busy,
+    required this.onOpen,
+  });
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: _continueTileMaxWidth),
+      child: _ContinueTile(
+        book: book,
+        cover: cover,
+        pacing: pacing,
+        busy: busy,
+        onOpen: onOpen,
+      ),
+    ),
+  );
+}
+
+/// The book the reader is in, with the way back into it.
+///
+/// One tile, and the tap is the tile. The cover runs the tile's full width
+/// and reaches its top edge, the title and author sit under it on the left,
+/// and the way in sits opposite them on the right. Under the author is one
+/// dim line saying how much of the book is left, which is the question a
+/// reader picking a book up again actually has.
+///
+/// The glyph is not a button. A tile that opens the book, carrying a
+/// control that opens the book, gives one action two targets, and the outer
+/// one swallows the reader's aim for the inner. Drawing the glyph and
+/// taking the tap on the tile keeps the target the size of the tile.
+///
+/// Accent appears once, on the filled part of the bar. The glyph stays
+/// neutral: two accented marks inside one container and neither of them
+/// reads as the important one.
+class _ContinueTile extends StatelessWidget {
+  final BookSummary book;
+  final Future<Uint8List?> cover;
+  final PacingConfig? pacing;
+  final bool busy;
+  final ValueChanged<BookSummary>? onOpen;
+
+  const _ContinueTile({
+    required this.book,
+    required this.cover,
+    required this.pacing,
     required this.busy,
     required this.onOpen,
   });
@@ -292,64 +420,207 @@ class _ContinueCard extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final hairline = theme.dividerTheme.thickness ?? AppHairline.width;
+    final dark = theme.brightness == Brightness.dark;
+    final progress = progressOf(book);
 
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppRadii.md),
-        border: Border.all(color: scheme.outlineVariant, width: hairline),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          BookCoverFuture(
-            bookId: book.id,
-            title: book.title,
-            cover: cover,
-            width: 72,
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
+    // The estimate where there is one, and the words that stand in for a
+    // bar where there is not. Both answer "how far in am I"; neither is
+    // worth its own line, and a book whose word count predates the column
+    // falls back rather than showing nothing.
+    final config = pacing;
+    final remaining = config == null ? null : remainingLabel(book, config);
+
+    return Semantics(
+      button: true,
+      label: semanticsForBook(book),
+      excludeSemantics: true,
+      child: Container(
+        key: homeContinueTileKey,
+        // Clipped by the container that draws the border, rather than by a
+        // ClipRRect inside it. The bar runs to both bottom corners and has
+        // to take their curve; the border draws over the clip, so it stays
+        // an unbroken hairline around the whole shape.
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          // Opaque, and the same colour as the screen behind it. The fill
+          // is not there to be seen: a BoxShadow paints a blurred copy of
+          // the shape underneath the box, so a transparent tile shows its
+          // own shadow through its middle.
+          color: scheme.surface,
+          borderRadius: BorderRadius.circular(AppRadii.md),
+          border: Border.all(color: scheme.outlineVariant, width: hairline),
+          boxShadow: [
+            BoxShadow(
+              color: scheme.shadow.withValues(
+                alpha: dark
+                    ? AppShadow.ambientOpacityDark
+                    : AppShadow.ambientOpacityLight,
+              ),
+              blurRadius: AppShadow.ambientBlur,
+              spreadRadius: AppShadow.ambientSpread,
+              offset: const Offset(0, AppShadow.ambientDy),
+            ),
+            BoxShadow(
+              color: scheme.shadow.withValues(
+                alpha: dark
+                    ? AppShadow.contactOpacityDark
+                    : AppShadow.contactOpacityLight,
+              ),
+              blurRadius: AppShadow.contactBlur,
+              spreadRadius: AppShadow.contactSpread,
+              offset: const Offset(0, AppShadow.contactDy),
+            ),
+          ],
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: onOpen == null ? null : () => onOpen!(book),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  book.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyLarge,
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final width = constraints.maxWidth;
+
+                    // The cover runs edge to edge and flush to the top, so
+                    // the tile's own clip gives it the top corners. Its
+                    // bottom corners are cropped off: BookCoverFuture
+                    // rounds all four, and a curve there would leave the
+                    // tile's surface showing in two notches against sides
+                    // that are otherwise straight.
+                    final height = width * kCoverAspect;
+
+                    return ClipRect(
+                      child: Align(
+                        alignment: Alignment.topCenter,
+                        heightFactor: (height - AppRadii.md) / height,
+                        child: BookCoverFuture(
+                          bookId: book.id,
+                          title: book.title,
+                          cover: cover,
+                          width: width,
+                        ),
+                      ),
+                    );
+                  },
                 ),
-                if (book.author != null)
-                  Text(
-                    book.author!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: scheme.onSurfaceVariant,
-                    ),
+                Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              book.title,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleMedium,
+                            ),
+                            if (book.author != null)
+                              Text(
+                                book.author!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                            const SizedBox(height: AppSpacing.xs),
+                            Text(
+                              remaining ?? progress.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      _OpenGlyph(busy: busy, enabled: onOpen != null),
+                    ],
                   ),
-                const SizedBox(height: AppSpacing.sm),
-                BookProgressLine(book: book),
-                const SizedBox(height: AppSpacing.md),
-                FilledButton(
-                  onPressed: onOpen == null ? null : () => onOpen!(book),
-                  child: busy
-                      // The spinner sits inside the button rather than over
-                      // the screen, so the thing that is working is the
-                      // thing that was tapped.
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            semanticsLabel: 'Opening',
-                          ),
-                        )
-                      : Text(book.started ? 'Continue' : 'Start reading'),
                 ),
+                _ProgressEdge(value: progress.value),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The mark opposite the title, and where the spinner goes while a book
+/// opens.
+///
+/// Sized to a button without being one, so the tile's own tap target keeps
+/// its full area and the glyph still reads as somewhere to press.
+class _OpenGlyph extends StatelessWidget {
+  final bool busy;
+  final bool enabled;
+
+  const _OpenGlyph({required this.busy, required this.enabled});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final colour = enabled ? scheme.onSurface : scheme.onSurfaceVariant;
+
+    return SizedBox.square(
+      dimension: 40,
+      child: Center(
+        child: busy
+            ? const SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(Icons.play_circle_outline, size: 32, color: colour),
+      ),
+    );
+  }
+}
+
+/// The tile's bottom edge, drawn as how far through the book the reader is.
+///
+/// Built from two boxes rather than a `LinearProgressIndicator`. Material 3
+/// draws a stop indicator and a gap before the head of the bar, which reads
+/// as damage once the bar is an edge of something rather than a control
+/// inside it.
+class _ProgressEdge extends StatelessWidget {
+  /// Fraction read, or null when the book has no measurable place.
+  final double? value;
+
+  const _ProgressEdge({required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final fraction = value;
+
+    return SizedBox(
+      height: _continueBarHeight,
+      child: Stack(
+        children: [
+          // The track runs the full width whether or not there is a
+          // fraction to draw on it, so the edge of the tile does not appear
+          // and disappear with the reader's progress.
+          Positioned.fill(
+            child: ColoredBox(color: scheme.surfaceContainerHighest),
+          ),
+          if (fraction != null)
+            Positioned.fill(
+              child: FractionallySizedBox(
+                alignment: Alignment.centerLeft,
+                widthFactor: fraction.clamp(0.0, 1.0),
+                child: ColoredBox(color: scheme.primary),
+              ),
+            ),
         ],
       ),
     );
@@ -370,21 +641,24 @@ class _RecentRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scaler = MediaQuery.textScalerOf(context);
-
-    return SizedBox(
-      height:
-          _recentCoverWidth * kCoverAspect + scaler.scale(_recentTextHeight),
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: books.length,
-        separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.md),
-        itemBuilder: (context, i) => _RecentTile(
-          book: books[i],
-          cover: coverOf(books[i].id),
-          onOpen: onOpen,
-        ),
-      ),
+    // Four columns, always, whether or not there are four books. A row that
+    // sized itself to what it had would draw one enormous cover for a
+    // library of two and shrink as the reader imported more.
+    return Row(
+      spacing: AppSpacing.md,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < _recentCount; i++)
+          Expanded(
+            child: i < books.length
+                ? _RecentTile(
+                    book: books[i],
+                    cover: coverOf(books[i].id),
+                    onOpen: onOpen,
+                  )
+                : const SizedBox.shrink(),
+          ),
+      ],
     );
   }
 }
@@ -411,26 +685,26 @@ class _RecentTile extends StatelessWidget {
       child: InkWell(
         onTap: onOpen == null ? null : () => onOpen!(book),
         borderRadius: BorderRadius.circular(AppRadii.md),
-        child: SizedBox(
-          width: _recentCoverWidth,
-          child: Column(
+        child: LayoutBuilder(
+          builder: (context, constraints) => Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               BookCoverFuture(
                 bookId: book.id,
                 title: book.title,
                 cover: cover,
-                width: _recentCoverWidth,
+                width: constraints.maxWidth,
               ),
               const SizedBox(height: AppSpacing.xs),
-              // One line, not two. The row scrolls sideways and a second
-              // line of title on every tile costs the same height whether
-              // the titles need it or not.
+              // One line, not two. Four columns on a phone truncate most
+              // titles either way, and the cover is what the reader
+              // recognises a book they have read by.
               Text(
                 book.title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelMedium,
+                style: theme.textTheme.labelSmall,
               ),
             ],
           ),
@@ -467,86 +741,25 @@ class _NothingOpenYet extends StatelessWidget {
           style: theme.textTheme.bodyMedium,
         ),
         const SizedBox(height: AppSpacing.xl),
+        // No glyphs on either button. A plus and a clipboard at button size
+        // are the two heaviest marks on an otherwise empty screen, and the
+        // labels already say what the buttons do.
         Center(
-          child: FilledButton.icon(
+          child: FilledButton(
             onPressed: onImport,
             style: FilledButton.styleFrom(minimumSize: const Size(200, 56)),
-            icon: const Icon(Icons.add),
-            label: const Text('Add a book'),
+            child: const Text('Add a book'),
           ),
         ),
         const SizedBox(height: AppSpacing.sm),
         Center(
-          child: TextButton.icon(
+          child: TextButton(
             onPressed: onPaste,
             style: TextButton.styleFrom(minimumSize: const Size(200, 48)),
-            icon: const Icon(Icons.content_paste),
-            label: const Text('Read pasted text'),
+            child: const Text('Read pasted text'),
           ),
         ),
       ],
-    );
-  }
-}
-
-/// The invitation to sync, or the state of it once there is an account.
-///
-/// Signed out this is an invitation, not a gate: everything on this screen
-/// works without an account, and the card says what an account adds rather
-/// than what it unlocks.
-///
-/// Signed in it reports and offers a manual run. No last-synced time: this
-/// strip is the invitation, and Settings has the Sync section that answers
-/// when the last run finished. The claim in the first version of this
-/// comment, that no timestamp existed to show, was wrong — `SyncState`
-/// carries `lastSyncedAt` and the repository stores
-/// `SyncEngine.lastSyncedAtKey`.
-class _AccountStrip extends StatelessWidget {
-  final bool signedIn;
-  final VoidCallback onSignIn;
-  final Future<void> Function() onSyncNow;
-
-  const _AccountStrip({
-    required this.signedIn,
-    required this.onSignIn,
-    required this.onSyncNow,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final hairline = theme.dividerTheme.thickness ?? AppHairline.width;
-
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppRadii.md),
-        border: Border.all(color: scheme.outlineVariant, width: hairline),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              signedIn
-                  ? 'Your place syncs across your devices.'
-                  : 'Sign in to sync your place across devices.',
-              style: theme.textTheme.bodyMedium,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          if (signedIn)
-            TextButton(
-              onPressed: () => unawaited(onSyncNow()),
-              child: const Text('Sync now'),
-            )
-          else
-            FilledButton.tonal(
-              onPressed: onSignIn,
-              child: const Text('Sign in'),
-            ),
-        ],
-      ),
     );
   }
 }
