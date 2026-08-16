@@ -495,10 +495,12 @@ class _NothingOpenYet extends StatelessWidget {
 /// works without an account, and the card says what an account adds rather
 /// than what it unlocks.
 ///
-/// Signed in it reports and offers a manual run. No last-synced time yet:
-/// `SyncState` carries a status and a message, not a timestamp, and a time
-/// invented on this screen from when the status last changed would be a
-/// different fact wearing the same words.
+/// Signed in it reports and offers a manual run. No last-synced time: this
+/// strip is the invitation, and Settings has the Sync section that answers
+/// when the last run finished. The claim in the first version of this
+/// comment, that no timestamp existed to show, was wrong — `SyncState`
+/// carries `lastSyncedAt` and the repository stores
+/// `SyncEngine.lastSyncedAtKey`.
 class _AccountStrip extends StatelessWidget {
   final bool signedIn;
   final VoidCallback onSignIn;

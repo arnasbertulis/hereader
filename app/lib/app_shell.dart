@@ -126,6 +126,8 @@ class _AppShellState extends State<AppShell> {
           repository: widget.repository,
           issueStamp: widget.sync.issueStamp,
           appearance: widget.appearance,
+          api: widget.api,
+          sync: widget.sync,
         ),
       ],
     );
