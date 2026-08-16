@@ -66,6 +66,45 @@ class BookCoverImage extends StatelessWidget {
   }
 }
 
+
+/// A book's cover once its bytes have been read.
+///
+/// Takes a future rather than bytes, so the caller decides how long a read
+/// is remembered. The library memoizes one future per book because a grid
+/// rebuilds its tiles on every scroll and text-scale change; Home keeps a
+/// much smaller map for the few books it draws.
+class BookCoverFuture extends StatelessWidget {
+  final String bookId;
+  final String title;
+  final Future<Uint8List?> cover;
+  final double width;
+
+  const BookCoverFuture({
+    super.key,
+    required this.bookId,
+    required this.title,
+    required this.cover,
+    required this.width,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List?>(
+      future: cover,
+      builder: (context, snapshot) => BookCoverImage(
+        bookId: bookId,
+        title: title,
+        width: width,
+        // Null while the read is in flight, which draws the generated face
+        // and then replaces it. No spinner: a blob read off a local database
+        // finishes inside a frame or two, and a spinner per tile would be
+        // more motion than the thing it is reporting on.
+        bytes: snapshot.data,
+      ),
+    );
+  }
+}
+
 /// The stand-in cover: the title on a neutral card under a coloured band.
 ///
 /// The band is the only place in the app where a colour comes from anything
