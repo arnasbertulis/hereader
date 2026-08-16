@@ -53,10 +53,7 @@ void main() {
 
     test('nothing left takes no time', () {
       expect(
-        remainingReadingTime(
-          remainingTokens: 0,
-          config: const PacingConfig(),
-        ),
+        remainingReadingTime(remainingTokens: 0, config: const PacingConfig()),
         Duration.zero,
       );
     });
