@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'data/library_repository.dart';
+import 'reading/home_screen.dart';
 import 'reading/library_screen.dart';
 import 'reading/settings_screen.dart';
 import 'sync/api_client.dart';
@@ -44,8 +45,9 @@ class AppShell extends StatefulWidget {
   /// tap their way to the tab they are about to assert on.
   final int initialTab;
 
-  static const int libraryTab = 0;
-  static const int settingsTab = 1;
+  static const int homeTab = 0;
+  static const int libraryTab = 1;
+  static const int settingsTab = 2;
 
   const AppShell({
     super.key,
@@ -53,7 +55,7 @@ class AppShell extends StatefulWidget {
     required this.sync,
     required this.api,
     required this.appearance,
-    this.initialTab = libraryTab,
+    this.initialTab = homeTab,
   });
 
   @override
@@ -61,14 +63,18 @@ class AppShell extends StatefulWidget {
 }
 
 class _AppShellState extends State<AppShell> {
-  /// Two tabs, not the three the UI brief describes.
+  /// Home first, then Library, then Settings.
   ///
-  /// Home has no content until progress, covers and the continue card land.
-  /// A tab that renders an explanation of what will eventually be there is
-  /// the placeholder the brief rules out for Home's own stats strip, and it
-  /// would be the first screen anyone opening the live URL sees. The
-  /// destination is a list entry, so Home arrives by adding one.
+  /// Home leads because it answers the question a reader arrives with, which
+  /// is where they were rather than what they own. The shell shipped with
+  /// two entries and Home is the third, added here as one more item in this
+  /// list and one more key in [_digits].
   static const _destinations = <_Destination>[
+    _Destination(
+      icon: Icons.home_outlined,
+      selectedIcon: Icons.home,
+      label: 'Home',
+    ),
     _Destination(
       icon: Icons.menu_book_outlined,
       selectedIcon: Icons.menu_book,
@@ -81,11 +87,12 @@ class _AppShellState extends State<AppShell> {
     ),
   ];
 
-  /// `Ctrl+1` and `Ctrl+2`, indexed alongside the destinations so a new tab
-  /// gets its shortcut without a second list to keep in step.
+  /// `Ctrl+1` through `Ctrl+3`, indexed alongside the destinations so a new
+  /// tab gets its shortcut without a second list to keep in step.
   static const _digits = <LogicalKeyboardKey>[
     LogicalKeyboardKey.digit1,
     LogicalKeyboardKey.digit2,
+    LogicalKeyboardKey.digit3,
   ];
 
   late int _index = widget.initialTab;
@@ -103,6 +110,12 @@ class _AppShellState extends State<AppShell> {
           ? Duration.zero
           : AppMotion.state,
       children: [
+        HomeScreen(
+          repository: widget.repository,
+          sync: widget.sync,
+          api: widget.api,
+          issueStamp: widget.sync.issueStamp,
+        ),
         LibraryScreen(
           repository: widget.repository,
           sync: widget.sync,

@@ -8,10 +8,12 @@ import 'package:flutter/material.dart';
 import '../data/library_repository.dart';
 import '../sync/api_client.dart';
 import '../sync/sign_in_screen.dart';
+import '../sync/sync_button.dart';
 import '../sync/sync_engine.dart';
 import '../theme/app_tokens.dart';
 import 'book_cover.dart';
 import 'book_opener.dart';
+import 'book_progress.dart';
 import 'library_book.dart';
 import 'paste_reader_screen.dart';
 
@@ -217,7 +219,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               )
             : null,
         actions: [
-          _SyncButton(sync: widget.sync, api: widget.api, onSignIn: _signIn),
+          SyncButton(sync: widget.sync, api: widget.api, onSignIn: _signIn),
           IconButton(
             onPressed: _busy ? null : _openPaste,
             icon: const Icon(Icons.content_paste),
@@ -416,40 +418,6 @@ class _BookShelf extends StatelessWidget {
   }
 }
 
-/// What the reader is told about their place in a book.
-///
-/// Three answers, not one bar drawn three ways. A book at zero percent and a
-/// book whose progress is unknown look identical as an empty bar, and only
-/// one of them is a fact.
-({String label, double? value}) _progressOf(BookSummary book) {
-  final progress = book.progress;
-
-  if (progress != null) {
-    return (label: '${_percent(progress)}%', value: progress);
-  }
-  if (book.started) return (label: 'In progress', value: null);
-
-  return (label: 'Not started', value: null);
-}
-
-int _percent(double progress) => (progress * 100).round();
-
-/// What a screen reader says for a tile.
-String _semanticsFor(BookSummary book) {
-  final progress = book.progress;
-
-  final String place;
-  if (progress != null) {
-    place = '${_percent(progress)} percent read';
-  } else if (book.started) {
-    place = 'in progress';
-  } else {
-    place = 'not started';
-  }
-
-  return <String>[book.title, ?book.author, place].join(', ');
-}
-
 /// A book in the grid: cover, title, author, place.
 class _BookTile extends StatelessWidget {
   final BookSummary book;
@@ -476,7 +444,7 @@ class _BookTile extends StatelessWidget {
         // percentage separately it is four stops to learn one book.
         Semantics(
           button: true,
-          label: _semanticsFor(book),
+          label: semanticsForBook(book),
           excludeSemantics: true,
           child: InkWell(
             onTap: onOpen == null ? null : () => onOpen!(book),
@@ -484,7 +452,12 @@ class _BookTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _Cover(book: book, cover: cover, width: width),
+                BookCoverFuture(
+                  bookId: book.id,
+                  title: book.title,
+                  cover: cover,
+                  width: width,
+                ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   book.title,
@@ -502,7 +475,7 @@ class _BookTile extends StatelessWidget {
                     ),
                   ),
                 const SizedBox(height: AppSpacing.xs),
-                _ProgressLine(book: book),
+                BookProgressLine(book: book),
               ],
             ),
           ),
@@ -541,7 +514,7 @@ class _BookRow extends StatelessWidget {
         Expanded(
           child: Semantics(
             button: true,
-            label: _semanticsFor(book),
+            label: semanticsForBook(book),
             excludeSemantics: true,
             child: InkWell(
               onTap: onOpen == null ? null : () => onOpen!(book),
@@ -549,7 +522,12 @@ class _BookRow extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _Cover(book: book, cover: cover, width: 72),
+                  BookCoverFuture(
+                    bookId: book.id,
+                    title: book.title,
+                    cover: cover,
+                    width: 72,
+                  ),
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: Column(
@@ -571,7 +549,7 @@ class _BookRow extends StatelessWidget {
                             ),
                           ),
                         const SizedBox(height: AppSpacing.sm),
-                        _ProgressLine(book: book),
+                        BookProgressLine(book: book),
                       ],
                     ),
                   ),
@@ -581,70 +559,6 @@ class _BookRow extends StatelessWidget {
           ),
         ),
         _TileMenu(book: book, onRemove: onRemove),
-      ],
-    );
-  }
-}
-
-/// The cover, once its bytes have been read.
-class _Cover extends StatelessWidget {
-  final BookSummary book;
-  final Future<Uint8List?> cover;
-  final double width;
-
-  const _Cover({required this.book, required this.cover, required this.width});
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<Uint8List?>(
-      future: cover,
-      builder: (context, snapshot) => BookCoverImage(
-        bookId: book.id,
-        title: book.title,
-        width: width,
-        // Null while the read is in flight, which draws the generated face
-        // and then replaces it. No spinner: a blob read off a local database
-        // finishes inside a frame or two, and a spinner per tile would be
-        // more motion than the thing it is reporting on.
-        bytes: snapshot.data,
-      ),
-    );
-  }
-}
-
-/// The bar and the percentage, or the words that stand in for them.
-class _ProgressLine extends StatelessWidget {
-  final BookSummary book;
-
-  const _ProgressLine({required this.book});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final progress = _progressOf(book);
-
-    final label = Text(
-      progress.label,
-      style: theme.textTheme.labelSmall?.copyWith(
-        color: theme.colorScheme.onSurfaceVariant,
-        // Percentages that change as the reader moves should not shift the
-        // text beside them.
-        fontFeatures: const [FontFeature.tabularFigures()],
-      ),
-    );
-
-    if (progress.value == null) return label;
-
-    return Row(
-      children: [
-        Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadii.sm),
-            child: LinearProgressIndicator(value: progress.value, minHeight: 4),
-          ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        label,
       ],
     );
   }
@@ -684,77 +598,6 @@ class _TileMenu extends StatelessWidget {
           child: Icon(Icons.more_vert, size: 20, color: scheme.onSurface),
         ),
       ),
-    );
-  }
-}
-
-/// Sync state in the app bar, and the way in to signing in.
-///
-/// Deliberately quiet. Sync failing is not the reader's problem to solve
-/// mid-chapter, so nothing here interrupts; it reports and gets out of the
-/// way.
-class _SyncButton extends StatelessWidget {
-  final SyncEngine sync;
-  final ApiClient api;
-  final VoidCallback onSignIn;
-
-  const _SyncButton({
-    required this.sync,
-    required this.api,
-    required this.onSignIn,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<SyncState>(
-      stream: sync.state,
-      builder: (context, snapshot) {
-        if (!api.auth.isSignedIn) {
-          return IconButton(
-            onPressed: onSignIn,
-            icon: const Icon(Icons.cloud_off_outlined),
-            tooltip: 'Sign in to sync',
-          );
-        }
-
-        final status = snapshot.data?.status ?? SyncStatus.idle;
-
-        return switch (status) {
-          SyncStatus.syncing => const Padding(
-            padding: EdgeInsets.all(14),
-            child: SizedBox(
-              height: 20,
-              width: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                // Every other arm of this switch is a button with a
-                // tooltip. This one replaces the button while a sync runs,
-                // so without a label the control disappears from the
-                // semantics tree entirely rather than changing state.
-                semanticsLabel: 'Syncing',
-              ),
-            ),
-          ),
-          SyncStatus.offline => IconButton(
-            onPressed: sync.syncNow,
-            icon: const Icon(Icons.cloud_off),
-            tooltip: 'Offline. Changes are saved and will sync later.',
-          ),
-          SyncStatus.failed => IconButton(
-            onPressed: sync.syncNow,
-            icon: Icon(
-              Icons.error_outline,
-              color: Theme.of(context).colorScheme.error,
-            ),
-            tooltip: snapshot.data?.message ?? 'Sync failed. Tap to retry.',
-          ),
-          _ => IconButton(
-            onPressed: sync.syncNow,
-            icon: const Icon(Icons.cloud_done_outlined),
-            tooltip: 'Synced. Tap to sync now.',
-          ),
-        };
-      },
     );
   }
 }

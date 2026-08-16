@@ -1,6 +1,7 @@
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
 import 'package:app/main.dart';
+import 'package:app/reading/home_screen.dart';
 import 'package:app/reading/library_screen.dart';
 import 'package:app/reading/paste_reader_screen.dart';
 import 'package:app/reading/profile_edit_screen.dart';
@@ -15,6 +16,7 @@ import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:rsvp_engine/rsvp_engine.dart';
 
 /// Everything the app needs, wired against an in-memory database.
 ///
@@ -102,17 +104,17 @@ Future<void> _disposeTree(WidgetTester tester) async {
 }
 
 void main() {
-  testWidgets('launches into an empty library', (tester) async {
+  testWidgets('launches into home with nothing to continue', (tester) async {
     final harness = _Harness.create();
     addTearDown(harness.close);
 
     await tester.pumpWidget(harness.app);
 
-    expect(find.byType(LibraryScreen), findsOneWidget);
+    expect(find.byType(HomeScreen), findsOneWidget);
 
     // The library comes from a stream, so the first frame is a spinner.
     await tester.pumpAndSettle();
-    expect(find.text('No books yet'), findsOneWidget);
+    expect(find.text('Nothing open yet'), findsOneWidget);
 
     await _disposeTree(tester);
   });
@@ -132,10 +134,55 @@ void main() {
     await tester.pumpWidget(harness.app);
     await tester.pumpAndSettle();
 
+    // Home is the tab that shows first, so this is the continue card. The
+    // library is offstage behind it with the same book in its grid.
     expect(find.text('Romeo and Juliet'), findsOneWidget);
     expect(find.text('William Shakespeare'), findsOneWidget);
-    // The tile reports the reader's place now, not the book's length.
     expect(find.text('Not started'), findsOneWidget);
+    expect(
+      find.widgetWithText(FilledButton, 'Start reading'),
+      findsOneWidget,
+    );
+
+    await _disposeTree(tester);
+  });
+
+  testWidgets('home continues the book read last, not the one added last', (
+    tester,
+  ) async {
+    final harness = _Harness.create();
+    addTearDown(harness.close);
+
+    await harness.repository.addBook(
+      id: 'read-first',
+      title: 'Romeo and Juliet',
+      bytes: Uint8List.fromList([1]),
+      wordCount: 25000,
+    );
+    await harness.repository.addBook(
+      id: 'added-later',
+      title: 'Hamlet',
+      bytes: Uint8List.fromList([2]),
+      wordCount: 30000,
+    );
+
+    // Read the older import, which is the whole point of the ordering: the
+    // library would put Hamlet first and Home should not.
+    await harness.repository.savePosition(
+      bookId: 'read-first',
+      locator: Locator(blockId: 'b1', charOffset: 0, parserVersion: 1),
+      hlc: await _stamp(),
+      tokenIndex: 5000,
+    );
+
+    await tester.pumpWidget(harness.app);
+    await tester.pumpAndSettle();
+
+    // Continue rather than Start reading is what a started book gets, so
+    // one of them means the card picked the book with a position.
+    expect(find.widgetWithText(FilledButton, 'Continue'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Start reading'), findsNothing);
+    expect(find.text('20%'), findsOneWidget);
 
     await _disposeTree(tester);
   });
@@ -296,7 +343,8 @@ void main() {
     // A pushed route, not a tab. What this covers is a GlobalKey identity
     // change taking the Navigator's stack with it, and a tab never goes on
     // that stack. Settings used to be pushed and is one of the tabs now, so
-    // the paste screen stands in.
+    // the paste screen stands in. Home's empty state offers it, and the
+    // library's app bar is offstage behind Home.
     await tester.tap(find.byIcon(Icons.content_paste));
     await tester.pumpAndSettle();
 
@@ -334,10 +382,11 @@ void main() {
 
     expect(find.byType(SettingsScreen), findsOneWidget);
 
-    // Offstage rather than disposed. The library holds a drift subscription
-    // and a scroll offset that a rebuilt subtree would lose, which is the
-    // whole reason the tabs sit in a stack.
-    expect(find.byType(LibraryScreen), findsNothing);
+    // Offstage rather than disposed. Home holds a drift subscription and a
+    // scroll offset that a rebuilt subtree would lose, which is the whole
+    // reason the tabs sit in a stack.
+    expect(find.byType(HomeScreen), findsNothing);
+    expect(find.byType(HomeScreen, skipOffstage: false), findsOneWidget);
     expect(find.byType(LibraryScreen, skipOffstage: false), findsOneWidget);
 
     await _disposeTree(tester);
@@ -350,8 +399,10 @@ void main() {
     await tester.pumpWidget(harness.app);
     await tester.pumpAndSettle();
 
+    // Digit 3 rather than 2, since Home took the first slot and the
+    // shortcut list is indexed alongside the destinations.
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
 
@@ -408,5 +459,27 @@ void main() {
     expect(tester.takeException(), isNull);
 
     await _disposeTree(tester);
+  });
+
+  test('a book never opened is ordered by when it arrived', () {
+    final read = BookSummary(
+      id: 'read',
+      title: 'Read',
+      wordCount: 10,
+      importedAt: DateTime.utc(2026, 1, 1),
+      lastReadAt: DateTime.utc(2026, 1, 2),
+    );
+    final imported = BookSummary(
+      id: 'imported',
+      title: 'Imported',
+      wordCount: 10,
+      importedAt: DateTime.utc(2026, 1, 3),
+    );
+
+    // The import is newer than the reading, so it leads. Falling back to a
+    // null date instead would bury every book the reader has not opened
+    // under one they finished months ago.
+    expect(byLastRead([read, imported]).first.id, 'imported');
+    expect(byLastRead([imported, read]).first.id, 'imported');
   });
 }

@@ -24,6 +24,15 @@ class BookSummary {
   final Locator? position;
   final DateTime importedAt;
 
+  /// When the reader last saved a place in this book, or null when they
+  /// never have.
+  ///
+  /// Home orders on this and the library orders on [importedAt], which is
+  /// why both are carried rather than one date that means whichever the
+  /// caller assumed. A book with no position row has no reading date at all,
+  /// and Home falls back to the import rather than inventing one.
+  final DateTime? lastReadAt;
+
   /// How many tokens into the book the stored position is, when that is
   /// known. See ADR 0013: a hint for comparison and display, never something
   /// to navigate by.
@@ -37,6 +46,7 @@ class BookSummary {
     this.author,
     this.position,
     this.tokenIndex,
+    this.lastReadAt,
   });
 
   /// Whether the reader has opened this book.
@@ -158,6 +168,7 @@ class LibraryRepository {
         positions.charOffset,
         positions.parserVersion,
         positions.tokenIndex,
+        positions.updatedAt,
       ])
       ..orderBy([OrderingTerm.desc(table.importedAt)]);
 
@@ -179,6 +190,7 @@ class LibraryRepository {
                   parserVersion: row.read(positions.parserVersion)!,
                 ),
           tokenIndex: row.read(positions.tokenIndex),
+          lastReadAt: row.read(positions.updatedAt),
         );
       }).toList();
 
