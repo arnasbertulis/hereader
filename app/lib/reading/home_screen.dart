@@ -14,6 +14,7 @@ import '../theme/app_tokens.dart';
 import 'book_cover.dart';
 import 'book_opener.dart';
 import 'book_progress.dart';
+import 'library_book.dart';
 import 'paste_reader_screen.dart';
 
 /// How many books the recent row shows, beyond the one in the continue card.
