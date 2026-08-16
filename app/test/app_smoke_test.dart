@@ -134,7 +134,8 @@ void main() {
 
     expect(find.text('Romeo and Juliet'), findsOneWidget);
     expect(find.text('William Shakespeare'), findsOneWidget);
-    expect(find.text('25000 words'), findsOneWidget);
+    // The tile reports the reader's place now, not the book's length.
+    expect(find.text('Not started'), findsOneWidget);
 
     await _disposeTree(tester);
   });
