@@ -5,7 +5,9 @@ import 'package:app/reading/home_screen.dart';
 import 'package:app/reading/library_screen.dart';
 import 'package:app/reading/paste_reader_screen.dart';
 import 'package:app/reading/profile_edit_screen.dart';
+import 'package:app/reading/profiles_screen.dart';
 import 'package:app/reading/settings_screen.dart';
+import 'package:app/sync/last_synced.dart';
 import 'package:app/sync/api_client.dart';
 import 'package:app/sync/auth_store.dart';
 import 'package:app/sync/sync_engine.dart';
@@ -232,7 +234,7 @@ void main() {
     expect(button.onPressed, isNotNull);
   });
 
-  testWidgets('settings lists the presets and no profiles of the reader own', (
+  testWidgets('the profile list holds presets and none of the reader own', (
     tester,
   ) async {
     final harness = _Harness.create();
@@ -240,10 +242,9 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: SettingsScreen(
+        home: ProfilesScreen(
           repository: harness.repository,
           issueStamp: _stamp,
-          appearance: harness.appearance,
         ),
       ),
     );
@@ -265,10 +266,9 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: SettingsScreen(
+        home: ProfilesScreen(
           repository: harness.repository,
           issueStamp: _stamp,
-          appearance: harness.appearance,
         ),
       ),
     );
@@ -305,10 +305,9 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: SettingsScreen(
+        home: ProfilesScreen(
           repository: harness.repository,
           issueStamp: _stamp,
-          appearance: harness.appearance,
         ),
       ),
     );
@@ -459,6 +458,107 @@ void main() {
     expect(tester.takeException(), isNull);
 
     await _disposeTree(tester);
+  });
+
+  testWidgets('settings is an index of sections, not one long scroll', (
+    tester,
+  ) async {
+    final harness = _Harness.create();
+    addTearDown(harness.close);
+
+    await tester.pumpWidget(harness.app);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.tune_outlined));
+    await tester.pumpAndSettle();
+
+    for (final section in const [
+      'Account',
+      'Reading profiles',
+      'Appearance',
+      'Reading',
+      'Sync',
+      'About',
+    ]) {
+      expect(find.text(section), findsOneWidget);
+    }
+
+    // The row states where it leads rather than only naming a section.
+    expect(find.text('Not signed in'), findsOneWidget);
+
+    await _disposeTree(tester);
+  });
+
+  testWidgets('the profiles row pushes the list that used to be settings', (
+    tester,
+  ) async {
+    final harness = _Harness.create();
+    addTearDown(harness.close);
+
+    await tester.pumpWidget(harness.app);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.tune_outlined));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Reading profiles'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ProfilesScreen), findsOneWidget);
+    expect(find.text('Standard'), findsOneWidget);
+
+    await _disposeTree(tester);
+  });
+
+  test('the accent is named where the reader picked a named one', () {
+    expect(
+      describeAppearance(
+        AppearanceSettings(
+          themeMode: ThemeMode.dark,
+          accent: AppAccents.rust.color,
+          highContrast: false,
+        ),
+      ),
+      'Dark · Rust',
+    );
+
+    // A colour off the sliders belongs to no entry in the list, and the row
+    // says so rather than printing six hex digits at the reader.
+    expect(
+      describeAppearance(
+        AppearanceSettings(
+          themeMode: ThemeMode.light,
+          accent: const Color(0xFF123456),
+          highContrast: true,
+        ),
+      ),
+      'Light · Custom · High contrast',
+    );
+  });
+
+  test('a sync that has never run says so rather than reporting a time', () {
+    final now = DateTime.utc(2026, 5, 1, 12);
+
+    expect(describeLastSynced(null), 'Not synced on this device yet');
+    expect(
+      describeLastSynced(now.subtract(const Duration(seconds: 20)), now: now),
+      'Synced just now',
+    );
+    expect(
+      describeLastSynced(now.subtract(const Duration(minutes: 1)), now: now),
+      'Synced 1 minute ago',
+    );
+    expect(
+      describeLastSynced(now.subtract(const Duration(hours: 5)), now: now),
+      'Synced 5 hours ago',
+    );
+
+    // Devices disagree about the hour more often than anyone expects, and a
+    // stored time ahead of this clock should not read as the future.
+    expect(
+      describeLastSynced(now.add(const Duration(hours: 3)), now: now),
+      'Synced recently',
+    );
   });
 
   test('a book never opened is ordered by when it arrived', () {
