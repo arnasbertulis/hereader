@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'app_colors.dart';
 import 'app_tokens.dart';
 import 'app_typography.dart';
+import 'page_transitions.dart';
 
 /// Assembles a [ThemeData] for ordinary app chrome — Home, Library and
 /// Settings — from [buildScheme] and the component themes below.
@@ -151,12 +152,11 @@ ThemeData appTheme({
       ),
     ),
 
-    // Route transitions are section 10's job, not this PR's: a short fade
-    // plus a small scale, no shared-axis slide. That needs a custom
-    // PageTransitionsBuilder (or confirming which built-in one matches,
-    // once flutter analyze / a real SDK is available to check against) and
-    // belongs with the navigation shell in PR 6, not with the token
-    // definitions here. Left as the platform default deliberately rather
-    // than guessed at.
+    // A fade and two percent of scale, on every platform. The default
+    // slides a full screen sideways over 300ms, which is the motion the
+    // frame-pacing investigation found worst on Android Chrome: long, slow
+    // translation of a large area, rendered on the main thread through
+    // requestAnimationFrame while the panel runs at twice that rate.
+    pageTransitionsTheme: quietPageTransitions,
   );
 }
