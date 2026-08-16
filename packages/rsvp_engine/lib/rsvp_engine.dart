@@ -2,6 +2,7 @@ export 'src/color/contrast.dart';
 export 'src/pacing/pacing_config.dart';
 export 'src/pacing/pacing_decision.dart';
 export 'src/pacing/pacing_model.dart';
+export 'src/pacing/reading_time.dart';
 export 'src/playback/playback_session.dart';
 export 'src/profile/presets.dart';
 export 'src/profile/profile.dart';
