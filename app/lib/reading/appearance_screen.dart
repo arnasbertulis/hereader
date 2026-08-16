@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_tokens.dart';
 import '../theme/appearance.dart';
+import 'custom_accent_screen.dart';
 
 /// Theme, accent and contrast for app chrome.
 ///
@@ -12,9 +13,8 @@ import '../theme/appearance.dart';
 /// surface it is not currently standing on; this one is standing on what it
 /// changes.
 ///
-/// Lives next to `settings_screen.dart` because that is where settings live
-/// today. Both move into a settings directory when the navigation shell
-/// gives settings a tab.
+/// Reached from the settings index, which states the current theme and
+/// accent on its Appearance row.
 class AppearanceScreen extends StatelessWidget {
   final AppearanceController controller;
 
@@ -75,6 +75,22 @@ class AppearanceScreen extends StatelessWidget {
                         selected: accent.color == settings.accent,
                         onTap: () => controller.setAccent(accent.color),
                       ),
+                    // Selected when the stored colour is none of the six.
+                    // The swatch shows that colour rather than a fixed
+                    // sample, so the row reads as one set of choices with
+                    // one of them selected.
+                    _AccentSwatch(
+                      accent: AppAccent('Custom', settings.accent),
+                      selected: !AppAccents.all.any(
+                        (a) => a.color == settings.accent,
+                      ),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              CustomAccentScreen(controller: controller),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),

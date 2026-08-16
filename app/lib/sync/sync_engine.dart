@@ -55,6 +55,15 @@ class SyncEngine {
   /// a hundred round trips.
   static const int batchSize = 100;
 
+  /// Where the time of the last finished run is kept.
+  ///
+  /// Named rather than written as a literal in two files. Settings reads it
+  /// to say how long ago sync ran, and `SyncState.lastSyncedAt` cannot
+  /// answer that: it is set on the successful emit and null on every other
+  /// status, so a device whose last run failed would report never having
+  /// synced at all.
+  static const String lastSyncedAtKey = 'sync.last_synced_at';
+
   final _state = StreamController<SyncState>.broadcast();
 
   HybridLogicalClock? _clock;
@@ -135,7 +144,7 @@ class SyncEngine {
       await _recordConflicts(await api.conflicts());
 
       await repository.setPreference(
-        'sync.last_synced_at',
+        lastSyncedAtKey,
         DateTime.now().toUtc().toIso8601String(),
         hlc: await issueStamp(),
       );

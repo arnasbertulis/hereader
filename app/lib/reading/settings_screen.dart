@@ -2,44 +2,53 @@ import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
+import '../sync/api_client.dart';
+import '../sync/auth_store.dart';
+import '../sync/last_synced.dart';
+import '../sync/sync_engine.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_tokens.dart';
 import '../theme/appearance.dart';
+import 'about_screen.dart';
+import 'account_screen.dart';
 import 'appearance_screen.dart';
-import 'profile_edit_screen.dart';
-import 'profile_presentation.dart';
+import 'profiles_screen.dart';
+import 'reading_settings_screen.dart';
+import 'sync_screen.dart';
 
-/// Reading profiles: which one is in use, and editing the reader's own.
+/// An index of settings sections, each pushing a subpage.
 ///
-/// Separate from the reader screen on purpose. The reader has a switcher for
-/// changing profile mid-book; this is where profiles are made and changed.
+/// This screen was the profile list until now, with an appearance row bolted
+/// to the top of it. Six sections in one scroll is a screen the reader has to
+/// read to the end of to learn what is on it, and the reader this app is for
+/// reads it at a text size that makes the scroll long.
 ///
-/// Built-in presets are not editable. Each is tied to a specific finding in
-/// `docs/research/rsvp-evidence.md`, so a preset edited past recognition
-/// would carry a name that no longer describes it, with no way back to the
-/// tested starting point. Editing one produces a copy instead, which also
-/// means a preset improved in a later release does not collide with a
-/// reader's modified version of the old one.
+/// Every row states its current value. A row that only names a section makes
+/// the reader open it to find out whether it was the one they wanted, which
+/// costs a push, a read and a back gesture per guess.
 class SettingsScreen extends StatefulWidget {
   final LibraryRepository repository;
 
   /// Supplies a clock stamp for each write. Pass `syncEngine.issueStamp`.
   ///
-  /// Injected rather than taking the engine itself: this screen needs a
-  /// stamp, not a sync engine, and a fake in a test should not have to be
-  /// one.
+  /// Injected rather than taking the engine itself: the subpages that write
+  /// need a stamp, not a sync engine, and a fake in a test should not have
+  /// to be one.
   final Future<String> Function() issueStamp;
 
-  /// Handed to [AppearanceScreen], which is reached from the row at the top
-  /// of this list. Appearance is not a reading profile and does not belong
-  /// on a screen called Reading profiles; it sits here because this is the
-  /// only settings surface the app has until the navigation shell lands,
-  /// and the row moves to a settings index then.
   final AppearanceController appearance;
+
+  /// For the Account row, which reads the session, and Sync, which runs one.
+  final ApiClient api;
+  final SyncEngine sync;
 
   const SettingsScreen({
     super.key,
     required this.repository,
     required this.issueStamp,
     required this.appearance,
+    required this.api,
+    required this.sync,
   });
 
   @override
@@ -47,240 +56,195 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  String? _activeId;
+  String? _activeProfileName;
+  DateTime? _lastSynced;
 
   @override
   void initState() {
     super.initState();
-    _loadActive();
+    _loadValues();
   }
 
-  Future<void> _loadActive() async {
+  /// Reads the two values that are not already on a stream.
+  ///
+  /// Called again whenever a subpage returns, because a reader who just
+  /// changed the active profile should not come back to a row still naming
+  /// the old one.
+  Future<void> _loadValues() async {
     // Resolved rather than read raw, so a pointer at a profile deleted on
-    // another device shows Standard selected instead of nothing.
+    // another device names Standard instead of nothing.
     final active = await widget.repository.activeProfile();
-    if (!mounted) return;
-    setState(() => _activeId = active.id);
-  }
-
-  Future<void> _select(ReadingProfile profile) async {
-    await widget.repository.setActiveProfile(
-      profile.id,
-      hlc: await widget.issueStamp(),
-    );
-    if (!mounted) return;
-    setState(() => _activeId = profile.id);
-  }
-
-  Future<void> _duplicate(ReadingProfile source) async {
-    final copy = source.fork(id: ReadingProfile.newId());
-    await widget.repository.saveProfile(copy, hlc: await widget.issueStamp());
-    if (!mounted) return;
-    await _edit(copy);
-  }
-
-  Future<void> _edit(ReadingProfile profile) async {
-    final result = await Navigator.of(context).push<ReadingProfile>(
-      MaterialPageRoute(
-        builder: (_) => ProfileEditScreen(
-          profile: profile,
-          repository: widget.repository,
-          issueStamp: widget.issueStamp,
-        ),
-      ),
+    final synced = await widget.repository.preference(
+      SyncEngine.lastSyncedAtKey,
     );
 
     if (!mounted) return;
 
-    // The editor forked a preset. A reader who customised the profile they
-    // were reading with means to read with the result, so the selection
-    // follows rather than staying on the untouched preset.
-    if (result != null && result.id != profile.id && _activeId == profile.id) {
-      await _select(result);
-      return;
-    }
-
-    await _loadActive();
+    setState(() {
+      _activeProfileName = active.name;
+      _lastSynced = DateTime.tryParse(synced ?? '');
+    });
   }
 
-  Future<void> _delete(ReadingProfile profile) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete ${profile.name}?'),
-        content: const Text(
-          'This removes it from every device signed in to your account. '
-          'Presets are not affected.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Keep'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
+  Future<void> _push(Widget screen) async {
+    await Navigator.of(
+      context,
+    ).push<void>(MaterialPageRoute(builder: (_) => screen));
 
-    if (confirmed != true || !mounted) return;
-
-    await widget.repository.deleteProfile(
-      profile.id,
-      hlc: await widget.issueStamp(),
-    );
-
-    // Deleting the active profile clears the pointer in the repository, so
-    // this reads back as Standard rather than as a dangling id.
-    await _loadActive();
+    await _loadValues();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Reading profiles')),
-      body: StreamBuilder<List<ReadingProfile>>(
-        stream: widget.repository.watchProfiles(),
-        builder: (context, snapshot) {
-          final profiles = snapshot.data;
-          if (profiles == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      appBar: AppBar(title: const Text('Settings')),
+      body: ListenableBuilder(
+        listenable: widget.appearance,
+        builder: (context, _) {
+          return StreamBuilder<List<ReadingProfile>>(
+            stream: widget.repository.watchProfiles(),
+            builder: (context, snapshot) {
+              final profiles = snapshot.data ?? const <ReadingProfile>[];
 
-          final presets = profiles.where((p) => p.isBuiltIn).toList();
-          final mine = profiles.where((p) => !p.isBuiltIn).toList();
-
-          return ListView(
-            children: [
-              const _SectionHeader('The app'),
-              ListTile(
-                leading: const Icon(Icons.palette_outlined),
-                title: const Text('Appearance'),
-                subtitle: const Text(
-                  'Light or dark, accent colour, and high contrast for the '
-                  'app around your books.',
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        AppearanceScreen(controller: widget.appearance),
+              return ListView(
+                padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+                children: [
+                  StreamBuilder<Session?>(
+                    stream: widget.api.auth.sessions,
+                    initialData: widget.api.auth.current,
+                    builder: (context, session) => _IndexRow(
+                      icon: Icons.person_outline,
+                      title: 'Account',
+                      value: session.data == null
+                          ? 'Not signed in'
+                          : 'Signed in',
+                      onTap: () => _push(
+                        AccountScreen(api: widget.api, sync: widget.sync),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-
-              const _SectionHeader('Your profiles'),
-              if (mine.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: Text(
-                    'None yet. Copy a preset below to make one you can '
-                    'change.',
+                  _IndexRow(
+                    icon: Icons.text_fields_outlined,
+                    title: 'Reading profiles',
+                    value: _profilesValue(profiles),
+                    onTap: () => _push(
+                      ProfilesScreen(
+                        repository: widget.repository,
+                        issueStamp: widget.issueStamp,
+                      ),
+                    ),
                   ),
-                ),
-              for (final profile in mine)
-                _ProfileRow(
-                  profile: profile,
-                  selected: profile.id == _activeId,
-                  onSelect: () => _select(profile),
-                  onEdit: () => _edit(profile),
-                  onDuplicate: () => _duplicate(profile),
-                  onDelete: () => _delete(profile),
-                ),
-
-              const _SectionHeader('Presets'),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Text(
-                  'Starting points that ship with the app. Copy one to '
-                  'change it.',
-                ),
-              ),
-              for (final profile in presets)
-                _ProfileRow(
-                  profile: profile,
-                  selected: profile.id == _activeId,
-                  onSelect: () => _select(profile),
-                  onEdit: () => _edit(profile),
-                  onDuplicate: () => _duplicate(profile),
-                ),
-
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 24, 16, 32),
-                child: Text(
-                  'Your profiles follow you between devices. Which one is '
-                  'selected does not: a phone read outdoors and a desktop in '
-                  'a dim room can want different ones.',
-                ),
-              ),
-            ],
+                  _IndexRow(
+                    icon: Icons.palette_outlined,
+                    title: 'Appearance',
+                    value: describeAppearance(widget.appearance.settings),
+                    onTap: () =>
+                        _push(AppearanceScreen(controller: widget.appearance)),
+                  ),
+                  _IndexRow(
+                    icon: Icons.auto_stories_outlined,
+                    title: 'Reading',
+                    value: 'How the app saves your place and takes keys',
+                    onTap: () => _push(const ReadingSettingsScreen()),
+                  ),
+                  _IndexRow(
+                    icon: Icons.sync_outlined,
+                    title: 'Sync',
+                    value: widget.api.auth.isSignedIn
+                        ? describeLastSynced(_lastSynced)
+                        : 'Off. Sign in to turn it on.',
+                    onTap: () => _push(
+                      SyncScreen(
+                        repository: widget.repository,
+                        api: widget.api,
+                        sync: widget.sync,
+                      ),
+                    ),
+                  ),
+                  _IndexRow(
+                    icon: Icons.info_outline,
+                    title: 'About',
+                    value:
+                        'Licence, research, and what this app does not claim',
+                    onTap: () => _push(const AboutScreen()),
+                  ),
+                ],
+              );
+            },
           );
         },
       ),
     );
   }
+
+  /// The active profile, and how many the reader has of their own.
+  ///
+  /// Presets are excluded from the count. Five of the profiles in that
+  /// stream ship with the app, so counting them all would tell every reader
+  /// they have five before they have made one.
+  String _profilesValue(List<ReadingProfile> profiles) {
+    final name = _activeProfileName;
+    final mine = profiles.where((p) => !p.isBuiltIn).length;
+
+    if (name == null) return 'Loading';
+    if (mine == 0) return '$name · presets only';
+
+    return '$name · $mine of your own';
+  }
 }
 
-class _SectionHeader extends StatelessWidget {
+/// The theme and accent, as the settings index states them.
+///
+/// The accent is named where the reader picked a named one and called custom
+/// otherwise, rather than shown as a hex value nobody reads back.
+String describeAppearance(AppearanceSettings settings) {
+  final mode = switch (settings.themeMode) {
+    ThemeMode.system => 'Match my device',
+    ThemeMode.light => 'Light',
+    ThemeMode.dark => 'Dark',
+  };
+
+  final named = AppAccents.all
+      .where((a) => a.color == settings.accent)
+      .firstOrNull;
+
+  final contrast = settings.highContrast ? ' · High contrast' : '';
+
+  return '$mode · ${named?.name ?? 'Custom'}$contrast';
+}
+
+/// One section, its current value, and the way into it.
+class _IndexRow extends StatelessWidget {
+  final IconData icon;
   final String title;
-  const _SectionHeader(this.title);
+  final String value;
+  final VoidCallback onTap;
 
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-    child: Text(title, style: Theme.of(context).textTheme.titleSmall),
-  );
-}
-
-class _ProfileRow extends StatelessWidget {
-  final ReadingProfile profile;
-  final bool selected;
-  final VoidCallback onSelect;
-  final VoidCallback onEdit;
-  final VoidCallback onDuplicate;
-  final VoidCallback? onDelete;
-
-  const _ProfileRow({
-    required this.profile,
-    required this.selected,
-    required this.onSelect,
-    required this.onEdit,
-    required this.onDuplicate,
-    this.onDelete,
+  const _IndexRow({
+    required this.icon,
+    required this.title,
+    required this.value,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return ListTile(
-      selected: selected,
-      leading: Icon(
-        selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+      leading: Icon(icon),
+      title: Text(title),
+      // The value under the title rather than beside it. Beside it is what
+      // the wireframe drew, and at the text sizes this app is built for the
+      // two collide before either wraps.
+      subtitle: Text(
+        value,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
       ),
-      title: Text(profile.name),
-      subtitle: Text(describeProfile(profile)),
-      onTap: onSelect,
-      trailing: PopupMenuButton<String>(
-        // Named rather than an icon row: a reader who needs 48pt type is not
-        // well served by three small targets crammed into a list row.
-        tooltip: 'Options for ${profile.name}',
-        onSelected: (value) => switch (value) {
-          'edit' => onEdit(),
-          'duplicate' => onDuplicate(),
-          'delete' => onDelete?.call(),
-          _ => null,
-        },
-        itemBuilder: (context) => [
-          PopupMenuItem(
-            value: 'edit',
-            child: Text(profile.isBuiltIn ? 'View settings' : 'Edit'),
-          ),
-          const PopupMenuItem(value: 'duplicate', child: Text('Make a copy')),
-          if (onDelete != null)
-            const PopupMenuItem(value: 'delete', child: Text('Delete')),
-        ],
-      ),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: onTap,
     );
   }
 }
