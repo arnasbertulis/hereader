@@ -24,6 +24,11 @@ class BookSummary {
   final Locator? position;
   final DateTime importedAt;
 
+  /// How many tokens into the book the stored position is, when that is
+  /// known. See ADR 0013: a hint for comparison and display, never something
+  /// to navigate by.
+  final int? tokenIndex;
+
   const BookSummary({
     required this.id,
     required this.title,
@@ -31,7 +36,79 @@ class BookSummary {
     required this.importedAt,
     this.author,
     this.position,
+    this.tokenIndex,
   });
+
+  /// Whether the reader has opened this book.
+  bool get started => position != null;
+
+  /// How far through the book the reader is, from 0 to 1, or null when that
+  /// cannot be worked out.
+  ///
+  /// Null in three cases, and the interface says something different about
+  /// each rather than drawing an empty bar for all of them: the book was
+  /// never opened, the position came from a client older than ADR 0013 and
+  /// carries no count, or the book row predates the wordCount column and
+  /// reports zero. The last of those is why this checks the denominator
+  /// rather than trusting it.
+  double? get progress {
+    final index = tokenIndex;
+    if (index == null || wordCount <= 0) return null;
+
+    return (index / wordCount).clamp(0.0, 1.0);
+  }
+}
+
+/// How the library list is ordered.
+///
+/// `recentlyAdded` rather than "Recent", which reads as recently opened and
+/// is not what this sorts by. Home orders by when a book was last read; the
+/// library orders by when it arrived.
+enum LibrarySort {
+  recentlyAdded('Recently added'),
+  title('Title'),
+  progress('Progress');
+
+  const LibrarySort(this.label);
+
+  final String label;
+
+  /// The sort stored under this name, falling back to the default for
+  /// anything unrecognised. A preference written by a newer build, or a
+  /// value edited by hand, orders the list rather than throwing.
+  static LibrarySort byName(String? name) =>
+      values.firstWhere((s) => s.name == name, orElse: () => recentlyAdded);
+}
+
+/// Orders two summaries under [sort].
+///
+/// In Dart rather than in the query. Progress is a ratio of two columns from
+/// two tables that is null in three different ways, so expressing it in SQL
+/// means a nullable division and an explicit nulls-last clause, and the other
+/// two orders would then live in a different place from it. The list being
+/// sorted is the one about to be laid out on screen.
+int _compare(LibrarySort sort, BookSummary a, BookSummary b) {
+  switch (sort) {
+    case LibrarySort.recentlyAdded:
+      return b.importedAt.compareTo(a.importedAt);
+
+    case LibrarySort.title:
+      return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+
+    case LibrarySort.progress:
+      final mine = a.progress;
+      final theirs = b.progress;
+
+      if (mine == null && theirs == null) {
+        return b.importedAt.compareTo(a.importedAt);
+      }
+      // A book with no measurable progress sorts last under either
+      // direction. It is not at zero percent; how far in it is is unknown.
+      if (mine == null) return 1;
+      if (theirs == null) return -1;
+
+      return theirs.compareTo(mine);
+  }
 }
 
 /// Everything the app stores locally.
@@ -57,47 +134,43 @@ class LibraryRepository {
   /// The rule this leaves behind is narrow, because `bytes` is the only
   /// column here that costs anything: a query over Books that is not about
   /// the bytes names the columns it wants.
-  Stream<List<BookSummary>> watchLibrary() {
-    final books = _db.books;
+  Stream<List<BookSummary>> watchLibrary({
+    LibrarySort sort = LibrarySort.recentlyAdded,
+  }) {
+    final table = _db.books;
     final positions = _db.readingPositions;
 
-    final query = _db.selectOnly(books)
+    final query = _db.selectOnly(table)
       ..join([
         leftOuterJoin(
           positions,
-          positions.bookId.equalsExp(books.id),
-          // The columns below are added by hand. Left at its default this
-          // would put every position column in the result, which is
-          // harmless, and would also make the select list something other
-          // than what this method asked for.
+          positions.bookId.equalsExp(table.id),
           useColumns: false,
         ),
       ])
       ..addColumns([
-        books.id,
-        books.title,
-        books.author,
-        books.wordCount,
-        books.importedAt,
+        table.id,
+        table.title,
+        table.author,
+        table.wordCount,
+        table.importedAt,
         positions.blockId,
         positions.charOffset,
         positions.parserVersion,
+        positions.tokenIndex,
       ])
-      ..orderBy([OrderingTerm.desc(books.importedAt)]);
+      ..orderBy([OrderingTerm.desc(table.importedAt)]);
 
-    return query.watch().map(
-      (rows) => rows.map((row) {
-        // A left outer join, so every position column is null together when
-        // the book has never been opened. Read one and branch on it rather
-        // than asserting on three.
+    return query.watch().map((rows) {
+      final books = rows.map((row) {
         final blockId = row.read(positions.blockId);
 
         return BookSummary(
-          id: row.read(books.id)!,
-          title: row.read(books.title)!,
-          author: row.read(books.author),
-          wordCount: row.read(books.wordCount)!,
-          importedAt: row.read(books.importedAt)!,
+          id: row.read(table.id)!,
+          title: row.read(table.title)!,
+          author: row.read(table.author),
+          wordCount: row.read(table.wordCount)!,
+          importedAt: row.read(table.importedAt)!,
           position: blockId == null
               ? null
               : Locator(
@@ -105,9 +178,26 @@ class LibraryRepository {
                   charOffset: row.read(positions.charOffset)!,
                   parserVersion: row.read(positions.parserVersion)!,
                 ),
+          tokenIndex: row.read(positions.tokenIndex),
         );
-      }).toList(),
-    );
+      }).toList();
+
+      books.sort((a, b) => _compare(sort, a, b));
+
+      return books;
+    });
+  }
+
+  /// The stored cover for a book, or null when it has none.
+  ///
+  /// One book at a time rather than a stream of every cover. A library of
+  /// forty books is forty images, and the grid needs the ones on screen.
+  Future<Uint8List?> coverOf(String bookId) async {
+    final row = await (_db.select(
+      _db.bookCovers,
+    )..where((c) => c.bookId.equals(bookId))).getSingleOrNull();
+
+    return row?.bytes;
   }
 
   /// Stored EPUB bytes, or null if the book is not on this device.
