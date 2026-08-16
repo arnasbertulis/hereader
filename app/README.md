@@ -28,10 +28,12 @@ only adds syncing a position and preferences between devices.
 
 ```
 lib/
+├─ app_shell.dart              The three tabs, the bar and the rail, and
+│                               the cross-fade between them
 ├─ data/
 │  ├─ database.dart            Drift schema: books, positions, pending
-│  │                            positions, profiles, preferences, outbox,
-│  │                            conflicts
+│  │                            positions, covers, profiles, preferences,
+│  │                            outbox, conflicts
 │  └─ library_repository.dart  The only file that knows drift exists
 ├─ sync/
 │  ├─ sync_engine.dart         Drains the outbox, applies remote events
@@ -40,19 +42,28 @@ lib/
 │                               storage on web
 ├─ theme/
 │  ├─ app_colors.dart         Neutral ramps, the accent list, buildScheme
-│  ├─ app_tokens.dart         Spacing, radii, durations, hairline widths
+│  ├─ app_tokens.dart         Spacing, radii, durations, hairline widths,
+│  │                           and the app's one shadow
 │  ├─ app_typography.dart     The type scale
 │  ├─ app_theme.dart          ThemeData and every component theme
 │  └─ appearance.dart         Theme mode, accent and high contrast: stored,
 │                              read before the first frame, notified from
 └─ reading/
+   ├─ home_screen.dart         The book you were last in, and four you read
+   │                            before it
    ├─ library_screen.dart      Import, list, open, remove
    ├─ library_book.dart        Import pipeline and the in-memory book model
+   ├─ book_cover.dart          Covers, and the generated face for a book
+   │                            that declares none
+   ├─ book_progress.dart       What the reader is told about their place:
+   │                            the bar, the percentage, and the time left
+   ├─ book_opener.dart         The one path from a book id to the reader
    ├─ reader_screen.dart       Full-screen reading surface
    ├─ rsvp_view.dart           Draws one token at the profile's anchor. The
    │                            only definition of what reading looks like;
    │                            the settings preview draws through it
-   ├─ settings_screen.dart     Profile list, presets separated from forks
+   ├─ settings_screen.dart     An index of sections, each its own subpage
+   ├─ profiles_screen.dart     Profile list, presets separated from forks
    ├─ appearance_screen.dart   Theme, accent and contrast for app chrome
    ├─ profile_edit_screen.dart One profile, with a live preview
    ├─ profile_presentation.dart Polarity colours, reader chrome theme. The
@@ -66,7 +77,12 @@ App chrome and the reading surface are themed separately and on purpose.
 `theme/` builds the app around the books from a neutral ramp plus one
 accent the reader picks; the reading surface takes its colours from the
 active reading profile, and `readerChromeTheme` seeds from its own fixed
-neutral so the app accent cannot reach it.
+neutral grey so neither the app accent nor a hue of its own can reach it.
+
+Accent is scarce by design. On a given screen it marks the one action or the
+one measurement worth marking — the progress fill on the home tile, the dot
+under the selected tab — and surfaces are separated with hairlines rather
+than elevation. `AppShadow` is the single exception and its comment says why.
 
 After changing `data/database.dart`, regenerate:
 
@@ -101,6 +117,25 @@ not have. That transaction also drops any queued position event for the same
 book that has never been sent, so the cadence above costs nothing on the wire.
 See [ADR 0011](../docs/adr/0011-position-save-cadence.md).
 
+## What the home screen knows
+
+The tile says how far into the book the reader is and roughly how long is
+left, and it works both out without parsing anything. A saved position
+carries how many tokens into the book it is and the book row carries how many
+there are, so progress is one division and the words still ahead are one
+subtraction. See [ADR 0013](../docs/adr/0013-progress-token-index.md).
+
+Turning those words into minutes needs a rate, and the rate is whatever the
+reader's active profile is set to, so the figure moves when they retune it.
+Under reader-elicited advance there is no rate at all and the tile says how
+many words are left instead. See
+[ADR 0014](../docs/adr/0014-reading-time-estimate.md).
+
+The active profile is a pointer in `preferences` naming a row in
+`stored_profiles`, so anything derived from it watches both tables.
+`watchActiveProfile` does that with one query whose stream drift invalidates
+on a write to either.
+
 ## Sync
 
 `SyncEngine` pushes the outbox, then pulls and applies whatever other devices
@@ -122,6 +157,10 @@ an error neither `NetworkException` nor `ApiException` describes. An earlier
 version of this code let such an error escape uncaught, which left the sync
 indicator spinning indefinitely with no work actually running.
 
+The sync state is shown on the library screen. The home screen carried a
+second copy of it and dropped it in the UI pass, rather than keeping four
+states in step across two screens for a readout nobody opens the app to check.
+
 ## Testing
 
 ```bash
@@ -132,6 +171,12 @@ Widget tests open an in-memory database rather than mocking the repository, so
 they exercise the real queries. `LibraryRepository` tests do the same for
 pending positions specifically: holding one, draining it on import, and
 stamp ordering in both directions.
+
+The smoke test identifies chrome by key rather than by widget type where the
+widget is this project's own: `homeContinueTileKey` for the home tile,
+`appNavBarKey` for the bottom bar. Matching a button's label instead was
+asserting two things at once, and one of them was not what the test was named
+after.
 
 One quirk worth knowing: drift schedules a zero-duration timer when a query
 stream is cancelled. If the widget tree is left to teardown, that timer is
