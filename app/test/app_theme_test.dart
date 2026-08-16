@@ -1,5 +1,7 @@
 import 'package:app/theme/app_colors.dart';
 import 'package:app/theme/app_theme.dart';
+import 'package:app/theme/app_tokens.dart';
+import 'package:app/theme/page_transitions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
@@ -181,6 +183,32 @@ void main() {
       );
     });
 
+    test('every platform gets the quiet transition', () {
+      final theme = appTheme(brightness: Brightness.light);
+
+      for (final platform in TargetPlatform.values) {
+        expect(
+          theme.pageTransitionsTheme.builders[platform],
+          isA<QuietPageTransitionsBuilder>(),
+          reason: '$platform kept a platform default',
+        );
+      }
+    });
+
+    // A Flutter web build reports the platform it runs on, so a map that
+    // covered only some of them would leave the slide in place on Android,
+    // which is the target this exists for.
+    test('the transition is shorter than the platform default', () {
+      const builder = QuietPageTransitionsBuilder();
+
+      expect(builder.transitionDuration, AppMotion.state);
+      expect(builder.reverseTransitionDuration, AppMotion.state);
+      expect(
+        builder.transitionDuration,
+        lessThan(const Duration(milliseconds: 300)),
+      );
+    });
+
     // Elevation is the thing hairlines replace. A shadow is a blur, blur
     // rasterises, and raster is back on the main thread on web until
     // cross-origin isolation ships.
@@ -191,6 +219,83 @@ void main() {
       expect(theme.appBarTheme.scrolledUnderElevation, 0);
       expect(theme.cardTheme.elevation, 0);
       expect(theme.navigationBarTheme.elevation, 0);
+    });
+  });
+
+  group('pushing a route', () {
+    Widget harness({bool disableAnimations = false}) => MaterialApp(
+      theme: appTheme(brightness: Brightness.light),
+      // MaterialApp.builder rather than a wrapper around home. The
+      // transition builder reads the media query at the route's own
+      // context, which sits above the Navigator; anything inserted under
+      // home is below it and never reaches the transition.
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(
+          context,
+        ).copyWith(disableAnimations: disableAnimations),
+        child: child!,
+      ),
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: TextButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const Scaffold(body: Text('arrived')),
+              ),
+            ),
+            child: const Text('go'),
+          ),
+        ),
+      ),
+    );
+
+    // Scoped to the arriving screen rather than the whole tree. Every
+    // Scaffold builds a _FloatingActionButtonTransition holding two
+    // ScaleTransitions of its own, with or without a button in it, so
+    // find.byType finds four before this one is counted. Walking up from
+    // the pushed screen's own text reaches the route's transition and none
+    // of theirs.
+    Finder transitionAround(String text) => find.ancestor(
+      of: find.text(text),
+      matching: find.byType(ScaleTransition),
+    );
+
+    testWidgets('fades and scales rather than sliding', (tester) async {
+      await tester.pumpWidget(harness());
+
+      await tester.tap(find.text('go'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+
+      // Mid-transition. The scale is the part that says this is not the
+      // platform slide, which carries no scale at all.
+      expect(transitionAround('arrived'), findsOneWidget);
+
+      final scale = tester.widget<ScaleTransition>(
+        transitionAround('arrived'),
+      );
+      expect(scale.scale.value, greaterThanOrEqualTo(0.98));
+      expect(scale.scale.value, lessThanOrEqualTo(1.0));
+
+      await tester.pumpAndSettle();
+      expect(find.text('arrived'), findsOneWidget);
+    });
+
+    testWidgets('draws the arriving screen once when animations are off', (
+      tester,
+    ) async {
+      await tester.pumpWidget(harness(disableAnimations: true));
+
+      await tester.tap(find.text('go'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+
+      // No transition widget at all, rather than one running to a value
+      // nobody asked to see move.
+      expect(transitionAround('arrived'), findsNothing);
+      expect(find.text('arrived'), findsOneWidget);
+
+      await tester.pumpAndSettle();
     });
   });
 }
