@@ -10,6 +10,17 @@ import 'sync/sync_engine.dart';
 import 'theme/app_tokens.dart';
 import 'theme/appearance.dart';
 
+/// Identifies the bottom navigation bar.
+///
+/// The bar is this file's own widget rather than a `NavigationBar`, so a
+/// test measuring its height or asserting which navigation the window got
+/// has no public type to name. A key rather than making the class public:
+/// nothing outside this file constructs one.
+const Key appNavBarKey = Key('app-nav-bar');
+
+/// Diameter of the selected-destination dot in [_DotBar].
+const double _dotSize = 4;
+
 /// A tab, and the icons and label that stand for it.
 class _Destination {
   final IconData icon;
@@ -113,7 +124,7 @@ class _AppShellState extends State<AppShell> {
         HomeScreen(
           repository: widget.repository,
           sync: widget.sync,
-          api: widget.api,
+          onSeeAll: () => _select(AppShell.libraryTab),
           issueStamp: widget.sync.issueStamp,
         ),
         LibraryScreen(
@@ -156,22 +167,12 @@ class _AppShellState extends State<AppShell> {
   Widget _withBar(BuildContext context, Widget body) {
     return Scaffold(
       body: body,
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: _DotBar(
+        key: appNavBarKey,
+        destinations: _destinations,
         selectedIndex: _index,
-        onDestinationSelected: _select,
-        // Labels always, never on selection alone. An icon that names its
-        // destination only once you are there is colour-as-signal in another
-        // form, and section 9 rules that out.
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        onSelected: _select,
         height: _barHeight(context),
-        destinations: [
-          for (final destination in _destinations)
-            NavigationDestination(
-              icon: Icon(destination.icon),
-              selectedIcon: Icon(destination.selectedIcon),
-              label: destination.label,
-            ),
-        ],
       ),
     );
   }
@@ -221,6 +222,127 @@ class _AppShellState extends State<AppShell> {
     final grown = MediaQuery.textScalerOf(context).scale(size) - size;
 
     return AppNav.barHeight + grown * lineHeight;
+  }
+}
+
+/// The bottom bar: a hairline, three destinations, and a dot under the one
+/// the reader is on.
+///
+/// Written out rather than themed onto `NavigationBar`, because the thing
+/// being replaced is the indicator itself. Material draws a filled pill
+/// behind the selected icon, which is the largest block of accent anywhere
+/// in the app and sits on the one surface every screen shares. A 4dp dot
+/// under the label says the same thing at a fraction of the area.
+///
+/// Selection is never carried by the dot alone. Labels are always shown and
+/// the selected destination takes the filled icon and `onSurface` against
+/// the others' `onSurfaceVariant`, so the state survives for a reader who
+/// cannot pick the accent out.
+class _DotBar extends StatelessWidget {
+  final List<_Destination> destinations;
+  final int selectedIndex;
+  final ValueChanged<int> onSelected;
+  final double height;
+
+  const _DotBar({
+    super.key,
+    required this.destinations,
+    required this.selectedIndex,
+    required this.onSelected,
+    required this.height,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hairline = theme.dividerTheme.thickness ?? AppHairline.width;
+
+    return Material(
+      color: theme.colorScheme.surface,
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // The same line the rail draws down its side, on the edge the
+            // bar shares with the screen above it.
+            Divider(height: hairline, thickness: hairline),
+            SizedBox(
+              height: height,
+              child: Row(
+                children: [
+                  for (var i = 0; i < destinations.length; i++)
+                    Expanded(
+                      child: _DotBarItem(
+                        destination: destinations[i],
+                        selected: i == selectedIndex,
+                        onTap: () => onSelected(i),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DotBarItem extends StatelessWidget {
+  final _Destination destination;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _DotBarItem({
+    required this.destination,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final colour = selected ? scheme.onSurface : scheme.onSurfaceVariant;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: destination.label,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              selected ? destination.selectedIcon : destination.icon,
+              color: colour,
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              destination.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelMedium?.copyWith(color: colour),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            // Drawn at both states rather than inserted on selection, so
+            // the icon and label do not shift by 4dp as the reader moves
+            // between tabs.
+            Container(
+              width: _dotSize,
+              height: _dotSize,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: selected ? scheme.primary : Colors.transparent,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
