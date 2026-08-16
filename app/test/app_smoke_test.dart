@@ -1,3 +1,4 @@
+import 'package:app/app_shell.dart';
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
 import 'package:app/main.dart';
@@ -140,9 +141,17 @@ void main() {
     // library is offstage behind it with the same book in its grid.
     expect(find.text('Romeo and Juliet'), findsOneWidget);
     expect(find.text('William Shakespeare'), findsOneWidget);
-    expect(find.text('Not started'), findsOneWidget);
+    expect(find.byKey(homeContinueTileKey), findsOneWidget);
+    // A book with a word count and no position is estimated whole, so the
+    // tile says how long it will take rather than that it is unstarted.
+    // Matched loosely: the figure is the active preset's rate, and pinning
+    // the string here would make this test fail the day that preset is
+    // retuned.
     expect(
-      find.widgetWithText(FilledButton, 'Start reading'),
+      find.descendant(
+        of: find.byKey(homeContinueTileKey),
+        matching: find.textContaining('left'),
+      ),
       findsOneWidget,
     );
 
@@ -180,11 +189,21 @@ void main() {
     await tester.pumpWidget(harness.app);
     await tester.pumpAndSettle();
 
-    // Continue rather than Start reading is what a started book gets, so
-    // one of them means the card picked the book with a position.
-    expect(find.widgetWithText(FilledButton, 'Continue'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Start reading'), findsNothing);
-    expect(find.text('20%'), findsOneWidget);
+    // The tile holds one book, so which title is inside it is the whole
+    // assertion. Hamlet is on the screen either way, in the recent row.
+    final tile = find.byKey(homeContinueTileKey);
+    expect(
+      find.descendant(of: tile, matching: find.text('Romeo and Juliet')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: tile, matching: find.text('Hamlet')),
+      findsNothing,
+    );
+
+    // A book with a percentage shows it as the bar along the tile's bottom
+    // edge, so the words that stand in for one are absent.
+    expect(find.text('Not started'), findsNothing);
 
     await _disposeTree(tester);
   });
@@ -194,6 +213,11 @@ void main() {
     addTearDown(harness.close);
 
     await tester.pumpWidget(harness.app);
+    await tester.pumpAndSettle();
+
+    // The sync control sits in the library's bar. Home dropped its own in
+    // the UI pass rather than showing the same state twice.
+    await tester.tap(find.byIcon(Icons.menu_book_outlined));
     await tester.pumpAndSettle();
 
     // Reading works signed out, so this is an invitation rather than a gate.
@@ -344,7 +368,7 @@ void main() {
     // that stack. Settings used to be pushed and is one of the tabs now, so
     // the paste screen stands in. Home's empty state offers it, and the
     // library's app bar is offstage behind Home.
-    await tester.tap(find.byIcon(Icons.content_paste));
+    await tester.tap(find.widgetWithText(TextButton, 'Read pasted text'));
     await tester.pumpAndSettle();
 
     final pasted = find.byType(PasteReaderScreen);
@@ -421,14 +445,14 @@ void main() {
     await tester.pumpWidget(harness.app);
     await tester.pumpAndSettle();
 
-    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.byKey(appNavBarKey), findsOneWidget);
     expect(find.byType(NavigationRail), findsNothing);
 
     tester.view.physicalSize = const Size(900, 800);
     await tester.pumpAndSettle();
 
     expect(find.byType(NavigationRail), findsOneWidget);
-    expect(find.byType(NavigationBar), findsNothing);
+    expect(find.byKey(appNavBarKey), findsNothing);
 
     await _disposeTree(tester);
   });
@@ -452,7 +476,7 @@ void main() {
     // clamps the scaler, so the bar has to absorb it rather than clip, and
     // an overflow here is an exception rather than a quiet stripe.
     expect(
-      tester.getSize(find.byType(NavigationBar)).height,
+      tester.getSize(find.byKey(appNavBarKey)).height,
       greaterThan(AppNav.barHeight),
     );
     expect(tester.takeException(), isNull);
