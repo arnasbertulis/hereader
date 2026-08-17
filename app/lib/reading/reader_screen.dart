@@ -5,9 +5,22 @@ import 'package:flutter/services.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
+import '../theme/app_theme.dart';
+import '../theme/app_tokens.dart';
 import 'library_book.dart';
 import 'profile_presentation.dart';
 import 'rsvp_view.dart';
+
+
+/// Identifies the play and pause button on the reading surface.
+///
+/// The button carried a text label until ADR 0015, and five tests across
+/// `reader_progress_test.dart` and `reader_semantics_test.dart` reached it
+/// with `find.text('Read')`. Each of those was asserting two things: that
+/// playback starts, and that the control says a particular word. A key
+/// asserts the first alone, as `homeContinueTileKey` and `appNavBarKey`
+/// already do for Home and the shell.
+const Key readerPlayButtonKey = Key('reader-play-button');
 
 /// Where the reader stopped.
 ///
@@ -324,24 +337,41 @@ class _ReaderScreenState extends State<ReaderScreen> {
   /// alone, so a profile made in settings or synced from another device can
   /// be chosen here. Making and editing profiles lives in settings; this is
   /// only a switcher.
-  /// Switches profile mid-book.
-  ///
-  /// Lists what is actually on this device rather than the built-in presets
-  /// alone, so a profile made in settings or synced from another device can
-  /// be chosen here. Making and editing profiles lives in settings; this is
-  /// only a switcher.
   Future<void> _pickProfile() async {
     _session.pause();
 
+    final source = AppChromeSource.of(context);
+    final chrome = readerChromeTheme(
+      presentation: _profile.presentation,
+      accent: source.accent,
+      highContrast: source.highContrast,
+    );
+
+    // The sheet's own container is themed here rather than in the builder.
+    //
+    // `showModalBottomSheet` reads `backgroundColor`, `shape`, `elevation`
+    // and `surfaceTintColor` off `Theme.of(context)` at this call site, and
+    // this context sits above the reader's own `Theme`. Wrapping the builder
+    // reaches the rows inside the sheet and nothing else, so the panel came
+    // up in the app's brightness carrying contents in the profile's, and the
+    // two disagreed wherever a reader's theme and their background did.
+    //
+    // Read off `chrome.bottomSheetTheme` rather than written out again, so
+    // `readerChromeTheme` stays the one place these are decided.
+    final sheet = chrome.bottomSheetTheme;
+
     final chosen = await showModalBottomSheet<ReadingProfile>(
       context: context,
-      // A modal route is inserted at the Navigator, not below the widget
-      // that opened it, so it does not inherit the reader's chrome theme
-      // from the tree. Applied again here, because this sheet slides up over
-      // the reading surface and a light one over a dark surface is the
-      // problem this whole change exists to fix.
+      backgroundColor: sheet.backgroundColor,
+      elevation: sheet.elevation,
+      shape: sheet.shape,
+      // No `surfaceTintColor` here: `BottomSheetThemeData` carries one and
+      // `showModalBottomSheet` takes no parameter for it. Nothing is lost.
+      // `Material` applies a surface tint through `ElevationOverlay`, which
+      // returns the colour unchanged at elevation 0, and `sheet.elevation`
+      // is 0 for the reason every other panel in this app is.
       builder: (_) => Theme(
-        data: readerChromeTheme(_profile.presentation),
+        data: chrome,
         child: SafeArea(
           child: StreamBuilder<List<ReadingProfile>>(
             stream: widget.repository.watchProfiles(),
@@ -349,7 +379,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
               final profiles = snapshot.data;
               if (profiles == null) {
                 return const Padding(
-                  padding: EdgeInsets.all(32),
+                  padding: EdgeInsets.all(AppSpacing.xxl),
                   child: Center(child: CircularProgressIndicator()),
                 );
               }
@@ -387,6 +417,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       hlc: await widget.issueStamp(),
     );
   }
+
 
   /// Stops, records the place, and leaves.
   ///
@@ -431,6 +462,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final state = _session.state;
     final showControls = state != PlaybackState.playing;
 
+    // The reader's accent and contrast choices, taken from the app theme
+    // above this route. `buildScheme` folds both into every role and cannot
+    // report either back, so `appTheme` carries them separately. See
+    // [AppChromeSource].
+    final source = AppChromeSource.of(context);
+    final ink = colorOf(readerInkArgbFor(_profile.presentation));
+
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -441,8 +479,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
           const SingleActivator(LogicalKeyboardKey.space): _onSurfaceTap,
           const SingleActivator(LogicalKeyboardKey.arrowRight): () =>
               _whenReading(_session.advance),
+          // The only rewind left. ADR 0015 took the button off the surface
+          // ahead of the tap zones, and a reader on a keyboard or a switch
+          // has no tap zone to reach for in the meantime.
+          //
+          // Steps by the profile's own `rewindWords` rather than the five
+          // the button passed. That field already decides how far a resume
+          // steps back, and two numbers for one idea is how they drift.
           const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
-              _whenReading(_session.rewind),
+              _whenReading(() => _session.rewind(_profile.rewindWords)),
           const SingleActivator(LogicalKeyboardKey.keyC): _openChapters,
           const SingleActivator(LogicalKeyboardKey.escape): _closeOrDismiss,
         },
@@ -452,7 +497,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
           // the profile rather than the platform. Above the Scaffold so the
           // chapter panel is included: it opens over the same surface.
           child: Theme(
-            data: readerChromeTheme(_profile.presentation),
+            data: readerChromeTheme(
+              presentation: _profile.presentation,
+              accent: source.accent,
+              highContrast: source.highContrast,
+            ),
             child: Scaffold(
               key: _scaffoldKey,
               // No drawer at all when the book declares no chapters, so the
@@ -514,18 +563,33 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       ),
                     ),
                     if (state == PlaybackState.finished)
-                      const Center(child: Text('End of book')),
+                      Center(
+                        child: Text('End of book', style: TextStyle(color: ink)),
+                      ),
                     if (showControls && _chapters.isNotEmpty)
                       Positioned(
                         top: 0,
                         left: 0,
                         child: SafeArea(
                           child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: IconButton.filledTonal(
+                            padding: const EdgeInsets.all(AppSpacing.lg),
+                            // A bare glyph in the surface's own ink. The
+                            // filled tonal disc this replaced took
+                            // `secondaryContainer`, which is an accent role,
+                            // so it drew a coloured circle over a background
+                            // the reader had chosen.
+                            //
+                            // `Icons.menu` rather than `menu_book_outlined`:
+                            // the book glyph is what the Library tab uses in
+                            // `app_shell.dart`, and the same picture meaning
+                            // "your books" in one place and "this book's
+                            // chapters" in another is a picture meaning two
+                            // things.
+                            child: IconButton(
                               onPressed: _openChapters,
-                              iconSize: 32,
-                              icon: const Icon(Icons.menu_book_outlined),
+                              iconSize: _secondaryIconSize,
+                              color: ink,
+                              icon: const Icon(Icons.menu),
                               tooltip: 'Chapters',
                             ),
                           ),
@@ -550,8 +614,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
                               progress: widget.book.text.progressAt(
                                 _session.index,
                               ),
+                              presentation: _profile.presentation,
                               onClose: _closeOrDismiss,
-                              onRewind: () => _session.rewind(5),
                               onToggle: _toggle,
                               onProfile: _pickProfile,
                             ),
@@ -649,9 +713,10 @@ class _ChapterPanel extends StatelessWidget {
 /// rather than part of it, and the reading surface is a tap target that a
 /// button sitting on it would compete with.
 ///
-/// Deliberately plain — theme colours and two text buttons. What matters here
-/// is when it appears and where it sends the reader; the chrome is expected
-/// to be replaced.
+/// A panel rather than a control, so it takes a surface role from the ramp
+/// and reads at 4.5:1 against it. It sat on `secondaryContainer` until ADR
+/// 0015, which is an accent role, so the one place on this screen carrying a
+/// paragraph of text was also the largest block of colour on it.
 class _FrontMatterOffer extends StatelessWidget {
   final VoidCallback onAccept;
   final VoidCallback onDismiss;
@@ -661,20 +726,34 @@ class _FrontMatterOffer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final hairline = theme.dividerTheme.thickness ?? AppHairline.width;
 
     return Container(
       width: double.infinity,
-      color: theme.colorScheme.secondaryContainer,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHigh,
+        // The panel sits on the reader's own background, which the ramp
+        // knows nothing about, so it needs an edge of its own to separate
+        // the two.
+        border: Border(
+          top: BorderSide(color: scheme.outlineVariant, width: hairline),
+          bottom: BorderSide(color: scheme.outlineVariant, width: hairline),
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.md,
+        AppSpacing.lg,
+        AppSpacing.xs,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'This opened past what looked like a title and licence page. '
             'That was a guess, and nothing was removed.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSecondaryContainer,
-            ),
+            style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurface),
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
@@ -695,73 +774,127 @@ class _FrontMatterOffer extends StatelessWidget {
   }
 }
 
+/// Icon sizes on the reading surface.
+///
+/// Hierarchy is carried by size because it can no longer be carried by
+/// colour. Everything here is one ink on the reader's own background, so
+/// play has to look like the primary action without being a different
+/// colour from exit and profile. 44 against 28 does that; a filled shape
+/// would put a second block of colour on a screen whose colours the reader
+/// chose.
+///
+/// Both sit inside `IconButton`'s own 48dp minimum, so neither changes the
+/// tap target.
+const double _primaryIconSize = 44;
+const double _secondaryIconSize = 28;
+
+/// Exit, play and profile, over a progress bar.
+///
+/// Three buttons rather than four. Rewind moved to the arrow key in ADR
+/// 0015 and comes back as a left-side tap zone, which is a change to what
+/// the reading surface itself does rather than another glyph in this row.
+///
+/// [ink] is resolved once by the reader screen from the profile's own
+/// background, rather than read from the theme here. The panels this screen
+/// opens take the neutral ramp and this row does not: it sits on whatever
+/// the reader picked in the background field, which the ramp knows nothing
+/// about.
+/// Exit, play and profile, over a progress bar.
+///
+/// Three buttons rather than four. Rewind moved to the arrow key in ADR
+/// 0015 and comes back as a left-side tap zone, which is a change to what
+/// the reading surface itself does rather than another glyph in this row.
+///
+/// Takes the profile rather than a resolved colour. The row needs three
+/// colours that all derive from the background, and passing one in while
+/// deriving the others here would put half the answer in the caller.
 class _Controls extends StatelessWidget {
   final PlaybackState state;
   final double progress;
+  final PresentationConfig presentation;
   final VoidCallback onClose;
-  final VoidCallback onRewind;
   final VoidCallback onToggle;
   final VoidCallback onProfile;
 
   const _Controls({
     required this.state,
     required this.progress,
+    required this.presentation,
     required this.onClose,
-    required this.onRewind,
     required this.onToggle,
     required this.onProfile,
   });
 
   @override
   Widget build(BuildContext context) {
-    final label = switch (state) {
-      PlaybackState.awaitingAdvance => 'Tap to advance',
-      PlaybackState.finished => 'Done',
+    final ink = colorOf(readerInkArgbFor(presentation));
+
+    // `_toggle` pauses from `awaitingAdvance` as well as from `playing`, so
+    // both states show the glyph for what the button does. The old row read
+    // its icon off `playing` alone and offered a play glyph under elicited
+    // pacing on a button that pauses.
+    final stopping =
+        state == PlaybackState.playing ||
+        state == PlaybackState.awaitingAdvance;
+
+    // What tapping the button does. `_surfaceLabel` says what tapping the
+    // surface does, and under elicited pacing those differ.
+    final toggleLabel = switch (state) {
+      PlaybackState.playing => 'Pause',
+      PlaybackState.awaitingAdvance => 'Stop advancing',
+      PlaybackState.finished => 'Read again',
       _ => 'Read',
     };
 
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // The one accent on this screen, where the accent survives the
+            // reader's background. `readerProgressFillFor` drops to the ink
+            // on the backgrounds that cannot support one.
+            //
+            // Height is twice the radius, which is what makes the ends
+            // semicircular rather than merely rounded. Both colours come
+            // from the profile rather than from a scheme surface role: the
+            // ramp does not know what is behind this bar.
             LinearProgressIndicator(
               value: progress,
+              minHeight: AppRadii.sm * 2,
+              borderRadius: BorderRadius.circular(AppRadii.sm),
+              color: readerProgressFillFor(
+                scheme: Theme.of(context).colorScheme,
+                presentation: presentation,
+              ),
+              backgroundColor: readerTrackFor(presentation),
               semanticsLabel: 'Progress through the book',
               semanticsValue: '${(progress * 100).round()}%',
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                IconButton.filledTonal(
+                IconButton(
                   onPressed: onClose,
-                  iconSize: 32,
+                  iconSize: _secondaryIconSize,
+                  color: ink,
                   icon: const Icon(Icons.close),
                   tooltip: 'Back to library',
                 ),
-                IconButton.filledTonal(
-                  onPressed: onRewind,
-                  iconSize: 32,
-                  icon: const Icon(Icons.replay_5),
-                  tooltip: 'Back five words',
-                ),
-                FilledButton.icon(
+                IconButton(
+                  key: readerPlayButtonKey,
                   onPressed: onToggle,
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(160, 56),
-                  ),
-                  icon: Icon(
-                    state == PlaybackState.playing
-                        ? Icons.pause
-                        : Icons.play_arrow,
-                  ),
-                  label: Text(label),
+                  iconSize: _primaryIconSize,
+                  color: ink,
+                  icon: Icon(stopping ? Icons.pause : Icons.play_arrow),
+                  tooltip: toggleLabel,
                 ),
-                IconButton.filledTonal(
+                IconButton(
                   onPressed: onProfile,
-                  iconSize: 32,
+                  iconSize: _secondaryIconSize,
+                  color: ink,
                   icon: const Icon(Icons.tune),
                   tooltip: 'Reading profile',
                 ),

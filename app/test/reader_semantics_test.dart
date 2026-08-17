@@ -74,7 +74,7 @@ void main() {
       await tester.pumpWidget(reader());
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Read'));
+      await tester.tap(find.byKey(readerPlayButtonKey));
       await tester.pump(const Duration(seconds: 1));
 
       expect(
@@ -94,7 +94,7 @@ void main() {
       await tester.pumpWidget(reader());
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Read'));
+      await tester.tap(find.byKey(readerPlayButtonKey));
       await tester.pump(const Duration(seconds: 1));
       await tester.tap(find.byType(RsvpView));
       await tester.pumpAndSettle();
