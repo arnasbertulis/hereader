@@ -45,8 +45,10 @@ void main() {
     test('withPolarity puts a pinned profile back to unset', () {
       const pinned = PresentationConfig(polarity: Polarity.lightOnDark);
       expect(pinned.withPolarity(null).polarity, isNull);
-      expect(pinned.withPolarity(Polarity.darkOnLight).polarity,
-          Polarity.darkOnLight);
+      expect(
+        pinned.withPolarity(Polarity.darkOnLight).polarity,
+        Polarity.darkOnLight,
+      );
     });
 
     test('withTint clears a background the same way', () {
@@ -107,16 +109,16 @@ void main() {
 
     test('a name this build cannot read means unset', () {
       expect(
-        PresentationConfig.fromJson(
-          const <String, dynamic>{'polarity': 'sepiaOnCream'},
-        ).polarity,
+        PresentationConfig.fromJson(const <String, dynamic>{
+          'polarity': 'sepiaOnCream',
+        }).polarity,
         isNull,
       );
 
       expect(
-        PresentationConfig.fromJson(
-          const <String, dynamic>{'polarity': 7},
-        ).polarity,
+        PresentationConfig.fromJson(const <String, dynamic>{
+          'polarity': 7,
+        }).polarity,
         isNull,
       );
     });
