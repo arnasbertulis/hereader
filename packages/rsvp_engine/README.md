@@ -96,9 +96,27 @@ Profiles are plain data and round-trip through JSON, including colours, which
 are stored as ARGB integers so this package stays free of Flutter. That is
 what lets them be persisted and synced without the app being involved.
 
+Two fields on `PresentationConfig` are nullable, and null means something on
+each. `tintArgb` null says the background follows the polarity. `polarity` null
+says the profile states no preference at all and whoever draws it decides:
+this package holds no notion of a platform theme and cannot look one up, so
+`resolvedWith(Polarity fallback)` takes the answer from the caller and leaves a
+profile that states one alone. The app passes the brightness it is running in.
+See [ADR 0016](../../docs/adr/0016-reader-theme-follows-the-app.md).
+
+Neither nullable field appears in `copyWith`, which reads a null argument as an
+instruction to keep the current value and so could never put either back to
+unset. `withPolarity` and `withTint` each set one field, null included.
+
+On the wire an unset field is an absent key rather than a null one, and
+`fromJson` reads a missing `polarity` and a name from some later build the same
+way: as a value this build should not guess at.
+
 `Presets.all` holds the built-in profiles. They live in code rather than
 storage, so improving one takes effect without a migration; a reader who edits
-one is really forking it into a stored profile of their own.
+one is really forking it into a stored profile of their own. `Standard` and
+`Spaced type` state no polarity, since nothing in the evidence behind either
+picks a surface. The three whose reasoning does pick one write it out.
 
 ## Playback
 
@@ -155,10 +173,17 @@ Playback is tested against a virtual clock through `fake_async`, so a
 five-minute reading session at 250 wpm runs in microseconds and the suite
 still finishes in about a second.
 
-A few tests in `presets` pin research-driven decisions rather than code: the
-central field loss preset asserts reader-elicited pacing because Arditi 1999
-says so. If someone changes it, the failure should prompt them to check the
-evidence rather than the implementation.
+A few tests pin research-driven decisions rather than code: the central field
+loss preset asserts reader-elicited pacing because Arditi 1999 says so, and
+`test/presentation_polarity_test.dart` asserts that the same preset keeps its
+reversed surface rather than following a caller. If someone changes either, the
+failure should prompt them to check the evidence rather than the
+implementation.
+
+`test/presentation_polarity_test.dart` also covers the wire format directly,
+including a payload written before `polarity` became nullable. Every profile
+stored by an earlier build carries the key, so this is what says those profiles
+keep the surface their reader already reads on.
 
 ## Status
 
