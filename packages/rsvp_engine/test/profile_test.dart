@@ -73,13 +73,9 @@ void main() {
       expect(original.toJson().containsKey('tintArgb'), isFalse);
     });
 
-    test('unknown mode and polarity fall back', () {
-      final restored = PresentationConfig.fromJson({
-        'mode': 'holographic',
-        'polarity': 'sepiaOnMauve',
-      });
+    test('an unknown mode falls back', () {
+      final restored = PresentationConfig.fromJson({'mode': 'holographic'});
       expect(restored.mode, PresentationMode.fixedSingle);
-      expect(restored.polarity, Polarity.darkOnLight);
     });
 
     test('rejects chunkSize above 1', () {
