@@ -13,6 +13,68 @@ import '../theme/app_typography.dart';
 /// legible, builds a theme from them, or writes a profile out in words
 /// belongs here rather than in a widget.
 
+// -- resolving a profile's polarity ---------------------------------------
+
+/// A [PresentationConfig] whose polarity someone has decided.
+///
+/// A profile may leave [PresentationConfig.polarity] null, which says the
+/// reader wants whatever the app is set to. Nothing below can paint that: a
+/// surface colour, a chrome brightness and a contrast figure all need a side.
+/// So the type says which configs are ready, and [resolvePresentation] is the
+/// only way to make one.
+///
+/// A screen resolves once, near the top of its build, and passes the result
+/// down. That is a rule the compiler now holds rather than a comment: the
+/// reading surface, the settings preview and the contrast readout all take
+/// this type, so none of them can measure or draw a polarity that another one
+/// resolved differently. Two of them disagreeing is what put a WCAG figure in
+/// settings against a colour pair the app never drew, and that arrangement
+/// looked correct in both files at the time.
+///
+/// An extension type rather than a class: it compiles away to the config
+/// itself, so a wrapper on the widget that rebuilds per word costs nothing.
+/// Rejected a plain wrapper class for that reason, and rejected an assert
+/// inside [surfaceArgbFor] because an assert fires in a debug run of a screen
+/// somebody opened, while this fires in `flutter analyze` on every screen at
+/// once.
+extension type ResolvedPresentation._(PresentationConfig config) {
+  /// The decided polarity.
+  ///
+  /// Never null. [resolvePresentation] is the only constructor and it runs
+  /// [PresentationConfig.resolvedWith], which fills this field or leaves a
+  /// value already there alone.
+  Polarity get polarity => config.polarity!;
+}
+
+/// The polarity a profile takes when it states none.
+///
+/// Dark app, dark page. The reader who set the app dark and then opened a
+/// book into a white surface is the whole reason ADR 0016 exists.
+///
+/// [appBrightness] is the brightness the app is running in, which is
+/// `Theme.of(context).brightness` read above any theme the reader screen puts
+/// over it. Theme mode is device-local under ADR 0012, so a profile that
+/// states no polarity draws light on a phone set light and dark on a desktop
+/// set dark, both signed into the same account. That follows from theme mode
+/// being device-local rather than working around it.
+Polarity polarityFor(Brightness appBrightness) => switch (appBrightness) {
+  Brightness.light => Polarity.darkOnLight,
+  Brightness.dark => Polarity.lightOnDark,
+};
+
+/// Decides [presentation]'s polarity, where the profile left it open.
+///
+/// Leaves a profile that names a polarity alone, which is what keeps
+/// `Central field loss` reversed inside a light app. Those presets cite
+/// Aquilante and Arditi for that surface; the app's theme is not evidence and
+/// does not get to overrule it.
+ResolvedPresentation resolvePresentation(
+  PresentationConfig presentation,
+  Brightness appBrightness,
+) => ResolvedPresentation._(
+  presentation.resolvedWith(polarityFor(appBrightness)),
+);
+
 // -- polarity defaults --------------------------------------------------
 
 /// The colours a profile falls back to when it carries no tint.
@@ -49,8 +111,11 @@ int inkArgbFor(Polarity polarity) => switch (polarity) {
 };
 
 /// The background colour a profile will actually be drawn on.
-int surfaceArgbFor(PresentationConfig presentation) =>
-    presentation.tintArgb ??
+///
+/// Takes a resolved config, because a profile following the app has no
+/// polarity of its own to switch on here.
+int surfaceArgbFor(ResolvedPresentation presentation) =>
+    presentation.config.tintArgb ??
     switch (presentation.polarity) {
       Polarity.darkOnLight => lightSurfaceArgb,
       Polarity.lightOnDark => darkSurfaceArgb,
@@ -139,7 +204,7 @@ const double readerTrackOpacity = 0.16;
 /// 0.179 is where a colour's contrast against black equals its contrast
 /// against white under the WCAG formula, which is exactly the point at
 /// which the better choice of overlay flips.
-Brightness chromeBrightnessFor(PresentationConfig presentation) =>
+Brightness chromeBrightnessFor(ResolvedPresentation presentation) =>
     relativeLuminance(surfaceArgbFor(presentation)) > 0.179
     ? Brightness.light
     : Brightness.dark;
@@ -161,7 +226,7 @@ Brightness chromeBrightnessFor(PresentationConfig presentation) =>
 /// the two clears about 4.1:1. WCAG 1.4.11 asks 3:1 for a control that is
 /// not text, which every glyph here is; `reader_chrome_test.dart` measures
 /// the whole preset list and both polarity defaults against that bar.
-int readerInkArgbFor(PresentationConfig presentation) =>
+int readerInkArgbFor(ResolvedPresentation presentation) =>
     chromeBrightnessFor(presentation) == Brightness.light
     ? darkInkArgb
     : lightInkArgb;
@@ -174,7 +239,7 @@ int readerInkArgbFor(PresentationConfig presentation) =>
 /// other never had. Handing `LinearProgressIndicator` a translucent
 /// background and re-deriving the composite in a test is the arrangement
 /// that had the WCAG readout in settings judging a pair the app never drew.
-Color readerTrackFor(PresentationConfig presentation) => Color.alphaBlend(
+Color readerTrackFor(ResolvedPresentation presentation) => Color.alphaBlend(
   colorOf(
     readerInkArgbFor(presentation),
   ).withValues(alpha: readerTrackOpacity),
@@ -201,9 +266,14 @@ Color readerTrackFor(PresentationConfig presentation) => Color.alphaBlend(
 /// Falling back to the ink rather than to a lightened accent, because a
 /// washed accent is still an accent and would report a colour the reader did
 /// not choose. Monochrome is what the rest of this screen already is.
+///
+/// ADR 0016 widens the set of backgrounds this has to survive: a profile
+/// following the app reaches both polarity defaults on one device, depending
+/// on the theme the reader has it in, so the fallback can now fire on a book
+/// that did not fire it yesterday.
 Color readerProgressFillFor({
   required ColorScheme scheme,
-  required PresentationConfig presentation,
+  required ResolvedPresentation presentation,
 }) {
   final track = readerTrackFor(presentation);
   final reads =
@@ -223,8 +293,11 @@ Color readerProgressFillFor({
 ///
 /// [brightness] comes from the profile rather than the platform, so a book
 /// read light on dark keeps a dark panel over it even on a device set to
-/// light. [accent] and [highContrast] arrive from `AppChromeSource`, which
-/// carries the reader's own appearance choices down from `appTheme`.
+/// light. Under ADR 0016 a profile that states no polarity has already taken
+/// the platform's brightness by the time it arrives here, so the two agree by
+/// construction rather than by coincidence. [accent] and [highContrast]
+/// arrive from `AppChromeSource`, which carries the reader's own appearance
+/// choices down from `appTheme`.
 ///
 /// The accent reaches exactly one thing here, `scheme.primary` on the
 /// progress fill and the selected chapter row. This file used to argue that
@@ -238,7 +311,7 @@ Color readerProgressFillFor({
 /// `scaffoldBackgroundColor` matches the profile so nothing shows through at
 /// the edges during a route transition.
 ThemeData readerChromeTheme({
-  required PresentationConfig presentation,
+  required ResolvedPresentation presentation,
   required Color accent,
   required bool highContrast,
 }) {

@@ -342,11 +342,17 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
     final source = AppChromeSource.of(context);
     final chrome = readerChromeTheme(
-      presentation: _profile.presentation,
+      // This `context` sits above the `Theme` that `build` installs, so its
+      // brightness is the app's own. Reading the reader's own theme here
+      // would feed a brightness this screen just resolved back into the
+      // resolution that produced it.
+      presentation: resolvePresentation(
+        _profile.presentation,
+        Theme.of(context).brightness,
+      ),
       accent: source.accent,
       highContrast: source.highContrast,
     );
-
     // The sheet's own container is themed here rather than in the builder.
     //
     // `showModalBottomSheet` reads `backgroundColor`, `shape`, `elevation`
@@ -467,7 +473,18 @@ class _ReaderScreenState extends State<ReaderScreen> {
     // report either back, so `appTheme` carries them separately. See
     // [AppChromeSource].
     final source = AppChromeSource.of(context);
-    final ink = colorOf(readerInkArgbFor(_profile.presentation));
+
+    // The one place this screen decides a polarity, and everything below
+    // takes the answer rather than asking again. A profile that names one
+    // keeps it; a profile that leaves it open takes the brightness the app
+    // is already in, which is read here rather than from the `Theme` this
+    // method installs a few lines down. See ADR 0016.
+    final presentation = resolvePresentation(
+      _profile.presentation,
+      Theme.of(context).brightness,
+    );
+
+    final ink = colorOf(readerInkArgbFor(presentation));
 
     return PopScope(
       canPop: false,
@@ -498,7 +515,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
           // chapter panel is included: it opens over the same surface.
           child: Theme(
             data: readerChromeTheme(
-              presentation: _profile.presentation,
+              presentation: presentation,
               accent: source.accent,
               highContrast: source.highContrast,
             ),
@@ -557,7 +574,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                           onTap: _onSurfaceTap,
                           child: RsvpView(
                             update: update,
-                            presentation: _profile.presentation,
+                            presentation: presentation,
                           ),
                         ),
                       ),
@@ -614,7 +631,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                               progress: widget.book.text.progressAt(
                                 _session.index,
                               ),
-                              presentation: _profile.presentation,
+                              presentation: presentation,
                               onClose: _closeOrDismiss,
                               onToggle: _toggle,
                               onProfile: _pickProfile,
@@ -811,7 +828,7 @@ const double _secondaryIconSize = 28;
 class _Controls extends StatelessWidget {
   final PlaybackState state;
   final double progress;
-  final PresentationConfig presentation;
+  final ResolvedPresentation presentation;
   final VoidCallback onClose;
   final VoidCallback onToggle;
   final VoidCallback onProfile;
