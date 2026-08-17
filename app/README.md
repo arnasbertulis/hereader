@@ -28,82 +28,129 @@ only adds syncing a position and preferences between devices.
 
 ```
 lib/
-├─ app_shell.dart              The three tabs, the bar and the rail, and
-│                               the cross-fade between them
+├─ main.dart                    Startup: opens the database, reads appearance
+│                                before the first frame, starts sync
+├─ startup_failure.dart         What the app shows when that fails, rather
+│                                than a blank window
+├─ app_shell.dart               The three tabs, the bar and the rail, and
+│                                the cross-fade between them
 ├─ data/
-│  ├─ database.dart            Drift schema: books, positions, pending
-│  │                            positions, covers, profiles, preferences,
-│  │                            outbox, conflicts
-│  └─ library_repository.dart  The only file that knows drift exists
+│  ├─ database.dart             Drift schema: books, positions, pending
+│  │                             positions, covers, profiles, preferences,
+│  │                             outbox, conflicts
+│  ├─ database.g.dart           Generated. See build_runner below
+│  └─ library_repository.dart   The only file that knows drift exists
 ├─ sync/
-│  ├─ sync_engine.dart         Drains the outbox, applies remote events
-│  ├─ api_client.dart          Calls the sync service, refreshes tokens
-│  └─ auth_store.dart          Session storage: keystore on native, local
-│                               storage on web
+│  ├─ sync_engine.dart          Drains the outbox, applies remote events
+│  ├─ api_client.dart           Calls the sync service, refreshes tokens
+│  ├─ auth_store.dart           Session storage: keystore on native, local
+│  │                             storage on web
+│  ├─ sync_button.dart          Status and a manual run, as one control
+│  ├─ last_synced.dart          How long ago the last finished run was
+│  ├─ position_conflict_sheet.dart  Two positions, for the reader to choose
+│  │                             between when devices diverge
+│  └─ sign_in_screen.dart       Sign in or register, always skippable
 ├─ theme/
-│  ├─ app_colors.dart         Neutral ramps, the accent list, buildScheme
-│  ├─ app_tokens.dart         Spacing, radii, durations, hairline widths,
-│  │                           and the app's one shadow
-│  ├─ app_typography.dart     The type scale
-│  ├─ app_theme.dart          ThemeData and every component theme.
-│  │                           AppChromeSource, a ThemeExtension, carries
-│  │                           the reader's accent and contrast choice down
-│  │                           to the reader screen, since buildScheme folds
-│  │                           both into a ColorScheme and cannot report
-│  │                           either back out
-│  └─ appearance.dart         Theme mode, accent and high contrast: stored,
-│                              read before the first frame, notified from
+│  ├─ app_colors.dart           Neutral ramps, the accent list, buildScheme
+│  ├─ app_tokens.dart           Spacing, radii, durations, hairline widths,
+│  │                             and the app's one shadow
+│  ├─ app_typography.dart       The type scale
+│  ├─ app_theme.dart            ThemeData and every component theme.
+│  │                             AppChromeSource, a ThemeExtension, carries
+│  │                             the reader's accent and contrast choice
+│  │                             down to the reader screen, since buildScheme
+│  │                             folds both into a ColorScheme and cannot
+│  │                             report either back out
+│  ├─ page_transitions.dart     Routes fade and scale rather than sliding
+│  ├─ rgb_sliders.dart          Three channel sliders, shared by the screens
+│  │                             that pick a colour
+│  └─ appearance.dart           Theme mode, accent and high contrast: stored,
+│                                read before the first frame, notified from
 └─ reading/
-   ├─ home_screen.dart         The book you were last in, and four you read
-   │                            before it
-   ├─ library_screen.dart      Import, list, open, remove
-   ├─ library_book.dart        Import pipeline and the in-memory book model
-   ├─ book_cover.dart          Covers, and the generated face for a book
-   │                            that declares none
-   ├─ book_progress.dart       What the reader is told about their place:
-   │                            the bar, the percentage, and the time left
-   ├─ book_opener.dart         The one path from a book id to the reader
-   ├─ reader_screen.dart       Full-screen reading surface
-   ├─ rsvp_view.dart           Draws one token at the profile's anchor. The
-   │                            only definition of what reading looks like;
-   │                            the settings preview draws through it
-   ├─ settings_screen.dart     An index of sections, each its own subpage
-   ├─ profiles_screen.dart     Profile list, presets separated from forks
-   ├─ appearance_screen.dart   Theme, accent and contrast for app chrome
-   ├─ profile_edit_screen.dart One profile, with a live preview
+   ├─ home_screen.dart          The book you were last in, and four you read
+   │                             before it
+   ├─ library_screen.dart       Import, list, open, remove
+   ├─ library_book.dart         Import pipeline and the in-memory book model
+   ├─ book_cover.dart           Covers, and the generated face for a book
+   │                             that declares none
+   ├─ book_progress.dart        What the reader is told about their place:
+   │                             the bar, the percentage, and the time left
+   ├─ book_opener.dart          The one path from a book id to the reader
+   ├─ paste_reader_screen.dart  Read arbitrary pasted text
+   ├─ reader_screen.dart        Full-screen reading surface
+   ├─ rsvp_view.dart            Draws one token at the profile's anchor. The
+   │                             only definition of what reading looks like;
+   │                             the settings preview draws through it. Takes
+   │                             a ResolvedPresentation, so a profile that
+   │                             follows the app arrives with a polarity
+   │                             already chosen
    ├─ profile_presentation.dart Polarity colours, reader chrome theme,
-   │                            readerInkArgbFor for controls drawn straight
-   │                            on the surface, and readerProgressFillFor /
-   │                            readerTrackFor for the one accented control
-   │                            on the screen. The ARGB helpers and WCAG
-   │                            maths it used to hold live in rsvp_engine,
-   │                            so they run in a browser
-   ├─ sign_in_screen.dart      Sign in or register, always skippable
-   └─ paste_reader_screen.dart Read arbitrary pasted text
+   │                             readerInkArgbFor for controls drawn straight
+   │                             on the surface, and readerProgressFillFor /
+   │                             readerTrackFor for the one accented control
+   │                             on the screen. ResolvedPresentation and
+   │                             resolvePresentation live here too: a profile
+   │                             may state no polarity, and this is where one
+   │                             gets decided. The ARGB helpers and WCAG
+   │                             maths it used to hold live in rsvp_engine,
+   │                             so they run in a browser
+   ├─ settings_screen.dart      An index of sections, each its own subpage
+   ├─ reading_settings_screen.dart  The reading section of that index
+   ├─ profiles_screen.dart      Profile list, presets separated from forks
+   ├─ profile_edit_screen.dart  One profile, with a live preview
+   ├─ appearance_screen.dart    Theme, accent and contrast for app chrome
+   ├─ custom_accent_screen.dart An accent outside the six built in
+   ├─ sync_screen.dart          Sync state and a manual run, in settings
+   ├─ account_screen.dart       Session and sign out
+   └─ about_screen.dart         What this is, and what it does not claim
 ```
+
+Settings subpages sit in `reading/` beside the reader rather than in a folder
+of their own. Most of them configure a reading profile, and the ones that do
+not are reached from the same index.
 
 App chrome and the reading surface are themed separately and on purpose.
 `theme/` builds the app around the books from a neutral ramp plus one accent
-the reader picks. The reading surface reads brightness from the active
-reading profile's own background rather than from the platform, through
-`readerChromeTheme`, so a book set to light on dark keeps dark chrome even on
-a device set to light — see [ADR 0015](../docs/adr/0015-reader-chrome-is-monochrome-over-the-profile.md).
+the reader picks. `readerChromeTheme` builds the reading surface from a
+brightness the reading profile decides, so a book set to light on dark keeps
+dark chrome on a device set to light. See
+[ADR 0015](../docs/adr/0015-reader-chrome-is-monochrome-over-the-profile.md).
+
+A profile need not decide, and by default the two most general presets do not.
+`PresentationConfig.polarity` is nullable: null says the reader stated no
+preference, and the screen drawing it supplies one from the brightness the app
+is running in. A dark app opens a book onto a dark page. The presets whose
+citations pick a surface, `Central field loss` and its timed variant and
+`Low fatigue`, state their polarity and keep it inside a light app. Following
+the app means taking its brightness rather than its colours: the reading
+surface keeps its own pair, which is what the contrast readout in settings
+measures. See
+[ADR 0016](../docs/adr/0016-reader-theme-follows-the-app.md).
+
+`ResolvedPresentation` is how that stays honest. It is an extension type over a
+config whose polarity is decided, `resolvePresentation` is the only way to make
+one, and every function that paints takes it. Each screen resolves once near
+the top of `build` and passes the result down, so the reading surface, the
+settings preview and the WCAG readout cannot disagree about which colours are
+on screen. That disagreement has happened here before, between `RsvpView`'s own
+ink constants and the readout measuring a different pair, and a comment saying
+where resolution belongs would not have caught it.
 
 The two screens are not otherwise isolated from each other. `readerChromeTheme`
 takes the app's own accent and contrast setting, carried down through
 `AppChromeSource`, and folds them into the same neutral ramp app chrome uses.
-Controls drawn straight onto the reading surface — the playback buttons, the
-chapter glyph — take no accent at all; their colour is `readerInkArgbFor`,
+Controls drawn straight onto the reading surface, the playback buttons and the
+chapter glyph, take no accent at all; their colour is `readerInkArgbFor`,
 picked from the surface's own luminance so a glyph stays legible against
 whatever a reader has tinted the background. The progress bar is the one
 exception, and even there the accent gives way to the ink wherever it cannot
 clear 3:1 against its own track.
 
 Accent is scarce by design. On a given screen it marks the one action or the
-one measurement worth marking — the progress fill on the home tile, the dot
-under the selected tab, the progress fill on the reading surface — and
-surfaces are separated with hairlines rather than elevation. `AppShadow` is
-the single exception and its comment says why.
+one measurement worth marking, the progress fill on the home tile, the dot
+under the selected tab, the progress fill on the reading surface, and surfaces
+are separated with hairlines rather than elevation. `AppShadow` is the single
+exception and its comment says why.
 
 After changing `data/database.dart`, regenerate:
 
@@ -188,6 +235,33 @@ The sync state is shown on the library screen. The home screen carried a
 second copy of it and dropped it in the UI pass, rather than keeping four
 states in step across two screens for a readout nobody opens the app to check.
 
+## Known limitations
+
+**A profile set to follow the app renders differently on two synced devices.**
+Theme mode is device-local under ADR 0012, so one profile draws light on a
+phone set light and dark on a desktop set dark. That is the intended
+consequence rather than a defect, and it is written down so nobody has to work
+it out from the code.
+
+**A client older than the nullable polarity field pins a following profile.**
+It reads the absent key as its own default, and because profiles merge whole
+under ADR 0008 it writes that pin back on its next edit of the same profile. No
+wire format avoids this: an older `PresentationConfig.fromJson` drops any key
+it has no field for. See
+[ADR 0016](../docs/adr/0016-reader-theme-follows-the-app.md).
+
+**The progress fill on the reading surface can go monochrome without saying
+so.** `readerProgressFillFor` falls back to the surface ink wherever the
+reader's accent cannot clear 3:1 against its own track, and the accent and the
+background are set on two screens that know nothing about each other. Unlike
+contrast and fade, this is not warn-don't-block: there is no reading for the
+reader to see and override, only a colour that quietly is not the one they
+picked. ADR 0016 widens the set of backgrounds this can happen on, since one
+profile now reaches both polarity defaults on one device.
+
+**Web imports block the interface.** `compute()` does not offload on Flutter
+web; see the note under how a book gets read.
+
 ## Testing
 
 ```bash
@@ -204,16 +278,29 @@ its widgets: `readerInkArgbFor` against every preset and a spread of tints
 around the point where the better overlay flips, and `readerProgressFillFor`
 against its own track across all six accents, since that pair is the one
 place an arbitrary reader-chosen background meets an accent nothing else on
-the screen has to contend with.
+the screen has to contend with. Every preset is measured under both app
+themes, because two of them state no polarity and reach a different surface in
+each.
+
+`reading_surface_test.dart` covers what actually gets painted. It pumps
+`ReaderScreen` under a dark app theme and reads the colour behind the word,
+naming no polarity anywhere: the book opens on `Presets.standard`, so the page
+can only have come from the theme.
 
 The smoke test identifies chrome by key rather than by widget type where the
 widget is this project's own: `homeContinueTileKey` for the home tile,
 `appNavBarKey` for the bottom bar, `readerPlayButtonKey` for the reading
-surface's play button. Matching a button's label instead was asserting two
-things at once, and for the play button the label itself changes with
-playback state, which made the match brittle on top of being imprecise.
+surface's play button, `profileFollowAppKey` for the switch that puts a profile
+back to following the app theme. Matching a button's label instead was
+asserting two things at once, and for the play button the label itself changes
+with playback state, which made the match brittle on top of being imprecise.
 
 One quirk worth knowing: drift schedules a zero-duration timer when a query
 stream is cancelled. If the widget tree is left to teardown, that timer is
 never pumped and the framework reports a leaked timer. Tests that build the
 library screen dispose the tree explicitly and pump with a duration.
+
+A second quirk, found the same way: `scrollUntilVisible` resolves its default
+`scrollable` argument to the one `Scrollable` in the tree and throws when it
+finds several. A screen with a `TextField` on it has two, since `EditableText`
+builds its own. Name the scrollable rather than letting it default.

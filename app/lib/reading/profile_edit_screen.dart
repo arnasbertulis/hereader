@@ -7,6 +7,15 @@ import '../data/library_repository.dart';
 import 'profile_presentation.dart';
 import 'rsvp_view.dart';
 
+/// Identifies the switch that puts a profile back to following the app theme.
+///
+/// Three `SwitchListTile`s sit on this screen, so a finder by type alone
+/// cannot say which. The alternative is the switch's own title, which would
+/// tie `reading_surface_test.dart` to a line of copy that has nothing to do
+/// with what the test is checking. Same argument as
+/// [readerPlayButtonKey] in `reader_screen.dart`.
+const Key profileFollowAppKey = Key('profile-follow-app');
+
 /// Edits one reading profile.
 ///
 /// A preset opens read-only with a button to copy it. The alternative —
@@ -119,6 +128,15 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     final pacing = _draft.pacing;
     final presentation = _draft.presentation;
 
+    // Resolved once and passed down, so the preview and the contrast readout
+    // under it report the pair the reader is looking at. The polarity control
+    // below reads `presentation` rather than this, because a control shows
+    // what the reader chose and not what the app filled in for them.
+    final resolved = resolvePresentation(
+      presentation,
+      Theme.of(context).brightness,
+    );
+
     // Under reader-elicited pacing the reader supplies their own timing, so
     // rate and pause controls have nothing to act on. Disabled rather than
     // hidden: a control that vanishes leaves the reader guessing what
@@ -136,7 +154,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         ),
         body: ListView(
           children: [
-            _Preview(profile: _draft),
+            _Preview(profile: _draft, presentation: resolved),
 
             if (!_editable) _PresetBanner(onCopy: _makeCopy, name: _draft.name),
 
@@ -368,6 +386,29 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
             // -- colour ------------------------------------------------
             const _SectionHeader('Colour'),
+
+            SwitchListTile(
+              key: profileFollowAppKey,
+              title: const Text('Follow the app’s theme'),
+              subtitle: const Text(
+                'The page turns light or dark along with the rest of the '
+                'app. Theme mode is set per device, so this profile can '
+                'read light on a phone and dark on a desktop.',
+              ),
+              value: presentation.polarity == null,
+              onChanged: _editable
+                  ? (following) => _updatePresentation(
+                      // Switching off pins the polarity the app was already
+                      // supplying, rather than the class default. The reader
+                      // is looking at a surface when they reach for this, and
+                      // pinning any other one would change the page they just
+                      // decided to keep.
+                      (p) =>
+                          p.withPolarity(following ? null : resolved.polarity),
+                    )
+                  : null,
+            ),
+
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: SegmentedButton<Polarity>(
@@ -381,10 +422,17 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                     label: Text('Light on dark'),
                   ),
                 ],
-                selected: {presentation.polarity},
-                onSelectionChanged: _editable
+                // The resolved value, so a profile following the app shows
+                // the side it is on. An empty selection would be accurate
+                // about the stored field and wrong about the page.
+                selected: {resolved.polarity},
+                // Disabled while the profile follows, which is how the rate
+                // and pause controls behave under elicited pacing. Tapping a
+                // side is also how a reader turns following off, so the
+                // switch above stays the one way to reach that state.
+                onSelectionChanged: _editable && presentation.polarity != null
                     ? (selected) => _updatePresentation(
-                        (p) => p.copyWith(polarity: selected.first),
+                        (p) => p.withPolarity(selected.first),
                       )
                     : null,
               ),
@@ -398,30 +446,16 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             ),
 
             _BackgroundField(
-              presentation: presentation,
+              presentation: resolved,
               enabled: _editable,
-              onChanged: (argb) =>
-                  _updatePresentation((p) => p.copyWith(tintArgb: argb)),
+              onChanged: (argb) => _updatePresentation((p) => p.withTint(argb)),
+              // `withTint` replaces the hand-written PresentationConfig this
+              // used to rebuild field by field. Both nullable fields on that
+              // class now have one setter each that can reach null, so
+              // clearing a background and clearing a polarity read the same.
               onReset: presentation.tintArgb == null
                   ? null
-                  : () => _updatePresentation(
-                      (p) => PresentationConfig(
-                        mode: p.mode,
-                        anchorX: p.anchorX,
-                        anchorY: p.anchorY,
-                        fontFamily: p.fontFamily,
-                        fontSizePt: p.fontSizePt,
-                        letterSpacingEm: p.letterSpacingEm,
-                        chunkSize: p.chunkSize,
-                        polarity: p.polarity,
-                        // Rebuilt rather than copied: copyWith cannot set a
-                        // nullable field back to null, and null here means
-                        // "follow the polarity" rather than any one colour.
-                        tintArgb: null,
-                        orpHighlight: p.orpHighlight,
-                        transitionMs: p.transitionMs,
-                      ),
-                    ),
+                  : () => _updatePresentation((p) => p.withTint(null)),
             ),
 
             const SizedBox(height: 40),
@@ -501,7 +535,15 @@ class _PresetBanner extends StatelessWidget {
 /// screen.
 class _Preview extends StatefulWidget {
   final ReadingProfile profile;
-  const _Preview({required this.profile});
+
+  /// The same profile's presentation, with its polarity already decided.
+  ///
+  /// Passed in rather than resolved here, so this preview and the contrast
+  /// readout beneath it cannot answer that question differently. The whole
+  /// profile still comes too: the session takes its pacing.
+  final ResolvedPresentation presentation;
+
+  const _Preview({required this.profile, required this.presentation});
 
   @override
   State<_Preview> createState() => _PreviewState();
@@ -596,7 +638,7 @@ class _PreviewState extends State<_Preview> {
 
   @override
   Widget build(BuildContext context) {
-    final presentation = widget.profile.presentation;
+    final presentation = widget.presentation;
     final surface = surfaceArgbFor(presentation);
     final ink = inkArgbFor(presentation.polarity);
 
@@ -808,7 +850,7 @@ class _SettingSlider extends StatelessWidget {
 /// gradient square. Alpha is fixed opaque, since a translucent reading
 /// background would composite against whatever the platform put behind it.
 class _BackgroundField extends StatelessWidget {
-  final PresentationConfig presentation;
+  final ResolvedPresentation presentation;
   final bool enabled;
   final ValueChanged<int> onChanged;
   final VoidCallback? onReset;
@@ -846,7 +888,7 @@ class _BackgroundField extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  presentation.tintArgb == null
+                  presentation.config.tintArgb == null
                       ? 'Following the polarity — ${hexOf(argb)}'
                       : hexOf(argb),
                 ),

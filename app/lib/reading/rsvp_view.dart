@@ -15,9 +15,16 @@ import 'profile_presentation.dart';
 /// is being read — and, more concretely, so the contrast readout judges the
 /// colours this widget puts on screen. It measured a different pair until
 /// the preview was folded in here.
+///
+/// Takes a [ResolvedPresentation], so a profile that follows the app theme
+/// arrives with a polarity already chosen. Resolving here instead would put
+/// the decision below the contrast readout in settings, which sits beside
+/// this widget and measures what it draws: the readout would report the
+/// unresolved colours while the reader looked at the resolved ones, which is
+/// the disagreement folding the preview in here fixed once already.
 class RsvpView extends StatelessWidget {
   final PlaybackUpdate? update;
-  final PresentationConfig presentation;
+  final ResolvedPresentation presentation;
 
   const RsvpView({super.key, required this.update, required this.presentation});
 
@@ -34,10 +41,15 @@ class RsvpView extends StatelessWidget {
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
 
+    // Everything below the polarity reads off the config itself. An extension
+    // type carries no members of what it wraps, which is what stops an
+    // unresolved config reaching a paint call by looking close enough.
+    final config = presentation.config;
+
     final style = TextStyle(
-      fontFamily: presentation.fontFamily,
-      fontSize: presentation.fontSizePt,
-      letterSpacing: presentation.fontSizePt * presentation.letterSpacingEm,
+      fontFamily: config.fontFamily,
+      fontSize: config.fontSizePt,
+      letterSpacing: config.fontSizePt * config.letterSpacingEm,
       height: 1.2,
       color: colorOf(inkArgbFor(presentation.polarity)),
       fontFeatures: const [FontFeature.tabularFigures()],
@@ -51,9 +63,9 @@ class RsvpView extends StatelessWidget {
       // anchor does not shift.
       word = SizedBox(
         key: const ValueKey('blank'),
-        height: presentation.fontSizePt * 1.2,
+        height: config.fontSizePt * 1.2,
       );
-    } else if (presentation.orpHighlight) {
+    } else if (config.orpHighlight) {
       final i = _orpIndex(token.text);
       word = Text.rich(
         TextSpan(
@@ -79,15 +91,15 @@ class RsvpView extends StatelessWidget {
       );
     }
 
-    final transition = reduceMotion ? 0 : presentation.transitionMs;
+    final transition = reduceMotion ? 0 : config.transitionMs;
 
     return ColoredBox(
       color: colorOf(surfaceArgbFor(presentation)),
       child: Align(
         // Anchor fractions map onto Alignment's -1..1 range.
         alignment: Alignment(
-          presentation.anchorX * 2 - 1,
-          presentation.anchorY * 2 - 1,
+          config.anchorX * 2 - 1,
+          config.anchorY * 2 - 1,
         ),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),

@@ -20,6 +20,11 @@ enum PresentationMode {
   continuousScroll,
 }
 
+/// Which way round the reading surface runs.
+///
+/// Two values, and this package keeps it that way. A profile that states no
+/// preference carries null in [PresentationConfig.polarity] rather than a
+/// third value here; see that field for why.
 enum Polarity { darkOnLight, lightOnDark }
 
 /// Everything about how text is drawn. No timing.
@@ -43,10 +48,27 @@ class PresentationConfig {
   /// does not yet do.
   final int chunkSize;
 
-  final Polarity polarity;
+  /// Ink and default background, or null for the caller to decide.
+  ///
+  /// Null says this profile states no preference, so whoever draws supplies
+  /// one through [resolvedWith]. This package holds no notion of a platform
+  /// theme and cannot pick for itself. The app passes the brightness it is
+  /// already running in.
+  ///
+  /// Null rather than a third value on [Polarity]. A `Polarity.followCaller`
+  /// would reach every switch in this package on a value none of them can
+  /// paint, so each one would throw or pick a side the reader never chose,
+  /// and it would move every profile already on disk onto an enum value none
+  /// of them were written with.
+  ///
+  /// Absent from [copyWith] for the same reason [tintArgb] is. Set it with
+  /// [withPolarity].
+  final Polarity? polarity;
 
   /// Background tint as ARGB, or null for the polarity default. Stored as an
   /// int so this package stays free of Flutter.
+  ///
+  /// Absent from [copyWith]. Set it with [withTint].
   final int? tintArgb;
 
   /// Highlight one letter as a fixation target. Preference only: this has
@@ -64,7 +86,7 @@ class PresentationConfig {
     this.fontSizePt = 44,
     this.letterSpacingEm = 0.0,
     this.chunkSize = 1,
-    this.polarity = Polarity.darkOnLight,
+    this.polarity,
     this.tintArgb,
     this.orpHighlight = false,
     this.transitionMs = 0,
@@ -77,6 +99,12 @@ class PresentationConfig {
        ),
        assert(transitionMs >= 0);
 
+  /// Every field except the two nullable ones.
+  ///
+  /// [polarity] and [tintArgb] each mean something by being null, and
+  /// `field ?? this.field` reads a null argument as "leave this alone", so
+  /// nothing routed through here could ever put one back to unset. Both have
+  /// a setter of their own instead, which leaves one way to write each.
   PresentationConfig copyWith({
     PresentationMode? mode,
     double? anchorX,
@@ -85,8 +113,6 @@ class PresentationConfig {
     double? fontSizePt,
     double? letterSpacingEm,
     int? chunkSize,
-    Polarity? polarity,
-    int? tintArgb,
     bool? orpHighlight,
     int? transitionMs,
   }) => PresentationConfig(
@@ -97,12 +123,62 @@ class PresentationConfig {
     fontSizePt: fontSizePt ?? this.fontSizePt,
     letterSpacingEm: letterSpacingEm ?? this.letterSpacingEm,
     chunkSize: chunkSize ?? this.chunkSize,
-    polarity: polarity ?? this.polarity,
-    tintArgb: tintArgb ?? this.tintArgb,
+    polarity: polarity,
+    tintArgb: tintArgb,
     orpHighlight: orpHighlight ?? this.orpHighlight,
     transitionMs: transitionMs ?? this.transitionMs,
   );
 
+  /// Sets [polarity], null included.
+  PresentationConfig withPolarity(Polarity? polarity) => PresentationConfig(
+    mode: mode,
+    anchorX: anchorX,
+    anchorY: anchorY,
+    fontFamily: fontFamily,
+    fontSizePt: fontSizePt,
+    letterSpacingEm: letterSpacingEm,
+    chunkSize: chunkSize,
+    polarity: polarity,
+    tintArgb: tintArgb,
+    orpHighlight: orpHighlight,
+    transitionMs: transitionMs,
+  );
+
+  /// Sets [tintArgb], null included.
+  PresentationConfig withTint(int? tintArgb) => PresentationConfig(
+    mode: mode,
+    anchorX: anchorX,
+    anchorY: anchorY,
+    fontFamily: fontFamily,
+    fontSizePt: fontSizePt,
+    letterSpacingEm: letterSpacingEm,
+    chunkSize: chunkSize,
+    polarity: polarity,
+    tintArgb: tintArgb,
+    orpHighlight: orpHighlight,
+    transitionMs: transitionMs,
+  );
+
+  /// This config with [fallback] standing in for an unset [polarity].
+  ///
+  /// Call it above whatever paints and pass the result down. A reading
+  /// surface that resolved this for itself would leave a settings preview
+  /// and a contrast readout measuring the unresolved value while the reader
+  /// looks at the resolved one, which is the disagreement between a preview
+  /// and the real surface that this project has already had once.
+  ///
+  /// Leaves a profile that states a polarity alone, so the low-vision
+  /// presets keep the surface their citations argue for.
+  PresentationConfig resolvedWith(Polarity fallback) =>
+      polarity == null ? withPolarity(fallback) : this;
+
+  /// Writes the fields that carry a value.
+  ///
+  /// An unset [polarity] leaves the key out rather than writing null, which
+  /// matches [fontFamily] and [tintArgb]. A client older than this field
+  /// reads the absence as its own default and pins the profile, and whole
+  /// profile merges under ADR 0008 mean it writes that pin back. See ADR
+  /// 0016 on why the app accepts that rather than encoding around it.
   Map<String, dynamic> toJson() => {
     'mode': mode.name,
     'anchorX': anchorX,
@@ -111,7 +187,7 @@ class PresentationConfig {
     'fontSizePt': fontSizePt,
     'letterSpacingEm': letterSpacingEm,
     'chunkSize': chunkSize,
-    'polarity': polarity.name,
+    if (polarity != null) 'polarity': polarity!.name,
     if (tintArgb != null) 'tintArgb': tintArgb,
     'orpHighlight': orpHighlight,
     'transitionMs': transitionMs,
@@ -143,11 +219,14 @@ class PresentationConfig {
       // it is legible; refusing the profile would lose their type size and
       // contrast along with it.
       chunkSize: coerceInt(json['chunkSize'], 1, min: 1, max: 1),
-      polarity: enumByName(
-        Polarity.values,
-        json['polarity'],
-        fallback.polarity,
-      ),
+      // Read through the name map rather than `enumByName`, because there is
+      // no fallback to give it: a missing key is a profile that states no
+      // polarity, which is the value null already carries. A name this build
+      // does not know lands in the same place. It came from a build that
+      // added a third value, and that name says nothing about which of these
+      // two the reader would have picked, so the caller's own theme answers
+      // better than a constant here does.
+      polarity: Polarity.values.asNameMap()[json['polarity']],
       tintArgb: json['tintArgb'] is num ? coerceInt(json['tintArgb'], 0) : null,
       orpHighlight: coerceBool(json['orpHighlight'], fallback.orpHighlight),
       transitionMs: coerceInt(
@@ -245,6 +324,11 @@ class ReadingProfile {
   /// The caller supplies the id, so the namespace is checked here: a fork
   /// keeping a preset's id would shadow that preset in the reader's list and
   /// would be refused by the repository on save.
+  ///
+  /// Copies the preset's presentation whole, unset polarity included. A
+  /// reader forking `Standard` keeps a profile that follows the app, and a
+  /// reader forking `Central field loss` keeps the light on dark that
+  /// preset's citations argue for.
   ReadingProfile fork({required String id, String? name}) {
     if (id.startsWith(builtInIdPrefix)) {
       throw ArgumentError.value(
