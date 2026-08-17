@@ -148,9 +148,12 @@ clear 3:1 against its own track.
 
 Accent is scarce by design. On a given screen it marks the one action or the
 one measurement worth marking, the progress fill on the home tile, the dot
-under the selected tab, the progress fill on the reading surface, and surfaces
-are separated with hairlines rather than elevation. `AppShadow` is the single
-exception and its comment says why.
+under the selected tab, the progress fill on the reading surface, the add
+button on the library. Surfaces are separated with hairlines rather than
+elevation, and two objects carry a shadow instead because a line cannot seat
+them: `AppShadow` under Home's continue tile, which sits alone in open space
+with nothing to align to, and `AppFloatShadow` under the library's add button,
+which floats over covers it cannot predict. Each token says so itself.
 
 After changing `data/database.dart`, regenerate:
 
@@ -231,9 +234,13 @@ an error neither `NetworkException` nor `ApiException` describes. An earlier
 version of this code let such an error escape uncaught, which left the sync
 indicator spinning indefinitely with no work actually running.
 
-The sync state is shown on the library screen. The home screen carried a
-second copy of it and dropped it in the UI pass, rather than keeping four
-states in step across two screens for a readout nobody opens the app to check.
+Sync reports itself in one place, the Sync section of Settings: what the last
+run did, when it finished, and a button to run one now. Home carried a copy of
+that state and dropped it in the UI pass; the library dropped its own with the
+app bar. Keeping four statuses in step across three screens is work nobody
+opens the app to see the result of. The library keeps the gesture without the
+readout, since a reader who has just put down another device should not wait
+five minutes for the timer: pulling the shelf down runs a sync.
 
 ## Known limitations
 
@@ -291,9 +298,10 @@ The smoke test identifies chrome by key rather than by widget type where the
 widget is this project's own: `homeContinueTileKey` for the home tile,
 `appNavBarKey` for the bottom bar, `readerPlayButtonKey` for the reading
 surface's play button, `profileFollowAppKey` for the switch that puts a profile
-back to following the app theme. Matching a button's label instead was
-asserting two things at once, and for the play button the label itself changes
-with playback state, which made the match brittle on top of being imprecise.
+back to following the app theme, `libraryAddButtonKey` for the button that
+opens the library's add menu. Matching a button's label instead was asserting
+two things at once, and for the play button the label itself changes with
+playback state, which made the match brittle on top of being imprecise.
 
 One quirk worth knowing: drift schedules a zero-duration timer when a query
 stream is cancelled. If the widget tree is left to teardown, that timer is
