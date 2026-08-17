@@ -45,7 +45,12 @@ lib/
 │  ├─ app_tokens.dart         Spacing, radii, durations, hairline widths,
 │  │                           and the app's one shadow
 │  ├─ app_typography.dart     The type scale
-│  ├─ app_theme.dart          ThemeData and every component theme
+│  ├─ app_theme.dart          ThemeData and every component theme.
+│  │                           AppChromeSource, a ThemeExtension, carries
+│  │                           the reader's accent and contrast choice down
+│  │                           to the reader screen, since buildScheme folds
+│  │                           both into a ColorScheme and cannot report
+│  │                           either back out
 │  └─ appearance.dart         Theme mode, accent and high contrast: stored,
 │                              read before the first frame, notified from
 └─ reading/
@@ -66,23 +71,39 @@ lib/
    ├─ profiles_screen.dart     Profile list, presets separated from forks
    ├─ appearance_screen.dart   Theme, accent and contrast for app chrome
    ├─ profile_edit_screen.dart One profile, with a live preview
-   ├─ profile_presentation.dart Polarity colours, reader chrome theme. The
-   │                            ARGB helpers and WCAG maths it used to hold
-   │                            live in rsvp_engine, so they run in a browser
+   ├─ profile_presentation.dart Polarity colours, reader chrome theme,
+   │                            readerInkArgbFor for controls drawn straight
+   │                            on the surface, and readerProgressFillFor /
+   │                            readerTrackFor for the one accented control
+   │                            on the screen. The ARGB helpers and WCAG
+   │                            maths it used to hold live in rsvp_engine,
+   │                            so they run in a browser
    ├─ sign_in_screen.dart      Sign in or register, always skippable
    └─ paste_reader_screen.dart Read arbitrary pasted text
 ```
 
 App chrome and the reading surface are themed separately and on purpose.
-`theme/` builds the app around the books from a neutral ramp plus one
-accent the reader picks; the reading surface takes its colours from the
-active reading profile, and `readerChromeTheme` seeds from its own fixed
-neutral grey so neither the app accent nor a hue of its own can reach it.
+`theme/` builds the app around the books from a neutral ramp plus one accent
+the reader picks. The reading surface reads brightness from the active
+reading profile's own background rather than from the platform, through
+`readerChromeTheme`, so a book set to light on dark keeps dark chrome even on
+a device set to light — see [ADR 0015](../docs/adr/0015-reader-chrome-is-monochrome-over-the-profile.md).
+
+The two screens are not otherwise isolated from each other. `readerChromeTheme`
+takes the app's own accent and contrast setting, carried down through
+`AppChromeSource`, and folds them into the same neutral ramp app chrome uses.
+Controls drawn straight onto the reading surface — the playback buttons, the
+chapter glyph — take no accent at all; their colour is `readerInkArgbFor`,
+picked from the surface's own luminance so a glyph stays legible against
+whatever a reader has tinted the background. The progress bar is the one
+exception, and even there the accent gives way to the ink wherever it cannot
+clear 3:1 against its own track.
 
 Accent is scarce by design. On a given screen it marks the one action or the
 one measurement worth marking — the progress fill on the home tile, the dot
-under the selected tab — and surfaces are separated with hairlines rather
-than elevation. `AppShadow` is the single exception and its comment says why.
+under the selected tab, the progress fill on the reading surface — and
+surfaces are separated with hairlines rather than elevation. `AppShadow` is
+the single exception and its comment says why.
 
 After changing `data/database.dart`, regenerate:
 
@@ -116,6 +137,12 @@ never sync; an event without a position would sync a change this device does
 not have. That transaction also drops any queued position event for the same
 book that has never been sent, so the cadence above costs nothing on the wire.
 See [ADR 0011](../docs/adr/0011-position-save-cadence.md).
+
+Rewind is `arrowLeft`, stepping by the active profile's `rewindWords`. The
+reading surface has no rewind button: left and right tap zones are meant to
+replace it and are not built yet, so a keyboard, a switch, or a screen reader
+is the only way back until then. See
+[ADR 0015](../docs/adr/0015-reader-chrome-is-monochrome-over-the-profile.md).
 
 ## What the home screen knows
 
@@ -172,11 +199,19 @@ they exercise the real queries. `LibraryRepository` tests do the same for
 pending positions specifically: holding one, draining it on import, and
 stamp ordering in both directions.
 
+`reader_chrome_test.dart` measures the reading surface's colours rather than
+its widgets: `readerInkArgbFor` against every preset and a spread of tints
+around the point where the better overlay flips, and `readerProgressFillFor`
+against its own track across all six accents, since that pair is the one
+place an arbitrary reader-chosen background meets an accent nothing else on
+the screen has to contend with.
+
 The smoke test identifies chrome by key rather than by widget type where the
 widget is this project's own: `homeContinueTileKey` for the home tile,
-`appNavBarKey` for the bottom bar. Matching a button's label instead was
-asserting two things at once, and one of them was not what the test was named
-after.
+`appNavBarKey` for the bottom bar, `readerPlayButtonKey` for the reading
+surface's play button. Matching a button's label instead was asserting two
+things at once, and for the play button the label itself changes with
+playback state, which made the match brittle on top of being imprecise.
 
 One quirk worth knowing: drift schedules a zero-duration timer when a query
 stream is cancelled. If the widget tree is left to teardown, that timer is
