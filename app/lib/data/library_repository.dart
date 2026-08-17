@@ -74,14 +74,27 @@ class BookSummary {
 /// `recentlyAdded` rather than "Recent", which reads as recently opened and
 /// is not what this sorts by. Home orders by when a book was last read; the
 /// library orders by when it arrived.
+///
+/// Each value names both ends of itself rather than carrying an ascending
+/// flag. Ascending means opposite things here: the useful end of a date is
+/// the newest and the useful end of a title is the first letter, so a shared
+/// direction would default to descending for two of these and ascending for
+/// the third. [endLabel] lets the control say which end the reader is at in
+/// the terms of the field they picked.
 enum LibrarySort {
-  recentlyAdded('Recently added'),
-  title('Title'),
-  progress('Progress');
+  recentlyAdded('Recently added', 'Newest first', 'Oldest first'),
+  title('Title', 'A to Z', 'Z to A'),
+  progress('Progress', 'Most read first', 'Least read first');
 
-  const LibrarySort(this.label);
+  const LibrarySort(this.label, this._nearEnd, this._farEnd);
 
   final String label;
+
+  final String _nearEnd;
+  final String _farEnd;
+
+  /// What sits at the top of the list right now, in the reader's words.
+  String endLabel({required bool reversed}) => reversed ? _farEnd : _nearEnd;
 
   /// The sort stored under this name, falling back to the default for
   /// anything unrecognised. A preference written by a newer build, or a
@@ -90,37 +103,56 @@ enum LibrarySort {
       values.firstWhere((s) => s.name == name, orElse: () => recentlyAdded);
 }
 
-/// Orders two summaries under [sort].
+/// Orders two summaries under [sort], with [reversed] flipping the result.
 ///
 /// In Dart rather than in the query. Progress is a ratio of two columns from
 /// two tables that is null in three different ways, so expressing it in SQL
 /// means a nullable division and an explicit nulls-last clause, and the other
 /// two orders would then live in a different place from it. The list being
 /// sorted is the one about to be laid out on screen.
-int _compare(LibrarySort sort, BookSummary a, BookSummary b) {
+///
+/// [reversed] multiplies the comparison rather than being decided per branch,
+/// so a field cannot reverse in one direction and not the other. The one
+/// thing it does not reach is a book whose progress is unknown: see below.
+int _compare(
+  LibrarySort sort,
+  BookSummary a,
+  BookSummary b, {
+  required bool reversed,
+}) {
+  final flip = reversed ? -1 : 1;
+
   switch (sort) {
     case LibrarySort.recentlyAdded:
-      return b.importedAt.compareTo(a.importedAt);
+      return flip * b.importedAt.compareTo(a.importedAt);
 
     case LibrarySort.title:
-      return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+      return flip * a.title.toLowerCase().compareTo(b.title.toLowerCase());
 
     case LibrarySort.progress:
       final mine = a.progress;
       final theirs = b.progress;
 
+      // Two books nobody has opened, ordered by arrival. Not flipped: this
+      // decides the order inside the unknown group, and that group stays at
+      // the bottom whichever way the known books run.
       if (mine == null && theirs == null) {
         return b.importedAt.compareTo(a.importedAt);
       }
+
       // A book with no measurable progress sorts last under either
-      // direction. It is not at zero percent; how far in it is is unknown.
+      // direction. It is not at zero percent; how far in it is is unknown,
+      // and ADR 0013 is explicit that null and zero say different things.
+      // Reversing to "least read first" would otherwise put every unopened
+      // book above the one the reader has barely started, which reads as a
+      // list of things they have read least and is a list of things nobody
+      // knows about.
       if (mine == null) return 1;
       if (theirs == null) return -1;
 
-      return theirs.compareTo(mine);
+      return flip * theirs.compareTo(mine);
   }
 }
-
 /// Everything the app stores locally.
 ///
 /// The only place that knows about drift. Screens talk to this.
@@ -144,8 +176,9 @@ class LibraryRepository {
   /// The rule this leaves behind is narrow, because `bytes` is the only
   /// column here that costs anything: a query over Books that is not about
   /// the bytes names the columns it wants.
-  Stream<List<BookSummary>> watchLibrary({
+Stream<List<BookSummary>> watchLibrary({
     LibrarySort sort = LibrarySort.recentlyAdded,
+    bool reversed = false,
   }) {
     final table = _db.books;
     final positions = _db.readingPositions;
@@ -194,7 +227,7 @@ class LibraryRepository {
         );
       }).toList();
 
-      books.sort((a, b) => _compare(sort, a, b));
+      books.sort((a, b) => _compare(sort, a, b, reversed: reversed));
 
       return books;
     });
