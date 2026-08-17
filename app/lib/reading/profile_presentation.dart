@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
+import '../theme/app_colors.dart';
+import '../theme/app_tokens.dart';
+import '../theme/app_typography.dart';
+
 /// Turning a [ReadingProfile] into things a screen can show, and the single
 /// home for colour in this app.
 ///
@@ -87,19 +91,42 @@ String contrastAdvice(ContrastRating rating) => switch (rating) {
 
 // -- chrome -------------------------------------------------------------
 //
-// `hereaderSeed` and `appTheme` moved to `app_theme.dart` in the UI pass:
-// ordinary app chrome now has a real, configurable accent (see the theme
-// pass's `buildScheme`), and that accent must never leak onto the reading
-// surface — a reader who tinted their background moss and set the app
-// accent to rust would otherwise see the two adjacent on the one screen
-// where the whole point is that they chose the colours.
+// `hereaderSeed` and `appTheme` moved to `app_theme.dart` in the UI pass.
+// What stayed here is everything that has to read the profile to decide a
+// colour, which is what the reading surface's own chrome does.
+//
+// This section used to seed a whole `ColorScheme` from a fixed colour and
+// hand it to every control on the reading surface. That colour was
+// `0xFF6750A4`, Material's own baseline, so the four tonal buttons, the
+// progress bar and the panel all came out purple under every profile. ADR
+// 0015 replaced the arrangement rather than the constant: `fromSeed`'s
+// default `tonalSpot` variant tints surfaces with whatever it is given, so
+// a grey seed would have moved the wash rather than removed it.
 
-/// The seed [readerChromeTheme] derives from. Fixed, and never the app's
-/// configurable accent, for the reason above.
-const readerChromeSeed = Color(0xFF6750A4);
+/// The bar a control on the reading surface has to clear.
+///
+/// WCAG 1.4.11, which asks 3:1 for anything needed to identify a control.
+/// Not 4.5:1: nothing on the reading surface is text after ADR 0015, and the
+/// worst background a reader can reach sits near the 0.179 luminance flip,
+/// where no overlay clears 4.5 in either direction.
+const double readerMinControlContrast = 3;
 
-/// Whether controls drawn over this profile's reading surface should be
-/// light or dark.
+/// How much of the ink the progress track keeps.
+///
+/// The track is the unfilled remainder of a bar whose fill carries the
+/// figure, so it wants to be visible without competing with the fill.
+///
+/// 0.16 rather than the 0.24 this shipped with. The figure is set by the
+/// fill's fallback rather than by appearance: on a background near the 0.179
+/// flip, the ink against a track at 0.24 reaches 2.93, so
+/// [readerProgressFillFor] would have swapped a fill that failed
+/// [readerMinControlContrast] for one that also failed it. At 0.16 the worst
+/// of the same set is 3.31, and the track still separates from the surface
+/// by 1.26 to 1.55, which is a groove rather than a second bar.
+const double readerTrackOpacity = 0.16;
+
+/// Whether controls drawn on this profile's reading surface should be light
+/// or dark.
 ///
 /// Read from the surface's own luminance rather than from [Polarity].
 /// Polarity decides the ink, and a reader is free to tint the background
@@ -117,30 +144,166 @@ Brightness chromeBrightnessFor(PresentationConfig presentation) =>
     ? Brightness.light
     : Brightness.dark;
 
-/// A theme for the controls the reader screen stacks on its surface.
+/// The colour of a glyph drawn straight onto the reading surface.
 ///
-/// The chapter button, the playback controls, the progress bar and the front
-/// matter offer are drawn directly on top of the text. Without this they take
-/// the app's theme, so both central field loss presets — `lightOnDark` — put
-/// a light panel and four light tonal buttons over a near-black surface,
-/// which is the opposite of what choosing reverse polarity asks for.
+/// The playback controls and the chapter button carried a filled tonal disc
+/// until ADR 0015, which gave each glyph a known background to contrast
+/// against. Without the disc they sit on whatever the reader chose in the
+/// background picker, which accepts arbitrary RGB, so the colour has to
+/// follow the surface rather than a theme role.
+///
+/// Reuses the reading ink values rather than defining a second pair. A
+/// reader who has tinted nothing then sees one monochrome surface, and a
+/// reader who has tinted heavily sees chrome that agrees with
+/// [chromeBrightnessFor] even where that disagrees with [Polarity].
+///
+/// The floor is a tint sitting on the 0.179 threshold, where the better of
+/// the two clears about 4.1:1. WCAG 1.4.11 asks 3:1 for a control that is
+/// not text, which every glyph here is; `reader_chrome_test.dart` measures
+/// the whole preset list and both polarity defaults against that bar.
+int readerInkArgbFor(PresentationConfig presentation) =>
+    chromeBrightnessFor(presentation) == Brightness.light
+    ? darkInkArgb
+    : lightInkArgb;
+
+/// The unfilled part of the progress bar.
+///
+/// Returned already blended against the surface rather than as the ink at an
+/// alpha. The widget paints this exact colour and `reader_chrome_test.dart`
+/// measures this exact colour, so neither can be right about a pair the
+/// other never had. Handing `LinearProgressIndicator` a translucent
+/// background and re-deriving the composite in a test is the arrangement
+/// that had the WCAG readout in settings judging a pair the app never drew.
+Color readerTrackFor(PresentationConfig presentation) => Color.alphaBlend(
+  colorOf(
+    readerInkArgbFor(presentation),
+  ).withValues(alpha: readerTrackOpacity),
+  colorOf(surfaceArgbFor(presentation)),
+);
+
+/// The filled part of the progress bar: the accent where it reads, the ink
+/// where it does not.
+///
+/// The fill is the one accent on the reading surface, and the reader picks
+/// both the accent and the background, on two different screens that know
+/// nothing about each other. ADR 0015 first recorded the overlap as a
+/// limitation and left `scheme.primary` in place unguarded. The test that
+/// measures six accents against every reachable background failed at 1.92,
+/// on a tint near the 0.179 flip where the track sits mid-luminance and
+/// nothing contrasts well with it.
+///
+/// The guard was rejected once on the grounds that it would change the bar's
+/// colour while the reader dragged the background picker. That was wrong
+/// about the screen: `_Preview` in `profile_edit_screen.dart` draws
+/// `RsvpView` and the contrast readout, and no controls, so the bar is not
+/// visible during the drag.
+///
+/// Falling back to the ink rather than to a lightened accent, because a
+/// washed accent is still an accent and would report a colour the reader did
+/// not choose. Monochrome is what the rest of this screen already is.
+Color readerProgressFillFor({
+  required ColorScheme scheme,
+  required PresentationConfig presentation,
+}) {
+  final track = readerTrackFor(presentation);
+  final reads =
+      contrastRatio(scheme.primary.toARGB32(), track.toARGB32()) >=
+      readerMinControlContrast;
+
+  return reads ? scheme.primary : colorOf(readerInkArgbFor(presentation));
+}
+
+/// A theme for the panels the reader screen opens over its surface.
+///
+/// The chapter drawer, the profile sheet and the front matter offer are
+/// panels: they have their own background, so they take the app's neutral
+/// ramp through [buildScheme] and read like the rest of the app. The
+/// controls drawn directly on the reading surface do not use this scheme's
+/// surface roles at all, and take [readerInkArgbFor] instead.
+///
+/// [brightness] comes from the profile rather than the platform, so a book
+/// read light on dark keeps a dark panel over it even on a device set to
+/// light. [accent] and [highContrast] arrive from `AppChromeSource`, which
+/// carries the reader's own appearance choices down from `appTheme`.
+///
+/// The accent reaches exactly one thing here, `scheme.primary` on the
+/// progress fill and the selected chapter row. This file used to argue that
+/// no accent should reach the reading surface, on the grounds that a moss
+/// background under a rust accent puts two chosen colours side by side. ADR
+/// 0015 takes the narrower position: that argument holds against four tonal
+/// fills and a full-width bar, and it does not hold against a single
+/// measurement, which is the one thing on the screen that has a quantity to
+/// report.
 ///
 /// `scaffoldBackgroundColor` matches the profile so nothing shows through at
-/// the edges during a route transition. `colorScheme.surface` is left as the
-/// seed produced it: forcing the profile's tint in would carry `onSurface`
-/// along with it, and a saturated background would then render the panel's
-/// own text unreadable at exactly the tints a reader is most likely to pick
-/// deliberately.
-ThemeData readerChromeTheme(PresentationConfig presentation) {
+/// the edges during a route transition.
+ThemeData readerChromeTheme({
+  required PresentationConfig presentation,
+  required Color accent,
+  required bool highContrast,
+}) {
   final brightness = chromeBrightnessFor(presentation);
+  final scheme = buildScheme(
+    accent: accent,
+    brightness: brightness,
+    highContrast: highContrast,
+  );
+  final hairlineWidth = highContrast
+      ? AppHairline.widthHighContrast
+      : AppHairline.width;
 
   return ThemeData(
     useMaterial3: true,
-    colorScheme: ColorScheme.fromSeed(
-      seedColor: readerChromeSeed,
-      brightness: brightness,
-    ),
+    colorScheme: scheme,
+    textTheme: appTextTheme(scheme),
     scaffoldBackgroundColor: colorOf(surfaceArgbFor(presentation)),
+
+    // The panels were taking Material's defaults for type and separation
+    // while every other screen took the app's, so a chapter list opened
+    // over a book in a different face and a different line weight from the
+    // library list it was opened from.
+    drawerTheme: DrawerThemeData(
+      backgroundColor: scheme.surface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      shape: const RoundedRectangleBorder(),
+    ),
+
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: scheme.surface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadii.md),
+        ),
+      ),
+    ),
+
+    listTileTheme: ListTileThemeData(
+      iconColor: scheme.onSurfaceVariant,
+      textColor: scheme.onSurface,
+      selectedColor: scheme.primary,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadii.md),
+      ),
+    ),
+
+    dividerTheme: DividerThemeData(
+      color: scheme.outlineVariant,
+      thickness: hairlineWidth,
+      space: hairlineWidth,
+    ),
+
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadii.md),
+        ),
+        minimumSize: const Size(48, 48),
+        textStyle: appTextTheme(scheme).labelLarge,
+      ),
+    ),
   );
 }
 
