@@ -5,6 +5,7 @@ import 'package:app/reading/reader_screen.dart';
 import 'package:app/reading/rsvp_view.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
@@ -32,6 +33,10 @@ void main() {
 
   tearDown(() => database.close());
 
+  /// No `theme:`, so `AppChromeSource.of` falls back rather than reading an
+  /// extension. That path is load-bearing for every test in this file;
+  /// `reader_chrome_test.dart` is what holds the fallback to the app's
+  /// default accent.
   Widget reader() => MaterialApp(
     home: ReaderScreen(
       book: LibraryBook(id: 'b', title: 'A Book', text: text),
@@ -59,7 +64,7 @@ void main() {
 
       expect(find.text('Alpha'), findsOneWidget);
 
-      await tester.tap(find.text('Read'));
+      await tester.tap(find.byKey(readerPlayButtonKey));
       await tester.pump(const Duration(seconds: 1));
 
       expect(find.text('Alpha'), findsNothing);
@@ -72,11 +77,19 @@ void main() {
     // The risk the rebuild gate introduces. A gate on the state transition
     // alone would skip this, because a rewind while paused emits without
     // changing state.
+    //
+    // Driven from the arrow key rather than from a button. ADR 0015 took
+    // the rewind button off the reading surface ahead of the left and right
+    // tap zones, so the binding is the only rewind a reader has and nothing
+    // else in the suite exercises it. That makes this test assert two
+    // things at once, which is usually the sign of a bad test; here it is
+    // the honest shape, because the button it used to press no longer
+    // exists and the behaviour it was checking still does.
     testWidgets('follows a rewind taken while paused', (tester) async {
       await tester.pumpWidget(reader());
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Read'));
+      await tester.tap(find.byKey(readerPlayButtonKey));
       await tester.pump(const Duration(seconds: 2));
 
       await tester.tap(find.byType(RsvpView));
@@ -84,9 +97,17 @@ void main() {
 
       final afterPause = _progress(tester);
 
-      await tester.tap(find.byTooltip('Back five words'));
+      // `CallbackShortcuts` sits above the Scaffold and resolves upward from
+      // whatever holds focus, so the tap on the play button above does not
+      // put this out of reach. The settle after `pumpWidget` is what matters:
+      // the `Focus(autofocus: true)` node claims focus a frame late, and a
+      // key sent before that lands nowhere.
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
       await tester.pumpAndSettle();
 
+      // Relative rather than a token count. The step is the profile's own
+      // `rewindWords`, and a number written here would be a second copy of
+      // a value the profile already carries.
       expect(_progress(tester), lessThan(afterPause));
 
       await disposeTree(tester);
@@ -98,7 +119,7 @@ void main() {
 
       final atOpen = _progress(tester);
 
-      await tester.tap(find.text('Read'));
+      await tester.tap(find.byKey(readerPlayButtonKey));
       await tester.pump(const Duration(seconds: 2));
 
       await tester.tap(find.byType(RsvpView));
