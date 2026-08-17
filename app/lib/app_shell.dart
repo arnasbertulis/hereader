@@ -130,7 +130,6 @@ class _AppShellState extends State<AppShell> {
         LibraryScreen(
           repository: widget.repository,
           sync: widget.sync,
-          api: widget.api,
           issueStamp: widget.sync.issueStamp,
         ),
         SettingsScreen(

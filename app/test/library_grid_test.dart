@@ -4,6 +4,7 @@ import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
 import 'package:app/reading/book_cover.dart';
 import 'package:app/reading/library_screen.dart';
+import 'package:app/reading/paste_reader_screen.dart';
 import 'package:app/sync/api_client.dart';
 import 'package:app/sync/auth_store.dart';
 import 'package:app/sync/sync_engine.dart';
@@ -78,7 +79,11 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: LibraryScreen(repository: repository, sync: sync, api: api, issueStamp: _stamp),
+        home: LibraryScreen(
+          repository: repository,
+          sync: sync,
+          issueStamp: _stamp,
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -144,7 +149,6 @@ void main() {
 
     final semantics = tester.ensureSemantics();
 
-
     await pump(tester);
 
     // Four stops to learn one book is three too many. The cover, title,
@@ -158,40 +162,181 @@ void main() {
     await _disposeTree(tester);
   });
 
-  testWidgets('the sort control reorders the shelf', (tester) async {
-    await addBook('book-1', title: 'Zeno', wordCount: 1000);
-    await addBook('book-2', title: 'Alpha', wordCount: 1000);
-    await readTo('book-1', 900);
+  group('sort', () {
+    testWidgets('the field control reorders the shelf', (tester) async {
+      await addBook('book-1', title: 'Zeno', wordCount: 1000);
+      await addBook('book-2', title: 'Alpha', wordCount: 1000);
+      await readTo('book-1', 900);
 
-    await pump(tester, width: 360);
+      await pump(tester, width: 360);
 
-    // The order books arrived in is not asserted here. Drift stores
-    // DateTime as whole seconds, so two imports inside one test share a
-    // timestamp and the tie is broken by a sort that is not stable.
-    await tester.tap(find.text(LibrarySort.recentlyAdded.label));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(LibrarySort.title.label).last);
-    await tester.pumpAndSettle();
+      // The order books arrived in is not asserted here. Drift stores
+      // DateTime as whole seconds, so two imports inside one test share a
+      // timestamp and the tie is broken by a sort that is not stable.
+      await tester.tap(find.text(LibrarySort.recentlyAdded.label));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(LibrarySort.title.label).last);
+      await tester.pumpAndSettle();
 
-    expect(
-      tester.getTopLeft(find.text('Alpha')).dy,
-      lessThan(tester.getTopLeft(find.text('Zeno')).dy),
-    );
+      expect(
+        tester.getTopLeft(find.text('Alpha')).dy,
+        lessThan(tester.getTopLeft(find.text('Zeno')).dy),
+      );
 
-    // The button now shows the label of the sort just chosen.
-    await tester.tap(find.text(LibrarySort.title.label));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text(LibrarySort.progress.label));
-    await tester.pumpAndSettle();
+      // The button now shows the label of the sort just chosen.
+      await tester.tap(find.text(LibrarySort.title.label));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(LibrarySort.progress.label));
+      await tester.pumpAndSettle();
 
-    // Ninety percent read against a book never opened, whose progress is
-    // unknown rather than zero and therefore sorts last.
-    expect(
-      tester.getTopLeft(find.text('Zeno')).dy,
-      lessThan(tester.getTopLeft(find.text('Alpha')).dy),
-    );
+      // Ninety percent read against a book never opened, whose progress is
+      // unknown rather than zero and therefore sorts last.
+      expect(
+        tester.getTopLeft(find.text('Zeno')).dy,
+        lessThan(tester.getTopLeft(find.text('Alpha')).dy),
+      );
 
-    await _disposeTree(tester);
+      await _disposeTree(tester);
+    });
+
+    testWidgets('the direction control swaps the ends', (tester) async {
+      await addBook('book-1', title: 'Zeno');
+      await addBook('book-2', title: 'Alpha');
+
+      await pump(tester, width: 360);
+
+      await tester.tap(find.text(LibrarySort.recentlyAdded.label));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(LibrarySort.title.label).last);
+      await tester.pumpAndSettle();
+
+      // The end label is in the reader's terms for the field they picked,
+      // rather than the word "ascending", which means the first letter here
+      // and the newest book one option up.
+      expect(find.text('A to Z'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Alpha')).dy,
+        lessThan(tester.getTopLeft(find.text('Zeno')).dy),
+      );
+
+      await tester.tap(find.text('A to Z'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Z to A'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Zeno')).dy,
+        lessThan(tester.getTopLeft(find.text('Alpha')).dy),
+      );
+
+      await _disposeTree(tester);
+    });
+
+    testWidgets('a book nobody has opened stays last when progress flips', (
+      tester,
+    ) async {
+      await addBook('book-1', title: 'Zeno', wordCount: 1000);
+      await addBook('book-2', title: 'Alpha', wordCount: 1000);
+      await readTo('book-1', 900);
+
+      await pump(tester, width: 360);
+
+      await tester.tap(find.text(LibrarySort.recentlyAdded.label));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(LibrarySort.progress.label).last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Most read first'));
+      await tester.pumpAndSettle();
+
+      // Least read first, and Alpha is still underneath. Its progress is
+      // unknown rather than zero, so it belongs to neither end: ADR 0013
+      // draws that distinction and this is where a reader would see it
+      // broken.
+      expect(find.text('Least read first'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Zeno')).dy,
+        lessThan(tester.getTopLeft(find.text('Alpha')).dy),
+      );
+
+      await _disposeTree(tester);
+    });
+
+    testWidgets('changing the field starts from that field near end', (
+      tester,
+    ) async {
+      await addBook('book-1', title: 'Zeno');
+
+      await pump(tester, width: 360);
+
+      await tester.tap(find.text('Newest first'));
+      await tester.pumpAndSettle();
+      expect(find.text('Oldest first'), findsOneWidget);
+
+      await tester.tap(find.text(LibrarySort.recentlyAdded.label));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(LibrarySort.title.label).last);
+      await tester.pumpAndSettle();
+
+      // Not "Z to A". Reversing a date and reversing an alphabet are not the
+      // same request, and carrying the flip across would hand the reader an
+      // end they never asked for.
+      expect(find.text('A to Z'), findsOneWidget);
+
+      await _disposeTree(tester);
+    });
+  });
+
+  group('adding something to read', () {
+    testWidgets('the button offers a file and a paste', (tester) async {
+      await addBook('book-1', title: 'Romeo and Juliet');
+
+      await pump(tester);
+
+      // Neither is on the shelf itself. The screen has one accent control
+      // and it opens this.
+      expect(find.text('Add an EPUB'), findsNothing);
+      expect(find.text('Paste text'), findsNothing);
+
+      await tester.tap(find.byKey(libraryAddButtonKey));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Add an EPUB'), findsOneWidget);
+      expect(find.text('Paste text'), findsOneWidget);
+
+      await _disposeTree(tester);
+    });
+
+    testWidgets('paste opens the paste reader', (tester) async {
+      await addBook('book-1', title: 'Romeo and Juliet');
+
+      await pump(tester);
+
+      await tester.tap(find.byKey(libraryAddButtonKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Paste text'));
+      await tester.pumpAndSettle();
+
+      // The regression this covers is not the navigation. Paste was
+      // unreachable once the library had a book in it, because the only
+      // control that offered it lived on the empty state.
+      expect(find.byType(PasteReaderScreen), findsOneWidget);
+
+      await _disposeTree(tester);
+    });
+
+    testWidgets('the empty library opens the same menu', (tester) async {
+      await pump(tester);
+
+      expect(find.text('No books yet'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Add something to read'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Add an EPUB'), findsOneWidget);
+      expect(find.text('Paste text'), findsOneWidget);
+
+      await _disposeTree(tester);
+    });
   });
 
   testWidgets('a narrow window lays books out one per row', (tester) async {
@@ -220,9 +365,12 @@ void main() {
     await pump(tester);
 
     // The tile height is computed from the scaled text block rather than
-    // from a fixed aspect ratio, so nothing here should overflow.
+    // from a fixed aspect ratio, so nothing here should overflow. The sort
+    // row is in this too: it wraps rather than clipping the label that says
+    // which order the shelf is in.
     expect(tester.takeException(), isNull);
     expect(find.text('Hamlet'), findsOneWidget);
+    expect(find.text('Newest first'), findsOneWidget);
 
     await _disposeTree(tester);
   });

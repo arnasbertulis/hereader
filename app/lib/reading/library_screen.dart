@@ -6,9 +6,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../data/library_repository.dart';
-import '../sync/api_client.dart';
-import '../sync/sign_in_screen.dart';
-import '../sync/sync_button.dart';
 import '../sync/sync_engine.dart';
 import '../theme/app_tokens.dart';
 import 'book_cover.dart';
@@ -17,10 +14,20 @@ import 'book_progress.dart';
 import 'library_book.dart';
 import 'paste_reader_screen.dart';
 
+/// Identifies the add button, for a test that would otherwise match its
+/// tooltip. Same argument as `readerPlayButtonKey`: the tooltip is copy, and
+/// a test asserting that a menu opens should not also assert a line of it.
+const Key libraryAddButtonKey = Key('library-add-button');
+
 /// Where the sort the reader chose is remembered. Device-local, like every
 /// other `ui.` key: which order a phone shows a shelf in is not a fact about
 /// the account.
 const _sortKey = 'ui.library_sort';
+
+/// Which end of that sort they are at. A second key rather than a compound
+/// value under the first, since `preferences` is one row per key and a
+/// compound one would need parsing on the way back out.
+const _sortReversedKey = 'ui.library_sort_reversed';
 
 /// Width a tile aims for before the column count is worked out.
 const double _targetTileWidth = 172;
@@ -31,10 +38,19 @@ const double _targetTileWidth = 172;
 /// clips the moment text grows.
 const double _textBlockHeight = 96;
 
+/// Room under the last row for the add button to float over nothing.
+///
+/// The button is 56 and sits 16 from the bottom edge, so a shelf ending at
+/// the old 32 put the final row's menu glyph underneath it. This is the one
+/// number on the screen that exists because of another widget's size.
+const double _shelfBottomPadding = 88;
+
+/// What the add menu came back with.
+enum _AddChoice { epub, paste }
+
 class LibraryScreen extends StatefulWidget {
   final LibraryRepository repository;
   final SyncEngine sync;
-  final ApiClient api;
 
   /// Stamps the sort preference. Taken as a function rather than reached
   /// through [sync], so a widget test can supply one without standing up a
@@ -45,7 +61,6 @@ class LibraryScreen extends StatefulWidget {
     super.key,
     required this.repository,
     required this.sync,
-    required this.api,
     required this.issueStamp,
   });
 
@@ -56,6 +71,7 @@ class LibraryScreen extends StatefulWidget {
 class _LibraryScreenState extends State<LibraryScreen> {
   bool _busy = false;
   LibrarySort _sort = LibrarySort.recentlyAdded;
+  bool _reversed = false;
 
   /// The one path into the reader. Home's continue card takes the same
   /// object rather than its own copy of the sequence.
@@ -78,23 +94,70 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Future<void> _restoreSort() async {
     final stored = await _repo.preference(_sortKey);
+    final reversed = await _repo.preference(_sortReversedKey);
     if (!mounted) return;
 
-    setState(() => _sort = LibrarySort.byName(stored));
+    setState(() {
+      _sort = LibrarySort.byName(stored);
+      // Anything other than the string this writes reads as the near end,
+      // which is where a reader who has never touched the control is.
+      _reversed = reversed == 'true';
+    });
   }
 
   Future<void> _chooseSort(LibrarySort sort) async {
-    setState(() => _sort = sort);
+    if (sort == _sort) return;
 
-    await _repo.setPreference(
-      _sortKey,
-      sort.name,
-      hlc: await widget.issueStamp(),
-    );
+    // The direction resets with the field. "Oldest first" and "Z to A" are
+    // not the same request, and carrying a reversal across a field change
+    // means the reader picks Title and gets the end they did not ask for.
+    setState(() {
+      _sort = sort;
+      _reversed = false;
+    });
+
+    await _writeSort();
+  }
+
+  Future<void> _flipSort() async {
+    setState(() => _reversed = !_reversed);
+    await _writeSort();
+  }
+
+  /// Both keys, one stamp. They are one choice as far as the reader is
+  /// concerned, and a crash between two writes would leave a field stored
+  /// against the other field's direction.
+  Future<void> _writeSort() async {
+    final hlc = await widget.issueStamp();
+
+    await _repo.setPreference(_sortKey, _sort.name, hlc: hlc);
+    await _repo.setPreference(_sortReversedKey, '$_reversed', hlc: hlc);
   }
 
   Future<Uint8List?> _coverOf(String bookId) =>
       _covers.putIfAbsent(bookId, () => _repo.coverOf(bookId));
+
+  /// Asks what the reader wants to read, then does it.
+  ///
+  /// One entry point for both routes in. The empty state's button and the
+  /// add button open this same menu rather than each wiring up its own pair
+  /// of actions, which is what kept paste reachable from one screen and not
+  /// the other for as long as it did.
+  Future<void> _openAddMenu() async {
+    final choice = await showDialog<_AddChoice>(
+      context: context,
+      builder: (_) => const _AddMenu(),
+    );
+
+    if (choice == null || !mounted) return;
+
+    switch (choice) {
+      case _AddChoice.epub:
+        await _import();
+      case _AddChoice.paste:
+        _openPaste();
+    }
+  }
 
   Future<void> _import() async {
     final result = await FilePicker.pickFiles(
@@ -137,7 +200,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// Shows the library's busy state around the shared open path.
   ///
   /// The screen keeps the flag because it decides what busy looks like here:
-  /// a bar under the app bar while the grid stays where it is.
+  /// a bar along the top while the shelf stays where it is.
   Future<void> _open(BookSummary summary) async {
     setState(() => _busy = true);
 
@@ -146,14 +209,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  Future<void> _signIn() async {
-    final signedIn = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => SignInScreen(api: widget.api)),
-    );
-
-    if (signedIn == true) unawaited(widget.sync.syncNow());
   }
 
   void _openPaste() {
@@ -204,69 +259,74 @@ class _LibraryScreenState extends State<LibraryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Library'),
-        // A bar rather than a spinner over the whole body. Blanking the
-        // library to say a book is opening throws away the thing the reader
-        // was looking at to report on the thing they just tapped.
-        bottom: _busy
-            ? const PreferredSize(
-                preferredSize: Size.fromHeight(4),
-                child: LinearProgressIndicator(
-                  minHeight: 4,
-                  semanticsLabel: 'Working',
-                ),
-              )
-            : null,
-        actions: [
-          SyncButton(sync: widget.sync, api: widget.api, onSignIn: _signIn),
-          IconButton(
-            onPressed: _busy ? null : _openPaste,
-            icon: const Icon(Icons.content_paste),
-            tooltip: 'Read pasted text',
-          ),
-          IconButton(
-            onPressed: _busy ? null : _import,
-            icon: const Icon(Icons.add),
-            tooltip: 'Add a book',
-          ),
-        ],
-      ),
-      body: StreamBuilder<List<BookSummary>>(
-        stream: _repo.watchLibrary(sort: _sort),
-        builder: (context, snapshot) {
-          final books = snapshot.data;
-          if (books == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (books.isEmpty) {
-            return _EmptyLibrary(onImport: _busy ? null : _import);
-          }
+      // No app bar. Its title repeated the tab label underneath it, and the
+      // three actions it carried have gone: sync to settings, import and
+      // paste into the add menu.
+      body: SafeArea(
+        // The shell owns the bottom edge, and its own Scaffold has already
+        // taken the inset for the nav bar.
+        bottom: false,
+        child: Column(
+          children: [
+            // A fixed slot rather than a widget that comes and goes. The bar
+            // used to live under an app bar that reserved its own space;
+            // here it would push the whole shelf down four pixels every time
+            // a book opened.
+            SizedBox(
+              height: 4,
+              child: _busy
+                  ? const LinearProgressIndicator(
+                      minHeight: 4,
+                      semanticsLabel: 'Working',
+                    )
+                  : null,
+            ),
+            Expanded(
+              child: StreamBuilder<List<BookSummary>>(
+                stream: _repo.watchLibrary(sort: _sort, reversed: _reversed),
+                builder: (context, snapshot) {
+                  final books = snapshot.data;
+                  if (books == null) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (books.isEmpty) {
+                    return _EmptyLibrary(onAdd: _busy ? null : _openAddMenu);
+                  }
 
-          return Column(
-            children: [
-              _LibraryHeader(
-                count: books.length,
-                sort: _sort,
-                onSort: _busy ? null : _chooseSort,
+                  return Column(
+                    children: [
+                      _SortRow(
+                        sort: _sort,
+                        reversed: _reversed,
+                        onSort: _busy ? null : _chooseSort,
+                        onFlip: _busy ? null : _flipSort,
+                      ),
+                      Expanded(
+                        child: RefreshIndicator(
+                          // Pull to sync: the periodic timer is five minutes,
+                          // which is a long time to wait when you have just
+                          // put down another device. The status readout lives
+                          // in settings now; this is the gesture, not a
+                          // second copy of the state.
+                          onRefresh: widget.sync.syncNow,
+                          child: _BookShelf(
+                            books: books,
+                            coverOf: _coverOf,
+                            onOpen: _busy ? null : _open,
+                            onRemove: _confirmRemove,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
-              Expanded(
-                child: RefreshIndicator(
-                  // Pull to sync: the periodic timer is five minutes, which
-                  // is a long time to wait when you have just put down
-                  // another device.
-                  onRefresh: widget.sync.syncNow,
-                  child: _BookShelf(
-                    books: books,
-                    coverOf: _coverOf,
-                    onOpen: _busy ? null : _open,
-                    onRemove: _confirmRemove,
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
+            ),
+          ],
+        ),
+      ),
+      floatingActionButton: _AddButton(
+        onPressed: _busy ? null : _openAddMenu,
       ),
     );
   }
@@ -276,16 +336,27 @@ class _LibraryScreenState extends State<LibraryScreen> {
 double _screenPadding(BuildContext context) =>
     MediaQuery.sizeOf(context).width >= 600 ? AppSpacing.xl : AppSpacing.lg;
 
-/// How many books there are, and the order they are in.
-class _LibraryHeader extends StatelessWidget {
-  final int count;
+/// The field to sort on, and which end of it to start from.
+///
+/// Two controls rather than one list of every combination. Six entries in a
+/// menu is a list the reader reads to find the one they want; a field and an
+/// end is two decisions they already have in mind. It also stops the menu
+/// growing by two every time a sort is added.
+///
+/// A `Wrap` rather than a `Row`. At 360dp with doubled text the two labels do
+/// not fit on one line, and a low-vision app clipping the word that says
+/// which order the shelf is in has failed at the one thing this row does.
+class _SortRow extends StatelessWidget {
   final LibrarySort sort;
+  final bool reversed;
   final ValueChanged<LibrarySort>? onSort;
+  final VoidCallback? onFlip;
 
-  const _LibraryHeader({
-    required this.count,
+  const _SortRow({
     required this.sort,
+    required this.reversed,
     required this.onSort,
+    required this.onFlip,
   });
 
   @override
@@ -299,17 +370,14 @@ class _LibraryHeader extends StatelessWidget {
         AppSpacing.sm,
         AppSpacing.sm,
       ),
-      child: Row(
+      child: Wrap(
+        alignment: WrapAlignment.end,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: AppSpacing.xs,
         children: [
-          Expanded(
-            child: Text(
-              count == 1 ? '1 book' : '$count books',
-              style: theme.textTheme.titleMedium,
-            ),
-          ),
           PopupMenuButton<LibrarySort>(
             enabled: onSort != null,
-            tooltip: 'Change the order',
+            tooltip: 'Sort by',
             initialValue: sort,
             onSelected: onSort,
             itemBuilder: (context) => [
@@ -330,7 +398,221 @@ class _LibraryHeader extends StatelessWidget {
               ),
             ),
           ),
+          // The label says which end the list starts from rather than
+          // "ascending", which means the newest books under one field and
+          // the letter A under another. Pressing it reads as swapping the
+          // ends, and the label changes to the end you land on.
+          TextButton.icon(
+            onPressed: onFlip,
+            icon: const Icon(Icons.swap_vert, size: 20),
+            label: Text(sort.endLabel(reversed: reversed)),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+/// Opens the add menu, from anywhere on the shelf.
+///
+/// Takes the accent, which on this screen is the one thing that does. The
+/// book tiles carry a progress fill in the same colour and that is the
+/// measurement the accent is for; this is the action. Nothing else here is
+/// coloured.
+///
+/// The shadow is [AppFloatShadow] rather than the elevation a
+/// `FloatingActionButton` draws for itself, which is why every elevation on
+/// it is zero. Material's own shadow is a Material 2 shape at a Material 2
+/// weight, and this app decides its own shadows in one file.
+class _AddButton extends StatelessWidget {
+  final VoidCallback? onPressed;
+
+  const _AddButton({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(
+              alpha: dark
+                  ? AppFloatShadow.ambientOpacityDark
+                  : AppFloatShadow.ambientOpacityLight,
+            ),
+            blurRadius: AppFloatShadow.ambientBlur,
+            spreadRadius: AppFloatShadow.ambientSpread,
+            offset: const Offset(0, AppFloatShadow.ambientDy),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(
+              alpha: dark
+                  ? AppFloatShadow.contactOpacityDark
+                  : AppFloatShadow.contactOpacityLight,
+            ),
+            blurRadius: AppFloatShadow.contactBlur,
+            spreadRadius: AppFloatShadow.contactSpread,
+            offset: const Offset(0, AppFloatShadow.contactDy),
+          ),
+        ],
+      ),
+      child: FloatingActionButton(
+        key: libraryAddButtonKey,
+        onPressed: onPressed,
+        elevation: 0,
+        focusElevation: 0,
+        hoverElevation: 0,
+        highlightElevation: 0,
+        disabledElevation: 0,
+        backgroundColor: scheme.primary,
+        foregroundColor: scheme.onPrimary,
+        tooltip: 'Add something to read',
+        child: const Icon(Icons.add, size: 32),
+      ),
+    );
+  }
+}
+
+/// Two ways to start reading, one above the other.
+///
+/// Halves rather than a list of rows. There are two of these and there is no
+/// third coming that is not a file or a paste, so each one takes half the
+/// panel and the whole half is the tap target. A reader who cannot reliably
+/// hit a small target gets a box the size of a hand instead of a 48dp row.
+///
+/// Each half says what it does and what happens to it afterwards. The
+/// difference between the two is not the source of the text, it is whether
+/// the thing survives closing the app, and a reader finding that out later
+/// is a reader who lost something.
+class _AddMenu extends StatelessWidget {
+  const _AddMenu();
+
+  /// Wide enough to hold two lines of explanation on a phone, capped before
+  /// it becomes a dialog the width of a monitor holding two words.
+  static const double _maxWidth = 480;
+
+  /// Tall enough that each half is a target rather than a row. Grows with
+  /// the reader's text size; the whole panel scrolls once it has to.
+  static const double _minHalfHeight = 148;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final size = MediaQuery.sizeOf(context);
+
+    return Semantics(
+      scopesRoute: true,
+      namesRoute: true,
+      explicitChildNodes: true,
+      label: 'Add something to read',
+      child: Dialog(
+        // Clipped so an ink ripple in either half stops at the rounded
+        // corner rather than painting over it.
+        clipBehavior: Clip.antiAlias,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        backgroundColor: theme.colorScheme.surfaceContainerLow,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadii.md),
+          side: BorderSide(
+            color: theme.colorScheme.outlineVariant,
+            width: theme.dividerTheme.thickness ?? AppHairline.width,
+          ),
+        ),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: _maxWidth,
+            maxHeight: size.height * 0.8,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _AddMenuHalf(
+                  choice: _AddChoice.epub,
+                  icon: Icons.upload_file,
+                  title: 'Add an EPUB',
+                  detail: 'A book file from this device. It stays in your '
+                      'library and remembers your place.',
+                  minHeight: _minHalfHeight,
+                ),
+                // Takes its colour and weight from the app's one divider
+                // theme, so it thickens with the rest of them under high
+                // contrast.
+                const Divider(),
+                _AddMenuHalf(
+                  choice: _AddChoice.paste,
+                  icon: Icons.content_paste,
+                  title: 'Paste text',
+                  detail: 'Read anything you have copied. Nothing is saved, '
+                      'and it is gone when you close it.',
+                  minHeight: _minHalfHeight,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AddMenuHalf extends StatelessWidget {
+  final _AddChoice choice;
+  final IconData icon;
+  final String title;
+  final String detail;
+  final double minHeight;
+
+  const _AddMenuHalf({
+    required this.choice,
+    required this.icon,
+    required this.title,
+    required this.detail,
+    required this.minHeight,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Semantics(
+      button: true,
+      label: '$title. $detail',
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: () => Navigator.of(context).pop(choice),
+        child: Container(
+          width: double.infinity,
+          constraints: BoxConstraints(minHeight: minHeight),
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 40, color: scheme.onSurface),
+              const SizedBox(height: AppSpacing.md),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleMedium,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                detail,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -376,7 +658,12 @@ class _BookShelf extends StatelessWidget {
 
         if (columns == 1) {
           return ListView.separated(
-            padding: EdgeInsets.fromLTRB(padding, 0, padding, AppSpacing.xxl),
+            padding: EdgeInsets.fromLTRB(
+              padding,
+              0,
+              padding,
+              _shelfBottomPadding,
+            ),
             physics: const AlwaysScrollableScrollPhysics(),
             itemCount: books.length,
             separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
@@ -392,7 +679,12 @@ class _BookShelf extends StatelessWidget {
         final tileWidth = (available - AppSpacing.md * (columns - 1)) / columns;
 
         return GridView.builder(
-          padding: EdgeInsets.fromLTRB(padding, 0, padding, AppSpacing.xxl),
+          padding: EdgeInsets.fromLTRB(
+            padding,
+            0,
+            padding,
+            _shelfBottomPadding,
+          ),
           physics: const AlwaysScrollableScrollPhysics(),
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
@@ -602,10 +894,15 @@ class _TileMenu extends StatelessWidget {
   }
 }
 
+/// What the shelf shows before there is a shelf.
+///
+/// Opens the same menu the add button does rather than importing directly.
+/// The button here used to be the only way to reach paste once the library
+/// had a book in it, which is how paste became unreachable at all.
 class _EmptyLibrary extends StatelessWidget {
-  final VoidCallback? onImport;
+  final VoidCallback? onAdd;
 
-  const _EmptyLibrary({required this.onImport});
+  const _EmptyLibrary({required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
@@ -621,16 +918,17 @@ class _EmptyLibrary extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              'Add an EPUB to start reading. Books stay on this device.',
+              'Add an EPUB to start reading, or paste text to try it out. '
+              'Books stay on this device.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: AppSpacing.xl),
             FilledButton.icon(
-              onPressed: onImport,
+              onPressed: onAdd,
               style: FilledButton.styleFrom(minimumSize: const Size(200, 56)),
               icon: const Icon(Icons.add),
-              label: const Text('Add a book'),
+              label: const Text('Add something to read'),
             ),
           ],
         ),

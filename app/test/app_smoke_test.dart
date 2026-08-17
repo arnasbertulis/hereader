@@ -215,15 +215,36 @@ void main() {
     await tester.pumpWidget(harness.app);
     await tester.pumpAndSettle();
 
-    // The sync control sits in the library's bar. Home dropped its own in
-    // the UI pass rather than showing the same state twice.
-    await tester.tap(find.byIcon(Icons.menu_book_outlined));
+    // Sync reports itself in Settings. The library carried this control
+    // until the add button took its bar, and Home carried a copy before
+    // that.
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+
+    // The index row answers without being opened, which is what every row on
+    // that screen is for.
+    expect(find.text('Off. Sign in to turn it on.'), findsOneWidget);
+    expect(find.text('Not signed in'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(ListTile, 'Sync'));
     await tester.pumpAndSettle();
 
     // Reading works signed out, so this is an invitation rather than a gate.
+    // It says where to go rather than offering a button that would take the
+    // reader somewhere they did not ask to be.
+    expect(find.byIcon(Icons.cloud_off_outlined), findsOneWidget);
+    expect(find.text('Sync is off'), findsOneWidget);
     expect(
-      find.widgetWithIcon(IconButton, Icons.cloud_off_outlined),
+      find.text('Sign in under Account to turn sync on.'),
       findsOneWidget,
+    );
+
+    // And the run button is off, since there is nothing to run against.
+    expect(
+      tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Sync now'),
+      ).onPressed,
+      isNull,
     );
 
     await _disposeTree(tester);

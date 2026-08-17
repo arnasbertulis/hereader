@@ -53,25 +53,29 @@ abstract final class AppNav {
 }
 
 /// The one line weight surfaces are separated by, in place of elevation.
-/// See section 2 of the UI brief. [AppShadow] is the single exception and
-/// says why.
+/// See section 2 of the UI brief. [AppShadow] and [AppFloatShadow] are the
+/// two exceptions and each says why.
 abstract final class AppHairline {
   static const double width = 1;
   static const double widthHighContrast = 2;
 }
 
-/// The one shadow in the app, under Home's continue tile.
+/// The shadow under Home's continue tile.
 ///
-/// Everything else separates surfaces with a hairline, for the reason
-/// [AppHairline] gives. This is the exception because that tile is the only
-/// element in the app that sits alone in open space with nothing to align
-/// to, and a line under an object that is not against anything does not
-/// seat it.
+/// This said "the one shadow in the app" until the library's add button
+/// arrived and made that two. The rule it is an exception to has not moved:
+/// surfaces separate with a hairline, and a shadow appears only where a
+/// hairline cannot do the job. Both places where it cannot are objects with
+/// nothing to draw a line against, and [AppFloatShadow] gives the second one.
+///
+/// This tile is the only element in the app that sits alone in open space
+/// with nothing to align to, and a line under an object that is not against
+/// anything does not seat it.
 ///
 /// The cost is real but small: a `BoxShadow` on a rounded rectangle takes
 /// Skia's blurred-shape path rather than rasterising a layer, which is what
-/// makes `BackdropFilter` the thing worth avoiding on this target. One
-/// shadow, on one widget, on one screen.
+/// makes `BackdropFilter` the thing worth avoiding on this target. Two
+/// shadows, on two widgets, on two screens.
 ///
 /// Two opacities rather than one colour. A shadow is a hole in the light,
 /// and a dark surface has less light to take away, so the same alpha that
@@ -101,4 +105,38 @@ abstract final class AppShadow {
 
   static const double contactOpacityLight = 0.20;
   static const double contactOpacityDark = 0.55;
+}
+
+/// The shadow under the library's add button.
+///
+/// The second exception to hairlines, on the same reasoning as [AppShadow]
+/// and for a different reason. That tile sits still in open space; this
+/// button sits over a shelf that scrolls under it, so what it needs a shadow
+/// for is separation from a cover it cannot predict. A hairline ring would
+/// draw one weight against every cover in the library, and a dark cover
+/// passing under a dark accent leaves a filled circle with nothing to say
+/// where it ends.
+///
+/// Its own numbers rather than [AppShadow]'s. Forty of blur at eighteen down
+/// belongs to an object 300dp wide; under a 56dp circle it is a puddle
+/// wider than the button. These are the same two layers at roughly a third
+/// the distance, so the pair still reads as ambient plus contact.
+///
+/// Lighter alphas too. The tile carries a shadow to sit in empty space; this
+/// one carries it to stay legible over an image, and a heavy shadow on a
+/// small bright circle reads as a smudge.
+abstract final class AppFloatShadow {
+  static const double ambientBlur = 16;
+  static const double ambientSpread = -2;
+  static const double ambientDy = 6;
+
+  static const double contactBlur = 6;
+  static const double contactSpread = -1;
+  static const double contactDy = 2;
+
+  static const double ambientOpacityLight = 0.22;
+  static const double ambientOpacityDark = 0.60;
+
+  static const double contactOpacityLight = 0.16;
+  static const double contactOpacityDark = 0.45;
 }
