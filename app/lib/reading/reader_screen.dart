@@ -829,20 +829,13 @@ const double _secondaryIconSize = 28;
 /// 0015 and comes back as a left-side tap zone, which is a change to what
 /// the reading surface itself does rather than another glyph in this row.
 ///
-/// [ink] is resolved once by the reader screen from the profile's own
-/// background, rather than read from the theme here. The panels this screen
-/// opens take the neutral ramp and this row does not: it sits on whatever
-/// the reader picked in the background field, which the ramp knows nothing
-/// about.
-/// Exit, play and profile, over a progress bar.
-///
-/// Three buttons rather than four. Rewind moved to the arrow key in ADR
-/// 0015 and comes back as a left-side tap zone, which is a change to what
-/// the reading surface itself does rather than another glyph in this row.
-///
-/// Takes the profile rather than a resolved colour. The row needs three
+/// Takes the resolved presentation rather than a colour. The row needs three
 /// colours that all derive from the background, and passing one in while
 /// deriving the others here would put half the answer in the caller.
+///
+/// The panels this screen opens take the app's neutral ramp; this row does
+/// not. It sits on whatever the reader picked in the background field, which
+/// the ramp knows nothing about.
 class _Controls extends StatelessWidget {
   final PlaybackState state;
   final double progress;
