@@ -50,13 +50,6 @@ lib/
 │  ├─ api_client.dart           Calls the sync service, refreshes tokens
 │  ├─ auth_store.dart           Session storage: keystore on native, local
 │  │                             storage on web
-│  ├─ sync_button.dart          Sync state and a manual run as one control,
-│  │                             built for an app bar. Nothing builds it now:
-│  │                             Home and the library both dropped their
-│  │                             copies and settings/sync_screen.dart carries
-│  │                             the state instead. Kept, unreferenced, for a
-│  │                             bar that may not come back — see the note
-│  │                             under Sync
 │  ├─ last_synced.dart          How long ago a sync finished, in words rather
 │  │                             than a timestamp, and coarse on purpose
 │  ├─ position_conflict_sheet.dart  Two positions, each resolved against this
@@ -336,11 +329,11 @@ run did, when it finished, and a button to run one now. Home carried a copy of
 that state and dropped it in the UI pass; the library dropped its own with the
 app bar. Keeping four statuses in step across three screens is work nobody
 opens the app to see the result of. `sync/sync_button.dart` is what those bars
-built, and nothing builds it now — it survives unreferenced rather than
-deleted, since the shape it packages is the one a bar would want back. The
-library keeps the gesture without the readout, since a reader who has just put
-down another device should not wait five minutes for the timer: pulling the
-shelf down runs a sync.
+built, and it is gone: a widget nothing constructs reads as a screen someone
+forgot to wire up rather than as a shape held in reserve, and git remembers it
+if a bar ever comes back. The library keeps the gesture without the readout,
+since a reader who has just put down another device should not wait five
+minutes for the timer: pulling the shelf down runs a sync.
 
 `SyncScreen` shows no count of what is waiting to be sent. `SyncState` carries
 none — the field that always read zero was removed rather than fixed — and the
