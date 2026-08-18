@@ -3,6 +3,48 @@ import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
 import '../theme/app_tokens.dart';
+import 'library_book.dart';
+
+const _months = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+/// When a note was written, or last edited if it has been since.
+///
+/// Null for anything that is not a note. An EPUB is never rewritten, and the
+/// library already orders on [BookSummary.importedAt] rather than labelling
+/// every tile with it, so a book gains no new information from this line —
+/// only a note's empty author slot does.
+///
+/// No `intl` dependency for one fixed format: a reader comparing "Edited"
+/// against "Added" wants a specific moment, not a locale-aware calendar, and
+/// 24-hour time sidesteps an AM/PM ambiguity that costs more to typeset
+/// accessibly than it saves.
+String? noteDateLabel(BookSummary book) {
+  if (BookSourceFormat.fromName(book.sourceFormat) != BookSourceFormat.note) {
+    return null;
+  }
+
+  final edited = book.updatedAt != null;
+  final at = (book.updatedAt ?? book.importedAt).toLocal();
+
+  final hour = at.hour.toString().padLeft(2, '0');
+  final minute = at.minute.toString().padLeft(2, '0');
+
+  return '${edited ? 'Edited' : 'Added'} ${_months[at.month - 1]} '
+      '${at.day}, $hour:$minute';
+}
 
 /// What the reader is told about their place in a book.
 ///
@@ -52,13 +94,15 @@ String semanticsForBook(BookSummary book) {
 String? remainingLabel(BookSummary book, PacingConfig pacing) {
   if (book.wordCount <= 0) return null;
 
-  final remaining = book.wordCount - (book.tokenIndex ?? 0);
+  // tokenIndex + 1, not tokenIndex: the same correction as BookSummary's own
+  // progress getter, and for the same reason — the index is the last word
+  // *seen*, so treating it as the count already read leaves one word of
+  // "remaining" at the true end of the book.
+  final read = book.tokenIndex == null ? 0 : book.tokenIndex! + 1;
+  final remaining = book.wordCount - read;
   if (remaining <= 0) return null;
 
-  final left = remainingReadingTime(
-    remainingTokens: remaining,
-    config: pacing,
-  );
+  final left = remainingReadingTime(remainingTokens: remaining, config: pacing);
   if (left == null) return '$remaining words left';
 
   final minutes = left.inMinutes;

@@ -5,6 +5,27 @@ import 'package:rsvp_engine/rsvp_engine.dart';
 
 import 'database.dart';
 
+/// A stored book's bytes, plus what reopening it needs beyond them.
+///
+/// [sourceFormat] is carried as the raw column string ('epub' or 'note')
+/// rather than as `BookSourceFormat`: that type lives in `reading/`, and this
+/// file is the one place in the app that knows about drift, so it does not
+/// import back into a layer that already imports it. Callers that need the
+/// enum convert at the point they use it.
+class StoredBook {
+  final Uint8List bytes;
+  final String sourceFormat;
+  final String title;
+  final String? author;
+
+  const StoredBook({
+    required this.bytes,
+    required this.sourceFormat,
+    required this.title,
+    this.author,
+  });
+}
+
 /// A book as the library list needs it: metadata without the bytes.
 ///
 /// Loading blobs to draw a list would read every book into memory to render
@@ -23,6 +44,18 @@ class BookSummary {
   final int wordCount;
   final Locator? position;
   final DateTime importedAt;
+
+  /// 'epub' or 'note', carried as the raw column string for the same reason
+  /// [StoredBook.sourceFormat] is: this file does not import the `reading/`
+  /// layer that owns `BookSourceFormat`.
+  final String sourceFormat;
+
+  /// When a note's own text was last written, or null if it never has been.
+  ///
+  /// Null for every EPUB forever, since nothing ever rewrites one. See the
+  /// column's own comment on [Books] for why this is not defaulted to
+  /// [importedAt] instead.
+  final DateTime? updatedAt;
 
   /// When the reader last saved a place in this book, or null when they
   /// never have.
@@ -43,6 +76,8 @@ class BookSummary {
     required this.title,
     required this.wordCount,
     required this.importedAt,
+    required this.sourceFormat,
+    this.updatedAt,
     this.author,
     this.position,
     this.tokenIndex,
@@ -61,11 +96,19 @@ class BookSummary {
   /// carries no count, or the book row predates the wordCount column and
   /// reports zero. The last of those is why this checks the denominator
   /// rather than trusting it.
+  ///
+  /// `tokenIndex + 1`, not `tokenIndex`: the index is the zero-based token
+  /// the reader is *at*, so the last word of the book sits at
+  /// `wordCount - 1` and reads as 100% only once the count of words already
+  /// seen — one more than that index — is what gets divided. Matches
+  /// `TokenizedText.progressAt`, which the reader screen's own progress bar
+  /// already uses; this used to be a second, uncorrected copy of the same
+  /// formula, so a finished book or note showed 99% rather than 100%.
   double? get progress {
     final index = tokenIndex;
     if (index == null || wordCount <= 0) return null;
 
-    return (index / wordCount).clamp(0.0, 1.0);
+    return ((index + 1) / wordCount).clamp(0.0, 1.0);
   }
 }
 
@@ -153,6 +196,7 @@ int _compare(
       return flip * theirs.compareTo(mine);
   }
 }
+
 /// Everything the app stores locally.
 ///
 /// The only place that knows about drift. Screens talk to this.
@@ -176,7 +220,7 @@ class LibraryRepository {
   /// The rule this leaves behind is narrow, because `bytes` is the only
   /// column here that costs anything: a query over Books that is not about
   /// the bytes names the columns it wants.
-Stream<List<BookSummary>> watchLibrary({
+  Stream<List<BookSummary>> watchLibrary({
     LibrarySort sort = LibrarySort.recentlyAdded,
     bool reversed = false,
   }) {
@@ -197,6 +241,8 @@ Stream<List<BookSummary>> watchLibrary({
         table.author,
         table.wordCount,
         table.importedAt,
+        table.sourceFormat,
+        table.updatedAt,
         positions.blockId,
         positions.charOffset,
         positions.parserVersion,
@@ -215,6 +261,8 @@ Stream<List<BookSummary>> watchLibrary({
           author: row.read(table.author),
           wordCount: row.read(table.wordCount)!,
           importedAt: row.read(table.importedAt)!,
+          sourceFormat: row.read(table.sourceFormat)!,
+          updatedAt: row.read(table.updatedAt),
           position: blockId == null
               ? null
               : Locator(
@@ -245,13 +293,26 @@ Stream<List<BookSummary>> watchLibrary({
     return row?.bytes;
   }
 
-  /// Stored EPUB bytes, or null if the book is not on this device.
-  Future<Uint8List?> bytesOf(String bookId) async {
+  /// Stored bytes plus what a reopen needs beyond them.
+  ///
+  /// Replaced [bytesOf] once a note stopped carrying its own title: an
+  /// EPUB's bytes are enough to reopen it, since the archive is where its
+  /// title and id came from in the first place, but a note's bytes are just
+  /// its text, and reopening it means feeding that text back in beside a
+  /// title the bytes were never going to supply.
+  Future<StoredBook?> storedBookOf(String bookId) async {
     final row = await (_db.select(
       _db.books,
     )..where((b) => b.id.equals(bookId))).getSingleOrNull();
 
-    return row?.bytes;
+    if (row == null) return null;
+
+    return StoredBook(
+      bytes: row.bytes,
+      sourceFormat: row.sourceFormat,
+      title: row.title,
+      author: row.author,
+    );
   }
 
   /// Adds a book, or replaces it if the same edition is imported again.
@@ -264,6 +325,7 @@ Stream<List<BookSummary>> watchLibrary({
     required String title,
     required Uint8List bytes,
     required int wordCount,
+    required String sourceFormat,
     String? author,
     String? language,
     Uint8List? coverBytes,
@@ -278,6 +340,7 @@ Stream<List<BookSummary>> watchLibrary({
               bytes: bytes,
               importedAt: DateTime.now().toUtc(),
               wordCount: Value(wordCount),
+              sourceFormat: Value(sourceFormat),
               author: Value(author),
               language: Value(language),
             ),
@@ -300,6 +363,59 @@ Stream<List<BookSummary>> watchLibrary({
 
       await _drainPendingPosition(id);
     });
+  }
+
+  /// Rewrites a stored note's title and text.
+  ///
+  /// A plain update, not [addBook]'s `insertOnConflictUpdate`: that path
+  /// rewrites `importedAt` to now on every call, which is right for
+  /// re-importing an edition and wrong here — an edit changes when the note
+  /// was last written, not when it first arrived.
+  ///
+  /// [resetProgress] is the caller's decision, not this method's: the editor
+  /// screen is the one holding both the old and new text, so it is the one
+  /// that can tell whether anything a reader was partway through actually
+  /// changed. When true, the stored position is dropped in the same
+  /// transaction as the rewrite, so a reader can never end up with a position
+  /// pointing at a block a re-parse no longer produces.
+  ///
+  /// Not enqueued: book content has never synced, notes included, so there is
+  /// nothing here for another device to receive.
+  Future<void> editNote({
+    required String id,
+    required String title,
+    required Uint8List bytes,
+    required int wordCount,
+    required bool resetProgress,
+  }) async {
+    await _db.transaction(() async {
+      final now = DateTime.now().toUtc();
+
+      await (_db.update(_db.books)..where((b) => b.id.equals(id))).write(
+        BooksCompanion(
+          title: Value(title),
+          bytes: Value(bytes),
+          wordCount: Value(wordCount),
+          updatedAt: Value(now),
+        ),
+      );
+
+      if (resetProgress) await _resetPosition(id);
+    });
+  }
+
+  /// Drops a book's stored position, without touching the book itself.
+  ///
+  /// Assumes it is already inside a transaction.
+  Future<void> _resetPosition(String bookId) async {
+    await (_db.delete(
+      _db.readingPositions,
+    )..where((p) => p.bookId.equals(bookId))).go();
+
+    // An unsent position event for the place just discarded would otherwise
+    // go out on the next drain and write a locator back that this book no
+    // longer resolves.
+    await _coalescePositionEvents(bookId);
   }
 
   /// Removes a book and, by cascade, its reading position.

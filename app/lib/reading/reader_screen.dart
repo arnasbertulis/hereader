@@ -11,7 +11,6 @@ import 'library_book.dart';
 import 'profile_presentation.dart';
 import 'rsvp_view.dart';
 
-
 /// Identifies the play and pause button on the reading surface.
 ///
 /// The button carried a text label until ADR 0015, and five tests across
@@ -95,7 +94,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
   late PlaybackState _lastState;
 
   /// The index already on disk. A tick that finds it unchanged returns
-  /// without a transaction, so a paused reader writes nothing at all.
+  /// without a transaction, so a paused reader writes nothing at all — a
+  /// finished one still does, forced, since reaching the end of a one-token
+  /// text finds it unchanged too. See [_save]'s `force` parameter.
   late int _lastSavedIndex;
 
   /// Whether to tell the reader this book opened past a guess.
@@ -158,7 +159,16 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
       // On the transition rather than on every update, so the second emit
       // seekToIndex produces does not queue a second write.
-      if (stopped && _lastState != u.state) unawaited(_save());
+      //
+      // Forced on finished regardless of whether the index moved. A text of
+      // one token starts and finishes at the same index, so the ordinary
+      // "unchanged, nothing to save" guard in _save would otherwise treat
+      // finishing it exactly like the glance-and-close it is built to
+      // ignore, and the book would show as never started no matter how many
+      // times it was read to the end.
+      if (stopped && _lastState != u.state) {
+        unawaited(_save(force: u.state == PlaybackState.finished));
+      }
 
       // The rest of the tree reads the index in exactly two places — the
       // progress bar and the chapter panel's highlight — and both sit behind
@@ -231,9 +241,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
   /// attempt still tries. A failed position write is not reported: the reader
   /// is mid-chapter, the outbox is intact, and there is nothing useful for
   /// them to do about it.
-  Future<void> _save() async {
+  ///
+  /// [force] skips the "unchanged, nothing to save" check. Only the
+  /// transition into [PlaybackState.finished] passes it — see the call site.
+  Future<void> _save({bool force = false}) async {
     final result = _result;
-    if (result == null || result.tokenIndex == _lastSavedIndex) return;
+    if (result == null) return;
+    if (!force && result.tokenIndex == _lastSavedIndex) return;
 
     final previous = _lastSavedIndex;
     _lastSavedIndex = result.tokenIndex;
@@ -424,7 +438,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
-
   /// Stops, records the place, and leaves.
   ///
   /// The write is awaited before popping. The library syncs on return, and
@@ -581,7 +594,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     ),
                     if (state == PlaybackState.finished)
                       Center(
-                        child: Text('End of book', style: TextStyle(color: ink)),
+                        child: Text(
+                          'End of book',
+                          style: TextStyle(color: ink),
+                        ),
                       ),
                     if (showControls && _chapters.isNotEmpty)
                       Positioned(
@@ -770,7 +786,9 @@ class _FrontMatterOffer extends StatelessWidget {
           Text(
             'This opened past what looked like a title and licence page. '
             'That was a guess, and nothing was removed.',
-            style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurface),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: scheme.onSurface,
+            ),
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,

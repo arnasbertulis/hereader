@@ -10,10 +10,12 @@ import 'package:rsvp_engine/rsvp_engine.dart';
 import '../data/library_repository.dart';
 import '../sync/sync_engine.dart';
 import '../theme/app_tokens.dart';
+import 'add_menu.dart';
 import 'book_cover.dart';
 import 'book_opener.dart';
 import 'book_progress.dart';
 import 'library_book.dart';
+import 'note_editor_screen.dart';
 import 'paste_reader_screen.dart';
 
 /// How many books the recent row shows, beyond the one in the continue card.
@@ -137,6 +139,29 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// Asks what the reader wants to read, then does it.
+  ///
+  /// The same menu the library's add button opens, not a shorter version of
+  /// its own — see [AddMenu]'s own comment for why Home used to carry a
+  /// second, incomplete copy of this choice.
+  Future<void> _openAddMenu() async {
+    final choice = await showDialog<AddChoice>(
+      context: context,
+      builder: (_) => const AddMenu(),
+    );
+
+    if (choice == null || !mounted) return;
+
+    switch (choice) {
+      case AddChoice.epub:
+        await _import();
+      case AddChoice.paste:
+        _openPaste();
+      case AddChoice.note:
+        _openNote();
+    }
+  }
+
   Future<void> _import() async {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
@@ -159,6 +184,7 @@ class _HomeScreenState extends State<HomeScreen> {
         language: book.language,
         bytes: bytes,
         wordCount: book.text.length,
+        sourceFormat: 'epub',
         coverBytes: book.coverBytes,
       );
 
@@ -173,10 +199,16 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openPaste() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => PasteReaderScreen(
-          repository: _repo,
-          issueStamp: widget.issueStamp,
-        ),
+        builder: (_) =>
+            PasteReaderScreen(repository: _repo, issueStamp: widget.issueStamp),
+      ),
+    );
+  }
+
+  void _openNote() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => NoteEditorScreen(repository: _repo, sync: widget.sync),
       ),
     );
   }
@@ -193,8 +225,8 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       // No app bar and no controls in the corners. The navigation names
       // this tab, and the two icons that were up here were a sync readout
-      // nobody opens Home to check and a paste entry the Library's own add
-      // menu takes over.
+      // nobody opens Home to check and a paste entry the shared add menu
+      // (see add_menu.dart) now carries instead.
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -225,8 +257,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             maxWidth: _maxContentWidth,
                           ),
                           child: _NothingOpenYet(
-                            onImport: _busy ? null : _import,
-                            onPaste: _busy ? null : _openPaste,
+                            onAdd: _busy ? null : _openAddMenu,
                           ),
                         ),
                       ),
@@ -282,10 +313,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             const SizedBox(height: AppSpacing.sm),
                             _RecentRow(
-                              books: recent
-                                  .skip(1)
-                                  .take(_recentCount)
-                                  .toList(),
+                              books: recent.skip(1).take(_recentCount).toList(),
                               coverOf: _coverOf,
                               onOpen: _busy ? null : _open,
                             ),
@@ -715,11 +743,17 @@ class _RecentTile extends StatelessWidget {
 }
 
 /// What Home shows before there is anything to continue.
+///
+/// One button opening [AddMenu], matching the library's own empty state,
+/// rather than two buttons of its own. It used to be two — EPUB and paste,
+/// with no way to reach the note editor at all — which was never a decision
+/// to leave notes out of this screen specifically; it was this widget having
+/// its own copy of a choice the library already owned, and the two drifting
+/// out of sync the moment a third option was added to one of them.
 class _NothingOpenYet extends StatelessWidget {
-  final VoidCallback? onImport;
-  final VoidCallback? onPaste;
+  final VoidCallback? onAdd;
 
-  const _NothingOpenYet({required this.onImport, required this.onPaste});
+  const _NothingOpenYet({required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
@@ -736,27 +770,18 @@ class _NothingOpenYet extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.sm),
         Text(
-          'Add a book to begin. Books stay on this device.',
+          'Add an EPUB or write a note to begin, or paste text to try it '
+          'out. Books and notes stay on this device.',
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyMedium,
         ),
         const SizedBox(height: AppSpacing.xl),
-        // No glyphs on either button. A plus and a clipboard at button size
-        // are the two heaviest marks on an otherwise empty screen, and the
-        // labels already say what the buttons do.
         Center(
-          child: FilledButton(
-            onPressed: onImport,
+          child: FilledButton.icon(
+            onPressed: onAdd,
             style: FilledButton.styleFrom(minimumSize: const Size(200, 56)),
-            child: const Text('Add a book'),
-          ),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Center(
-          child: TextButton(
-            onPressed: onPaste,
-            style: TextButton.styleFrom(minimumSize: const Size(200, 48)),
-            child: const Text('Read pasted text'),
+            icon: const Icon(Icons.add),
+            label: const Text('Add something to read'),
           ),
         ),
       ],
