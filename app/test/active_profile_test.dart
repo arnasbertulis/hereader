@@ -80,6 +80,21 @@ void main() {
       expect((await repo.activeProfile()).id, Presets.standard.id);
     });
 
+    test('clears a pointer at a preset this build does not have', () async {
+      // The built-in namespace is answered from Presets rather than from the
+      // database, so a pointer inside it that names nothing is a separate
+      // path from a stored id that names nothing. A preset renamed or
+      // dropped between builds lands here.
+      await repo.setPreference(
+        LibraryRepository.activeProfileKey,
+        '${ReadingProfile.builtInIdPrefix}withdrawn',
+        hlc: stamp(1),
+      );
+
+      expect((await repo.activeProfile()).id, Presets.standard.id);
+      expect(await repo.preference(LibraryRepository.activeProfileKey), isNull);
+    });
+
     test('clears a pointer that no longer resolves', () async {
       await repo.setPreference(
         LibraryRepository.activeProfileKey,
