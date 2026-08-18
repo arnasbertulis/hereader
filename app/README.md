@@ -256,11 +256,31 @@ value it was seeded with at open and the guard silently ate every completion
 write. The state transition was the fact worth keying on; the index was a
 proxy that happened to work for every book long enough to look like the rule.
 
-Rewind is `arrowLeft`, stepping by the active profile's `rewindWords`. The
-reading surface has no rewind button: left and right tap zones are meant to
-replace it and are not built yet, so a keyboard, a switch, or a screen reader
-is the only way back until then. See
-[ADR 0015](../docs/adr/0015-reader-chrome-is-monochrome-over-the-profile.md).
+The reading surface is three regions, split 25 / 50 / 25. The left and right
+quarters step back and forward and stop there; the centre half keeps play,
+pause and the elicited advance. `arrowLeft` and `arrowRight` do the same two
+things as the edges, so a reader on a keyboard or a switch is not on a
+different set of controls from a reader with a thumb.
+
+How far one step moves is `ui.step_words`, set on Settings › Reading, device
+local and defaulting to one word. It is not the profile's `rewindWords`, which
+answers a different question — how far a *resume* re-enters the sentence after
+a pause — and stays with the profile because it belongs to a reading style
+rather than to an input.
+
+Every reader-driven move goes through `PlaybackSession.stopAt`, which stops
+where it lands and suppresses exactly one resume rewind. Without that, a step
+forward followed by pressing play would leave the reader behind where they
+started, since the resume out of `paused` applies `rewindWords` on the way.
+Chapter jumps still use `seekToIndex` and still have that fault; it is recorded
+in [ADR 0020](../docs/adr/0020-reader-driven-navigation.md).
+
+The control row is close, profile, play, forward a sentence, forward a
+paragraph. Both jumps are to the right of play because both move forward, and
+both disable at the end of the book rather than offering a jump that goes
+nowhere. There is still no rewind button: back is the left zone. See
+[ADR 0015](../docs/adr/0015-reader-chrome-is-monochrome-over-the-profile.md)
+and [ADR 0020](../docs/adr/0020-reader-driven-navigation.md).
 
 ## Notes
 

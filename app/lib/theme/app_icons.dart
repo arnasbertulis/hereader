@@ -102,6 +102,16 @@ abstract final class AppIcons {
   static const closeBook = IconData(0xe4f6, fontFamily: _light);
   static const readingProfile = IconData(0xe432, fontFamily: _light);
 
+  /// Forward to the start of the next sentence, and of the next paragraph.
+  ///
+  /// Transport glyphs rather than the pilcrow, which is the picture of
+  /// "paragraph" and carries no direction. Both of these have to read as
+  /// *forward* before they read as anything else, since they sit in a row
+  /// where the reader's only backward control is a tap zone with no glyph at
+  /// all. Two triangles for the longer of the two jumps. See ADR 0020.
+  static const skipSentence = IconData(0xe5a6, fontFamily: _light);
+  static const skipParagraph = IconData(0xe6a6, fontFamily: _light);
+
   // -- profile editing -------------------------------------------------
   static const forkProfile = IconData(0xe1ca, fontFamily: _light);
   static const contrastPasses = IconData(0xe184, fontFamily: _light);

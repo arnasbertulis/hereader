@@ -321,4 +321,116 @@ void main() {
       expect(text.startOfBlock('missing'), isNull);
     });
   });
+
+  // `_blocks()` tokenizes to:
+  //   0 One  1 two  2 three.   | block a
+  //   3 Four 4 five.           | block b
+  //   5 Six  6 seven 7 eight 8 nine.  | block c
+  group('nextSentenceStart', () {
+    test('lands on the word after a sentence end', () {
+      // Token 2 is "three." and ends block a. Token 3 is the first word of
+      // the next sentence, which is also the first word of the next block.
+      expect(_text().nextSentenceStart(0), 3);
+    });
+
+    test('a sentence end inside a block is found', () {
+      final text = _text(const [(id: 'a', text: 'One two. Three four five.')]);
+
+      expect(text.nextSentenceStart(0), 2);
+    });
+
+    test('a full stop masked by a blank line still ends a sentence', () {
+      // The failure this guards: `Tokenizer` takes the longer of the pause
+      // its punctuation implies and the pause its whitespace implies, so a
+      // "." followed by a blank line reports `paragraph` and the sentence
+      // end underneath it is invisible. Matching `sentence` alone would step
+      // over token 1 and answer 4 instead of 2.
+      final text = _text(const [
+        (id: 'a', text: 'One two.\n\nThree four. Five six.'),
+      ]);
+
+      expect(text.tokens[1].pauseAfter, PauseAfter.paragraph);
+      expect(text.nextSentenceStart(0), 2);
+    });
+
+    test('a block-final full stop is a plain sentence end', () {
+      // The other half of the same fact, pinned so the reasoning above is
+      // not read as applying to block boundaries. Blocks tokenize one at a
+      // time, so nothing follows the last token of one for the whitespace
+      // rule to see.
+      final text = _text(const [
+        (id: 'a', text: 'One two.'),
+        (id: 'b', text: 'Three four.'),
+      ]);
+
+      expect(text.tokens[1].pauseAfter, PauseAfter.sentence);
+      expect(text.nextSentenceStart(0), 2);
+    });
+
+    test('scanning from the middle of a sentence finds its end', () {
+      // Token 1 is "two", mid-sentence in block a. The end is token 2.
+      expect(_text().nextSentenceStart(1), 3);
+    });
+
+    test('the last sentence has no next one', () {
+      expect(_text().nextSentenceStart(5), isNull);
+      expect(_text().nextSentenceStart(8), isNull);
+    });
+
+    test('an empty text has no next sentence', () {
+      expect(_text(const []).nextSentenceStart(0), isNull);
+    });
+
+    test('a negative index is read as the start', () {
+      expect(_text().nextSentenceStart(-5), 3);
+    });
+  });
+
+  group('nextParagraphStart', () {
+    test('lands on the first token of the next block', () {
+      expect(_text().nextParagraphStart(0), 3);
+      expect(_text().nextParagraphStart(2), 3);
+      expect(_text().nextParagraphStart(3), 5);
+    });
+
+    test('a sentence end inside a block is not a paragraph end', () {
+      final text = _text(const [
+        (id: 'a', text: 'One two. Three four.'),
+        (id: 'b', text: 'Five six.'),
+      ]);
+
+      expect(text.nextParagraphStart(0), 4);
+    });
+
+    test('a blank line inside one block ends a paragraph', () {
+      // The other source of a paragraph boundary, for a caller handing this
+      // type prose that never went through a normalizer.
+      final text = _text(const [(id: 'a', text: 'One two\n\nThree four')]);
+
+      expect(text.tokens[1].pauseAfter, PauseAfter.paragraph);
+      expect(text.nextParagraphStart(0), 2);
+    });
+
+    test('the nearer of the two boundaries wins', () {
+      final text = _text(const [
+        (id: 'a', text: 'One two\n\nThree four'),
+        (id: 'b', text: 'Five six'),
+      ]);
+
+      // The block boundary is at 4 and the blank line is at 2.
+      expect(text.nextParagraphStart(0), 2);
+      expect(text.nextParagraphStart(2), 4);
+    });
+
+    test('the last block has no next paragraph', () {
+      expect(_text().nextParagraphStart(5), isNull);
+      expect(_text().nextParagraphStart(8), isNull);
+    });
+
+    test('an out of range index has no answer', () {
+      expect(_text().nextParagraphStart(-1), isNull);
+      expect(_text().nextParagraphStart(9), isNull);
+      expect(_text(const []).nextParagraphStart(0), isNull);
+    });
+  });
 }

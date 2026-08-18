@@ -60,6 +60,9 @@ class PlaybackSession {
   bool _inGap = false;
   Timer? _timer;
 
+  /// Set by [stopAt] and spent by the next [play]. See [stopAt] for why.
+  bool _resumeHere = false;
+
   final _updates = StreamController<PlaybackUpdate>.broadcast();
 
   PlaybackSession({
@@ -127,9 +130,13 @@ class PlaybackSession {
 
     if (_state == PlaybackState.finished) return;
 
-    if (_state == PlaybackState.paused) {
+    if (_state == PlaybackState.paused && !_resumeHere) {
       _index = (_index - _profile.rewindWords).clamp(0, tokens.length - 1);
     }
+
+    // Spent whether or not it applied, so it describes the last thing the
+    // reader did rather than accumulating across resumes.
+    _resumeHere = false;
 
     _inGap = false;
     _scheduleCurrent();
@@ -143,6 +150,13 @@ class PlaybackSession {
     _timer?.cancel();
     _timer = null;
     _inGap = false;
+
+    // A pause is not a place the reader picked, so it re-arms the rewind even
+    // if a [stopAt] put them here first. Otherwise stepping once and then
+    // reading for an hour would still suppress the rewind on the pause after
+    // it, an hour later, for a reason nobody could see.
+    _resumeHere = false;
+
     _setState(PlaybackState.paused);
   }
 
@@ -200,6 +214,36 @@ class PlaybackSession {
       _setState(PlaybackState.paused);
       _emit();
     }
+  }
+
+  /// Move to [target] and stop there, as a place the reader chose.
+  ///
+  /// Unlike [pause], resuming from here does not apply
+  /// [ReadingProfile.rewindWords]. That field exists so a reader coming back
+  /// to a book re-enters the sentence with some context; a reader who has just
+  /// stepped onto a particular word does not want to be moved off it, and
+  /// under a tap zone the two land one after the other on every single step.
+  ///
+  /// The suppression lasts exactly one [play] and any [pause] clears it.
+  ///
+  /// [PlaybackState.awaitingAdvance] is not turned into a pause. It is active
+  /// reading under an elicited pacing model rather than a stop, so a step
+  /// re-schedules and the reader keeps the advance they were using. Every
+  /// other state stops.
+  void stopAt(int target) {
+    if (tokens.isEmpty) return;
+
+    _timer?.cancel();
+    _inGap = false;
+    _index = target.clamp(0, tokens.length - 1);
+    _resumeHere = true;
+
+    if (_state == PlaybackState.awaitingAdvance) {
+      _scheduleCurrent();
+      return;
+    }
+
+    _setState(PlaybackState.paused);
   }
 
   /// Resume from a stored locator. Lands on the token containing [offset], or

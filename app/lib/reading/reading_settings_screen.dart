@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import 'reading_display.dart';
+import 'setting_slider.dart';
 
 /// What the app does while a book is open — one setting, and the rest stated
 /// rather than configured.
@@ -16,7 +17,9 @@ import 'reading_display.dart';
 /// out. What is actually ruled out is narrower: a setting whose wrong value
 /// costs the reader their place. A switch that turns off position saving, or
 /// a slider on the fifteen-second cadence, is still not going here. Which of
-/// two honest figures a tile shows is not that kind of setting.
+/// two honest figures a tile shows is not that kind of setting, and neither
+/// is how far one tap moves — a step the reader dislikes is undone by the
+/// step back beside it.
 class ReadingSettingsScreen extends StatelessWidget {
   final ReadingDisplayController display;
 
@@ -33,11 +36,27 @@ class ReadingSettingsScreen extends StatelessWidget {
         builder: (context, _) => ListView(
           padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
           children: [
+            const _SectionHeader('Step'),
+            SettingSlider(
+              label: 'One step moves',
+              value: display.stepWords.toDouble(),
+              valueLabel:
+                  '${display.stepWords} '
+                  'word${display.stepWords == 1 ? '' : 's'}',
+              min: kMinStepWords.toDouble(),
+              max: kMaxStepWords.toDouble(),
+              divisions: kMaxStepWords - kMinStepWords,
+              help:
+                  'Tapping the left or right quarter of the reading surface '
+                  'moves this far and stops there. The Left and Right keys do '
+                  'the same. Starting again picks up where you stopped rather '
+                  'than stepping back the way it does after a pause.',
+              onChanged: (v) => display.setStepWords(v.round()),
+            ),
+            const Divider(),
             const _SectionHeader('Time left counts'),
             Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.lg,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: SegmentedButton<TimeLeftScope>(
                 segments: const [
                   ButtonSegment(
@@ -171,8 +190,8 @@ class _Shortcut {
 
 const _shortcuts = [
   _Shortcut('Start or pause', 'Space'),
-  _Shortcut('Back one word', 'Left'),
-  _Shortcut('Forward one word', 'Right'),
+  _Shortcut('Back a step', 'Left'),
+  _Shortcut('Forward a step', 'Right'),
   _Shortcut('Chapters', 'C'),
   _Shortcut('Close the book', 'Escape'),
 ];

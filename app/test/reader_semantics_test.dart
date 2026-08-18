@@ -2,7 +2,6 @@ import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
 import 'package:app/reading/library_book.dart';
 import 'package:app/reading/reader_screen.dart';
-import 'package:app/reading/rsvp_view.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -44,6 +43,11 @@ void main() {
     // The gap this file exists for. The surface is the app's primary
     // control and was a bare GestureDetector: no role, no label, nothing
     // for a screen reader to find or activate.
+    //
+    // Read off the centre zone rather than off `RsvpView` since ADR 0020
+    // split the surface into three. `RsvpView` is paint now, under an
+    // `ExcludeSemantics`, and the word it draws is announced by the zone
+    // that presses it rather than as a node of its own.
     testWidgets('is a button a screen reader can find and press', (
       tester,
     ) async {
@@ -53,13 +57,60 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        tester.getSemantics(find.byType(RsvpView)),
+        tester.getSemantics(find.byKey(readerTapCentreKey)),
         isSemantics(
           isButton: true,
           hasTapAction: true,
           label: 'Start reading',
           value: 'Alpha',
         ),
+      );
+
+      handle.dispose();
+      await disposeTree(tester);
+    });
+
+    // The edges are the reader's only way back on a touch screen, so each
+    // has to be findable in its own right — and each names a number set on
+    // a screen the reader cannot see from here.
+    testWidgets('the edges are buttons that say how far they move', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+
+      await tester.pumpWidget(reader());
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getSemantics(find.byKey(readerTapBackKey)),
+        isSemantics(isButton: true, hasTapAction: true, label: 'Back 1 word'),
+      );
+      expect(
+        tester.getSemantics(find.byKey(readerTapForwardKey)),
+        isSemantics(
+          isButton: true,
+          hasTapAction: true,
+          label: 'Forward 1 word',
+        ),
+      );
+
+      handle.dispose();
+      await disposeTree(tester);
+    });
+
+    // The word belongs to the control that stops on it, not to the two
+    // beside it. Three nodes each announcing it would say it three times.
+    testWidgets('only the centre carries the word', (tester) async {
+      final handle = tester.ensureSemantics();
+
+      await tester.pumpWidget(reader());
+      await tester.pumpAndSettle();
+
+      expect(tester.getSemantics(find.byKey(readerTapBackKey)).value, '');
+      expect(tester.getSemantics(find.byKey(readerTapForwardKey)).value, '');
+      expect(
+        tester.getSemantics(find.byKey(readerTapCentreKey)).value,
+        'Alpha',
       );
 
       handle.dispose();
@@ -78,7 +129,7 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
 
       expect(
-        tester.getSemantics(find.byType(RsvpView)),
+        tester.getSemantics(find.byKey(readerTapCentreKey)),
         isSemantics(label: 'Pause reading', value: ''),
       );
 
@@ -96,10 +147,10 @@ void main() {
 
       await tester.tap(find.byKey(readerPlayButtonKey));
       await tester.pump(const Duration(seconds: 1));
-      await tester.tap(find.byType(RsvpView));
+      await tester.tap(find.byKey(readerTapCentreKey));
       await tester.pumpAndSettle();
 
-      final node = tester.getSemantics(find.byType(RsvpView));
+      final node = tester.getSemantics(find.byKey(readerTapCentreKey));
       expect(node.label, 'Start reading');
       expect(node.value, isNotEmpty);
 

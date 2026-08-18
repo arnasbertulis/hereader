@@ -418,4 +418,194 @@ void main() {
       expect(session.current.token, isNull);
     });
   });
+
+  group('stopAt', () {
+    test('stops on the token the reader named', () {
+      fakeAsync((async) {
+        final s = PlaybackSession(tokens: _tokens(), profile: _profile());
+        s.play();
+        async.elapse(const Duration(milliseconds: 250));
+        expect(s.state, PlaybackState.playing);
+
+        s.stopAt(3);
+
+        expect(s.index, 3);
+        expect(s.state, PlaybackState.paused);
+
+        // No timer left armed, so the word does not move on under a reader
+        // who has stopped to look at it.
+        async.elapse(const Duration(seconds: 2));
+        expect(s.index, 3);
+
+        s.dispose();
+      });
+    });
+
+    test('resuming does not apply rewindWords', () {
+      final s = PlaybackSession(
+        tokens: _tokens(),
+        profile: _profile(rewindWords: 2),
+      );
+      s.stopAt(3);
+      s.play();
+
+      expect(
+        s.index,
+        3,
+        reason:
+            'the reader chose this word; a resume must not move them off it',
+      );
+
+      s.dispose();
+    });
+
+    test('a plain pause still applies rewindWords', () {
+      fakeAsync((async) {
+        final s = PlaybackSession(
+          tokens: _tokens(),
+          profile: _profile(rewindWords: 2),
+        );
+        s.play();
+        async.elapse(const Duration(milliseconds: 650));
+        expect(s.index, 3);
+
+        s.pause();
+        s.play();
+
+        expect(s.index, 1);
+
+        s.dispose();
+      });
+    });
+
+    test('a pause after a stopAt re-arms the rewind', () {
+      fakeAsync((async) {
+        final s = PlaybackSession(
+          tokens: _tokens(),
+          profile: _profile(rewindWords: 2),
+        );
+
+        s.stopAt(3);
+        s.play();
+        expect(s.index, 3, reason: 'the suppression applies here');
+
+        async.elapse(const Duration(milliseconds: 250));
+        s.pause();
+        s.play();
+
+        expect(
+          s.index,
+          lessThan(4),
+          reason: 'a pause is not a chosen place, so the rewind is back',
+        );
+        expect(s.index, 2);
+
+        s.dispose();
+      });
+    });
+
+    test('the suppression is spent by one resume, not held', () {
+      fakeAsync((async) {
+        final s = PlaybackSession(
+          tokens: _tokens(),
+          profile: _profile(rewindWords: 2),
+        );
+
+        s.stopAt(0);
+        s.play();
+        expect(s.index, 0, reason: 'the one resume the suppression covers');
+
+        // Back into `paused` by a route that is not `pause()`, so nothing
+        // clears the flag on the way. If it were held rather than spent, the
+        // resume below would land on 3 instead of 1.
+        async.elapse(const Duration(seconds: 2));
+        expect(s.state, PlaybackState.finished);
+        s.rewind();
+        expect(s.state, PlaybackState.paused);
+        expect(s.index, 3);
+
+        s.play();
+        expect(s.index, 1);
+
+        s.dispose();
+      });
+    });
+
+    test('clamps rather than throwing at either end', () {
+      final s = PlaybackSession(tokens: _tokens(), profile: _profile());
+
+      s.stopAt(-4);
+      expect(s.index, 0);
+
+      s.stopAt(99);
+      expect(s.index, 4);
+
+      s.dispose();
+    });
+
+    test('from finished it re-enters paused', () {
+      fakeAsync((async) {
+        final s = PlaybackSession(tokens: _tokens(), profile: _profile());
+        s.play();
+        async.elapse(const Duration(seconds: 3));
+        expect(s.state, PlaybackState.finished);
+
+        s.stopAt(2);
+
+        expect(s.state, PlaybackState.paused);
+        expect(s.index, 2);
+
+        s.dispose();
+      });
+    });
+
+    test('an empty text is left alone', () {
+      final s = PlaybackSession(tokens: const [], profile: _profile());
+
+      s.stopAt(3);
+
+      expect(s.index, 0);
+      expect(s.state, PlaybackState.finished);
+
+      s.dispose();
+    });
+
+    test('awaiting advance survives a step', () {
+      final s = PlaybackSession(
+        tokens: _tokens(),
+        profile: _profile(kind: PacingModelKind.elicited),
+      );
+      s.play();
+      expect(s.state, PlaybackState.awaitingAdvance);
+
+      s.stopAt(3);
+
+      // Not a pause. Under elicited pacing the reader is reading, one press
+      // at a time, and dropping them into `paused` would make them find the
+      // play button to get their advance back.
+      expect(s.state, PlaybackState.awaitingAdvance);
+      expect(s.index, 3);
+
+      s.advance();
+      expect(s.index, 4);
+
+      s.dispose();
+    });
+
+    test('emits what it landed on', () {
+      final s = PlaybackSession(tokens: _tokens(), profile: _profile());
+      final seen = <PlaybackUpdate>[];
+      s.updates.listen(seen.add);
+
+      s.stopAt(2);
+
+      return Future(() {
+        expect(seen, hasLength(1));
+        expect(seen.single.index, 2);
+        expect(seen.single.token?.text, 'three');
+        expect(seen.single.state, PlaybackState.paused);
+        s.dispose();
+      });
+    });
+  });
 }

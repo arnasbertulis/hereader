@@ -101,4 +101,88 @@ void main() {
     // the wrong thing to open it with.
     expect(queued, isEmpty);
   });
+
+  group('step words', () {
+    test('a fresh install steps by one', () {
+      expect(controller().stepWords, kDefaultStepWords);
+      expect(kDefaultStepWords, 1);
+    });
+
+    test('survives a restart', () async {
+      final first = controller();
+      await first.setStepWords(4);
+
+      final second = controller();
+      await second.restore();
+
+      expect(second.stepWords, 4);
+    });
+
+    test('an absent, empty or unreadable value steps by the default', () {
+      expect(decodeStepWords(null), kDefaultStepWords);
+      expect(decodeStepWords(''), kDefaultStepWords);
+      expect(decodeStepWords('lots'), kDefaultStepWords);
+      expect(decodeStepWords('3.5'), kDefaultStepWords);
+    });
+
+    test('a value outside the range is pinned, not discarded', () {
+      // Nearer the reader's intent than the default is: a row written by a
+      // build offering a wider range still says which end they wanted.
+      expect(decodeStepWords('0'), kMinStepWords);
+      expect(decodeStepWords('-2'), kMinStepWords);
+      expect(decodeStepWords('40'), kMaxStepWords);
+    });
+
+    test('zero is not reachable through the setter either', () async {
+      final c = controller();
+      await c.setStepWords(0);
+
+      expect(c.stepWords, kMinStepWords);
+    });
+
+    test('setting the value it already holds writes nothing', () async {
+      final c = controller();
+      await c.restore();
+
+      await c.setStepWords(kDefaultStepWords);
+
+      expect(stamps, 0);
+    });
+
+    test('a change notifies once', () async {
+      final c = controller();
+      var notified = 0;
+      c.addListener(() => notified++);
+
+      await c.setStepWords(6);
+
+      expect(notified, 1);
+      expect(c.stepWords, 6);
+    });
+
+    test('queues nothing for other devices', () async {
+      final c = controller();
+      await c.setStepWords(5);
+
+      // Device-local like every other ui. key. A thumb on a phone and an
+      // arrow key on a desktop want different grains, which is the whole
+      // reason this is not `ReadingProfile.rewindWords`. See ADR 0020.
+      expect(await db.select(db.outboxEvents).get(), isEmpty);
+    });
+
+    test('restore reads both keys', () async {
+      final first = controller();
+      await first.setStepWords(7);
+      await first.setTimeLeftScope(TimeLeftScope.book);
+
+      final second = controller();
+      await second.restore();
+
+      // One `restore` and two reads. The step arrived after the scope did,
+      // and a restore that still read one key would leave the reader's step
+      // at the default on every launch with nothing to show for it.
+      expect(second.stepWords, 7);
+      expect(second.timeLeftScope, TimeLeftScope.book);
+    });
+  });
 }
