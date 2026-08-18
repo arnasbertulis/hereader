@@ -786,7 +786,6 @@ class _BookTile extends StatelessWidget {
               children: [
                 BookCoverFuture(
                   bookId: book.id,
-                  title: book.title,
                   cover: cover,
                   width: width,
                 ),
@@ -867,7 +866,6 @@ class _BookRow extends StatelessWidget {
                 children: [
                   BookCoverFuture(
                     bookId: book.id,
-                    title: book.title,
                     cover: cover,
                     width: 72,
                   ),

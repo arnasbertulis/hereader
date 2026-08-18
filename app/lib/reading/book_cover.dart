@@ -9,18 +9,20 @@ import '../theme/app_tokens.dart';
 /// inside it.
 const double kCoverAspect = 1.5;
 
-/// A book's cover, or a face generated from its title when it has none.
+/// A book's cover, or a generated stand-in when it has none.
 ///
 /// Pasted text and books whose publisher declared no cover both land on the
 /// generated face, and so does every book imported before covers were stored.
 /// Drawing nothing in those cases would make a grid of mostly blank boxes
 /// look broken rather than plain.
+///
+/// Takes no title. The face draws none — the tile underneath already carries
+/// it — so the only thing identifying a book here is the band colour, which
+/// comes from the id.
 class BookCoverImage extends StatelessWidget {
   /// Decides the band colour. The same book gets the same band on every
   /// device, because the id is the same on every device.
   final String bookId;
-
-  final String title;
 
   /// The stored image, or null for the generated face.
   final Uint8List? bytes;
@@ -31,7 +33,6 @@ class BookCoverImage extends StatelessWidget {
   const BookCoverImage({
     super.key,
     required this.bookId,
-    required this.title,
     required this.width,
     this.bytes,
   });
@@ -75,14 +76,12 @@ class BookCoverImage extends StatelessWidget {
 /// much smaller map for the few books it draws.
 class BookCoverFuture extends StatelessWidget {
   final String bookId;
-  final String title;
   final Future<Uint8List?> cover;
   final double width;
 
   const BookCoverFuture({
     super.key,
     required this.bookId,
-    required this.title,
     required this.cover,
     required this.width,
   });
@@ -93,7 +92,6 @@ class BookCoverFuture extends StatelessWidget {
       future: cover,
       builder: (context, snapshot) => BookCoverImage(
         bookId: bookId,
-        title: title,
         width: width,
         // Null while the read is in flight, which draws the generated face
         // and then replaces it. No spinner: a blob read off a local database
@@ -105,7 +103,7 @@ class BookCoverFuture extends StatelessWidget {
   }
 }
 
-/// The stand-in cover: the title on a neutral card under a coloured band.
+/// The stand-in cover: a neutral card under a coloured band.
 ///
 /// The band is the only place in the app where a colour comes from anything
 /// but the reader's accent, and it earns that: a shelf of identical grey

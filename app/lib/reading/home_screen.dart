@@ -525,7 +525,6 @@ class _ContinueTile extends StatelessWidget {
                         heightFactor: (height - AppRadii.md) / height,
                         child: BookCoverFuture(
                           bookId: book.id,
-                          title: book.title,
                           cover: cover,
                           width: width,
                         ),
@@ -720,7 +719,6 @@ class _RecentTile extends StatelessWidget {
             children: [
               BookCoverFuture(
                 bookId: book.id,
-                title: book.title,
                 cover: cover,
                 width: constraints.maxWidth,
               ),
