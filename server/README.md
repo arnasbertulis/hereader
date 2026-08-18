@@ -6,7 +6,8 @@ Stores reading positions, profiles and preferences. Never book files: those
 stay on the reader's device, which is a privacy decision and a licensing one.
 See [ADR 0004](../docs/adr/0004-store-book-files.md).
 
-Deployed on a single Hetzner VPS via Docker Compose, behind Caddy. See
+Deployed on a single Hetzner VPS via Docker Compose, behind Caddy, which also
+serves the compiled Flutter web build from the same hostname. See
 [ADR 0006](../docs/adr/0006-deployment-infrastructure.md).
 
 ## Running it
@@ -35,10 +36,28 @@ $env:JWT_SECRET = [Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random
 ./mvnw spring-boot:run
 ```
 
-Flyway applies the schema on first start. `GET /health` reports whether the
+Flyway applies the schema on first start. `GET /api/health` reports whether the
 service can reach its database rather than merely whether the process is
 alive, because a health check that always answers ok makes a broken deploy
 look healthy.
+
+Everything sits under a `/api` context path, set by
+`server.servlet.context-path`, so that Caddy can serve the web build from the
+same hostname and browser requests are same-origin in production. Controller
+mappings below are written without it; the URL a client calls carries it.
+
+**Via Docker Compose**, which is what production runs:
+
+```bash
+cp .env.example .env   # then edit JWT_SECRET and DATABASE_PASSWORD
+docker compose up --build -d
+```
+
+Compose brings up three containers: Postgres, this service, and Caddy. Only
+Caddy publishes ports to the world; the service binds to `127.0.0.1:8080` and
+the database publishes nothing at all, which is why a development container
+must not reuse the name `hereader-db` — it would be replaced by one nothing on
+the host machine can reach.
 
 ## Configuration
 
@@ -53,6 +72,10 @@ signing secret, which has none.
 | `JWT_SECRET` | none | At least 32 bytes, or startup fails |
 | `JWT_ACCESS_MINUTES` | 60 | |
 | `JWT_REFRESH_DAYS` | 60 | |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:*`, plus the deployed hostname | Comma-separated. Load-bearing for a Flutter dev server on a random port |
+
+`.env` holds the secret and the database password on a developer's machine and
+on the server, populated separately in each place and never committed.
 
 ## Endpoints
 
@@ -91,6 +114,10 @@ Unauthenticated requests get 401, unauthorised ones get 403. Spring Security
 answers 403 for both by default; the client needs them apart to know when to
 refresh rather than log the reader out.
 
+CORS is configured explicitly. Spring Security sends no CORS headers by
+default, so a browser client on a different origin gets a request that the
+service handled correctly and the browser then discarded.
+
 ## Sync
 
 Clients append events to a local outbox and drain it when there is a
@@ -103,10 +130,24 @@ keeps every write including ones that lost. `entity_state` holds the current
 resolved value per entity, so a device that has been away for a month does not
 replay a thousand events to learn one reading position.
 
+**A deletion is a fact about the event, not only about the state.** Both
+tables carry a `deleted` flag. `entity_state` has since V2; `sync_events` only
+since V3, and the gap between them was the worst bug this project has had.
+Clients pull the log, not the resolved state, and the pull query filled the
+field with a literal `false`. A profile deleted on one device would have
+arrived elsewhere as an ordinary write carrying that profile's last payload
+and the deletion's stamp — the highest stamp in play — so every other device
+would write it back as live while the deleting device kept its tombstone. Two
+devices permanently disagreeing, nothing logged. Found by reading the wire
+contract end to end before attempting a cross-device test; neither suite could
+have caught it, since the Dart tests run against a fake service and the Java
+tests had never exercised a deletion because no client had ever sent one.
+
 **Ordering uses hybrid logical clocks.** Format is
 `{millis:013d}-{counter:05d}-{deviceId}`, fixed-width so lexicographic
 comparison gives the same answer as comparing the parts, which means the
-database can order by the string without parsing it.
+database can order by the string without parsing it. The Dart client
+implements the same format byte for byte.
 
 Clients supply their own stamps, so the service does not trust them. A stamp
 more than five minutes ahead of server time is rejected rather than clamped:
@@ -135,6 +176,12 @@ divergence is recorded for the reader to settle.
 One device moving a long way is not a divergence — that is an afternoon of
 reading. It takes two devices disagreeing.
 
+The threshold is measured against a token index the client supplies, which the
+service cannot verify. It is used here and only here: a wrong value costs a
+prompt that was not needed or misses one that was, and the client deliberately
+never shows the figure to a reader, since both candidates resolve against that
+device's own copy of the book.
+
 The service has no way to know whether a device has actually imported the
 book a position refers to — book files never reach it, by design. A client
 that receives a position for a book it does not have holds it locally until
@@ -160,6 +207,12 @@ user_sync_state       the sequence counter, one row per user
 sync_events           append-only log
 entity_state          current resolved value per entity
 position_conflicts    divergences awaiting the reader
+```
+
+```
+V1  initial schema
+V2  entity_state, the resolved value per entity
+V3  the deleted flag on sync_events — see the deletion note above
 ```
 
 No JPA. The queries here are simple enough that `JdbcClient` and plain SQL are
@@ -201,5 +254,7 @@ CI runs the same suite against a Postgres service container.
 ## Not built yet
 
 Compaction of the event log. Bookmarks, which have a conflict rule defined but
-no endpoint using it. A CD pipeline — deploys are currently a manual SSH
-session; see [ADR 0006](../docs/adr/0006-deployment-infrastructure.md).
+no endpoint using it. Automated backups — Postgres here holds positions and
+preferences rather than book files, so the practical cost of loss is low, but
+it is a gap rather than a decision. A CD pipeline — deploys are currently a
+manual SSH session; see [ADR 0006](../docs/adr/0006-deployment-infrastructure.md).

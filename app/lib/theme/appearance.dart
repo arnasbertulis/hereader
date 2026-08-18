@@ -8,10 +8,18 @@ import 'app_colors.dart';
 /// controller that stores them.
 ///
 /// These are the app around the books: Home, Library, Settings, sign-in. The
-/// reading surface takes its colours from the active reading profile and
-/// nothing here reaches it. `readerChromeTheme` seeds from its own fixed
-/// neutral for exactly that reason, so a reader who tinted their background
-/// moss and set the accent to rust never sees the two adjacent.
+/// reading surface itself still takes its colours from the active reading
+/// profile — the page, the ink and the tint are all the profile's.
+///
+/// The chrome drawn *over* that surface is not so separate, and this comment
+/// claimed it was for longer than it was true. ADR 0015 has
+/// `readerChromeTheme` build through the same `buildScheme` these choices
+/// feed, at a brightness read from the profile's own background rather than
+/// the platform's, with `AppChromeSource` carrying the accent and contrast
+/// below down to it. So the accent does reach the reading screen, on exactly
+/// one thing: the progress fill, and only where it clears 3:1 against its own
+/// track. The controls drawn straight on the surface take `readerInkArgbFor`
+/// and no accent at all.
 ///
 /// **Device-local, on purpose.** `setPreference` takes `sync: false` and
 /// every write below passes it explicitly. Two reasons. A phone read

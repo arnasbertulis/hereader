@@ -28,15 +28,19 @@ only adds syncing a position and preferences between devices.
 
 ```
 lib/
-├─ main.dart                    Startup: opens the database, reads appearance
-│                                before the first frame, starts sync
-├─ startup_failure.dart         What the app shows when that fails, rather
-│                                than a blank window
+├─ main.dart                    Startup: opens the database, restores the
+│                                session and the clock, reads appearance
+│                                before the first frame, starts sync. Also
+│                                where HEREADER_API is read
+├─ startup_failure.dart         Shown when any of that throws. Depends on
+│                                nothing that can have failed — plain widgets
+│                                and a pure colour function — because there
+│                                is no widget tree left to report through
 ├─ app_shell.dart               The three tabs, the bar and the rail, and
 │                                the cross-fade between them
 ├─ data/
-│  ├─ database.dart             Drift schema: books (an EPUB or a note,
-│  │                             told apart by sourceFormat), positions,
+│  ├─ database.dart             Drift schema, version 9: books (an EPUB or a
+│  │                             note, told apart by sourceFormat), positions,
 │  │                             pending positions, covers, profiles,
 │  │                             preferences, outbox, conflicts
 │  ├─ database.g.dart           Generated. See build_runner below
@@ -46,15 +50,23 @@ lib/
 │  ├─ api_client.dart           Calls the sync service, refreshes tokens
 │  ├─ auth_store.dart           Session storage: keystore on native, local
 │  │                             storage on web
-│  ├─ sync_button.dart          Status and a manual run, as one control
-│  ├─ last_synced.dart          How long ago the last finished run was
-│  ├─ position_conflict_sheet.dart  Two positions, for the reader to choose
-│  │                             between when devices diverge
+│  ├─ sync_button.dart          Sync state and a manual run as one control,
+│  │                             built for an app bar. Nothing builds it now:
+│  │                             Home and the library both dropped their
+│  │                             copies and settings/sync_screen.dart carries
+│  │                             the state instead. Kept, unreferenced, for a
+│  │                             bar that may not come back — see the note
+│  │                             under Sync
+│  ├─ last_synced.dart          How long ago a sync finished, in words rather
+│  │                             than a timestamp, and coarse on purpose
+│  ├─ position_conflict_sheet.dart  Two positions, each resolved against this
+│  │                             device's own copy of the book rather than
+│  │                             shown from the payload's unverified hint
 │  └─ sign_in_screen.dart       Sign in or register, always skippable
 ├─ theme/
-│  ├─ app_colors.dart           Neutral ramps, the accent list, buildScheme
+│  ├─ app_colors.dart           Neutral ramps, the six accents, buildScheme
 │  ├─ app_tokens.dart           Spacing, radii, durations, hairline widths,
-│  │                             and the app's one shadow
+│  │                             and the app's two shadows
 │  ├─ app_typography.dart       The type scale
 │  ├─ app_theme.dart            ThemeData and every component theme.
 │  │                             AppChromeSource, a ThemeExtension, carries
@@ -62,33 +74,45 @@ lib/
 │  │                             down to the reader screen, since buildScheme
 │  │                             folds both into a ColorScheme and cannot
 │  │                             report either back out
-│  ├─ page_transitions.dart     Routes fade and scale rather than sliding
-│  ├─ rgb_sliders.dart          Three channel sliders, shared by the screens
-│  │                             that pick a colour
+│  ├─ page_transitions.dart     Routes fade and scale two percent rather than
+│  │                             sliding a full screen width, because judder
+│  │                             is a position error integrated over time and
+│  │                             a long slow translation is the worst case a
+│  │                             web build can draw
+│  ├─ rgb_sliders.dart          A colour as three sliders — long tracks rather
+│  │                             than a two-dimensional field, for readers who
+│  │                             cannot reliably hit a small target. Built by
+│  │                             custom_accent_screen.dart only; the profile
+│  │                             editor has its own copy, which is a real
+│  │                             duplication rather than a decision
 │  └─ appearance.dart           Theme mode, accent and high contrast: stored,
-│                                read before the first frame, notified from
+│                                read before the first frame, notified from.
+│                                Device-local, each write passing sync: false
 └─ reading/
    ├─ home_screen.dart          The book you were last in, and four you read
    │                             before it. Empty state opens the same
    │                             AddMenu the library does
    ├─ library_screen.dart       Import, list, open, remove, edit a note,
-   │                             filter by format
+   │                             sort, and filter by format
    ├─ library_book.dart         Import pipeline, the in-memory book model,
    │                             and BookSourceFormat — an EPUB parses
    │                             through EpubParser, a note through
    │                             HtmlNormalizer directly
    ├─ add_menu.dart             The three-way add dialog (EPUB/note/paste),
-   │                             shared by the library's add button and
-   │                             Home's empty state
+   │                             shared by the library's add button, the
+   │                             library's empty state and Home's
    ├─ note_editor_screen.dart   Write a note, or edit one already stored
    ├─ book_cover.dart           Covers, and the generated face for a book
    │                             that declares none
    ├─ book_progress.dart        What the reader is told about their place:
    │                             the bar, the percentage, the time left, and
    │                             a note's own Added/Edited date
-   ├─ book_opener.dart          The one path from a book id to the reader,
-   │                             dispatching the reopen by source format
-   ├─ paste_reader_screen.dart  Read arbitrary pasted text
+   ├─ book_opener.dart          The one path from a book id to the reader.
+   │                             Not a navigation call: it syncs, settles a
+   │                             waiting divergence, reads the bytes,
+   │                             re-parses by source format and re-reads the
+   │                             position before anything is pushed
+   ├─ paste_reader_screen.dart  Read arbitrary pasted text, without storing it
    ├─ reader_screen.dart        Full-screen reading surface
    ├─ rsvp_view.dart            Draws one token at the profile's anchor. The
    │                             only definition of what reading looks like;
@@ -107,14 +131,28 @@ lib/
    │                             maths it used to hold live in rsvp_engine,
    │                             so they run in a browser
    ├─ settings_screen.dart      An index of sections, each its own subpage
-   ├─ reading_settings_screen.dart  The reading section of that index
+   ├─ reading_settings_screen.dart  What the app does while a book is open,
+   │                             stated rather than configured. Nothing here
+   │                             writes a preference: a switch that turns off
+   │                             position saving would be a setting whose
+   │                             wrong value costs the reader their place
    ├─ profiles_screen.dart      Profile list, presets separated from forks
    ├─ profile_edit_screen.dart  One profile, with a live preview
-   ├─ appearance_screen.dart    Theme, accent and contrast for app chrome
-   ├─ custom_accent_screen.dart An accent outside the six built in
-   ├─ sync_screen.dart          Sync state and a manual run, in settings
-   ├─ account_screen.dart       Session and sign out
-   └─ about_screen.dart         What this is, and what it does not claim
+   ├─ appearance_screen.dart    Theme, accent and contrast for app chrome.
+   │                             Its own preview, since every control here
+   │                             rethemes the app on the frame it is tapped
+   ├─ custom_accent_screen.dart An accent outside the six named ones. Needed
+   │                             no migration: the stored form has always
+   │                             been six hex digits rather than a name
+   ├─ sync_screen.dart          What sync has done and a way to run it now.
+   │                             Reports rather than configures, and shows no
+   │                             count of what is waiting — see Sync below
+   ├─ account_screen.dart       The session, the device, and the way in and
+   │                             out of an account. Signing out keeps books
+   │                             and places, and the dialog says so
+   └─ about_screen.dart         What this is, what it is built on, and what
+                                 it does not claim. No version number: the
+                                 app carries no real one
 ```
 
 Settings subpages sit in `reading/` beside the reader rather than in a folder
@@ -200,6 +238,14 @@ not have. That transaction also drops any queued position event for the same
 book that has never been sent, so the cadence above costs nothing on the wire.
 See [ADR 0011](../docs/adr/0011-position-save-cadence.md).
 
+The save is skipped when the token index has not moved since the last one, so
+glancing at an open book and closing it writes nothing — except on the
+transition into `finished`, which forces it through. That exception is the
+whole rule for a one-token text, where the index never moves away from the
+value it was seeded with at open and the guard silently ate every completion
+write. The state transition was the fact worth keying on; the index was a
+proxy that happened to work for every book long enough to look like the rule.
+
 Rewind is `arrowLeft`, stepping by the active profile's `rewindWords`. The
 reading surface has no rewind button: left and right tap zones are meant to
 replace it and are not built yet, so a keyboard, a switch, or a screen reader
@@ -220,12 +266,27 @@ OPF — so both travel in from whoever is asking to reopen it.
 
 Editing rewrites title, bytes and word count through a plain update, never
 through `addBook`'s upsert, which would bump `importedAt` on every edit.
+`Books.updatedAt` is nullable with no backfill, since null and "edited at
+the moment it was imported" are different facts, and it is what the library
+reads to show "Added" or "Edited" on a note's tile, in the space an EPUB's
+author line leaves empty.
+
 Whether an edit resets the reader's saved position is decided by the editor
 screen, not the repository: it holds both the old and new text, so it can
 tell a title-only change from one that actually moved the words underneath
 a saved place, and only the second asks the reader to confirm — and only
 when there was a place to lose. See
 [ADR 0017](../docs/adr/0017-local-notes.md).
+
+The library's format filter — All, Books, Notes — is client-side over the
+list already streamed for sorting, and persisted the way sort is. It carries
+its own empty state rather than reusing the library's: a reader filtered to
+Notes with none yet is looking at a different fact than an empty library, so
+they get "No notes yet" and a button straight to the editor rather than the
+three-way menu asking them to repeat a choice the filter already made, and
+the controls row stays on screen so All is always one tap back. Saving into
+a filter the result would not appear under resets it to All, but only when
+the save was real and only when the addition would otherwise be invisible.
 
 ## What the home screen knows
 
@@ -274,9 +335,18 @@ Sync reports itself in one place, the Sync section of Settings: what the last
 run did, when it finished, and a button to run one now. Home carried a copy of
 that state and dropped it in the UI pass; the library dropped its own with the
 app bar. Keeping four statuses in step across three screens is work nobody
-opens the app to see the result of. The library keeps the gesture without the
-readout, since a reader who has just put down another device should not wait
-five minutes for the timer: pulling the shelf down runs a sync.
+opens the app to see the result of. `sync/sync_button.dart` is what those bars
+built, and nothing builds it now — it survives unreferenced rather than
+deleted, since the shape it packages is the one a bar would want back. The
+library keeps the gesture without the readout, since a reader who has just put
+down another device should not wait five minutes for the timer: pulling the
+shelf down runs a sync.
+
+`SyncScreen` shows no count of what is waiting to be sent. `SyncState` carries
+none — the field that always read zero was removed rather than fixed — and the
+outbox query the repository exposes is limited and skips parked events, so a
+number taken from it would answer a narrower question than the label on it
+would claim.
 
 ## Known limitations
 
@@ -310,6 +380,11 @@ web; see the note under how a book gets read.
 `semanticsForBook` was not extended to announce it, so the fact is on
 screen and nowhere else.
 
+**The reader chrome, the library controls and the note editor are verified on
+Windows only.** Nothing in any of them animates or translates a large area,
+which is the shape Chrome's main-thread throttle actually reaches, but that is
+an expectation rather than a result.
+
 ## Testing
 
 ```bash
@@ -334,6 +409,10 @@ each.
 `ReaderScreen` under a dark app theme and reads the colour behind the word,
 naming no polarity anywhere: the book opens on `Presets.standard`, so the page
 can only have come from the theme.
+
+`app_theme_test.dart` asserts that the neutral ramp is byte-identical under
+all six accents, which is the whole claim `buildScheme` exists to make and the
+one `ColorScheme.fromSeed` could not.
 
 The smoke test identifies chrome by key rather than by widget type where the
 widget is this project's own: `homeContinueTileKey` for the home tile,
@@ -365,4 +444,5 @@ save-and-open flow at its full depth (the add-menu dialog, the editor,
 `BookOpener`'s sync and conflict checks, then the reader it pushes), which is
 why that path has no automated test and the library's filter-reset-on-save
 behaviour is checked by reading the code rather than by a test exercising it
-end to end.
+end to end. `library_filter_test.dart` does cover the cancel path, which
+reaches no isolate.
