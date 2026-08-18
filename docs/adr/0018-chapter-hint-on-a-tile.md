@@ -116,9 +116,12 @@ the second screen to do so, for the reason ADR 0014 gives for the first: the
 pointer is a preference and the profile it names is a row, so a figure derived
 from it goes stale on two separate writes.
 
-`_textBlockHeight` moved from 96 to 114. A grid tile is measured rather than
-laid out to fit, so a line added below the bar without a number added there is
-a line the grid clips.
+`_textBlockHeight` moved from 96 to 118. A grid tile is measured rather than
+laid out to fit, so a line added into it without a number added there is a
+line the grid clips — the line and the gap separating it from the bar both
+count. On a library tile the chapter goes *above* the bar: it continues the
+author line, since both name what the book is, while the bar and its
+percentage are a measurement and read as the base of the tile.
 
 Four cases show a book figure under the chapter scope, and each is legible
 because no chapter is drawn beside it: a note, a book declaring no table of
@@ -196,13 +199,19 @@ while reading, and that row also holds the EPUB blob.
 `dart test` and `dart test -p chrome` in both pure packages, unchanged and
 passing — the check that nothing arithmetic leaked out of the app layer.
 
-**Not yet run, and this section will be rewritten when it has been:** the
-check by hand on Windows against Romeo and Juliet — reading into a scene,
-closing, and watching the tile name it; flipping the setting in Settings and
-watching the figure grow while the chapter stays; a note and a book still in
-front matter falling back. Nothing above establishes that the line renders
-where it is meant to or truncates the half it is meant to.
+Checked by hand on Windows, and this paragraph replaces one that said "not yet
+run" while it had not been. Reading into a scene and closing names it on the
+tile; the setting flips the figure between the chapter and the book without
+leaving the tab, and the chapter stays either way.
 
-Also outstanding: the sync case on two real devices, which is the failure this
-whole design is arranged around and which no suite here can reach; and Android
+That run is also what moved the line on a library tile. It shipped below the
+bar, on no reasoning beyond the order the widgets happened to be written in,
+and looked wrong on a screen in a way no test could report: the bar and its
+percentage are a measurement and belong at the base of the tile, and a line of
+text under them reads as stranded. Above the bar it continues the author line
+instead. `_textBlockHeight` went to 118 with it — the line and the gap under
+it — since a grid tile is measured rather than laid out to fit.
+
+Outstanding: the sync case on two real devices, which is the failure this whole
+design is arranged around and which no suite here can reach; and Android
 Chrome, where this adds text that has to ellipsize at phone width.

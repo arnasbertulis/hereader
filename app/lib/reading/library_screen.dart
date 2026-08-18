@@ -71,10 +71,11 @@ const double _targetTileWidth = 172;
 /// them. Scaled with the reader's text size to give the tile its height,
 /// since a fixed aspect ratio clips the moment text grows.
 ///
-/// 96 until the place line arrived under the bar. A tile is measured rather
-/// than laid out to fit, so a line added below without a number added here is
-/// a line the grid clips.
-const double _textBlockHeight = 114;
+/// 96 until the place line arrived above the bar. A tile is measured rather
+/// than laid out to fit, so a line added in there without a number added here
+/// is a line the grid clips — the line itself and the gap that separates it
+/// from the measurement under it.
+const double _textBlockHeight = 118;
 
 /// Room under the last row for the add button to float over nothing.
 ///
@@ -872,10 +873,17 @@ class _BookTile extends StatelessWidget {
                     ),
                   ),
                 const SizedBox(height: AppSpacing.xs),
-                BookProgressLine(book: book),
-                // No fallback: the words that stand in for a bar are already
-                // beside it, one line up.
+                // Above the bar, not below it. The chapter belongs with the
+                // author line it continues — both name what the book is —
+                // while the bar and its percentage are a measurement and read
+                // as the base of the tile.
+                //
+                // No fallback: the words that stand in for a bar when there
+                // is no measurable place are already beside it, one line
+                // down.
                 BookPlaceLine(book: book, pacing: pacing, scope: scope),
+                const SizedBox(height: AppSpacing.xs),
+                BookProgressLine(book: book),
               ],
             ),
           ),
@@ -962,13 +970,14 @@ class _BookRow extends StatelessWidget {
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
-                        const SizedBox(height: AppSpacing.sm),
-                        BookProgressLine(book: book),
+                        const SizedBox(height: AppSpacing.xs),
                         BookPlaceLine(
                           book: book,
                           pacing: pacing,
                           scope: scope,
                         ),
+                        const SizedBox(height: AppSpacing.sm),
+                        BookProgressLine(book: book),
                       ],
                     ),
                   ),
