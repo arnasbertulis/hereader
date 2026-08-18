@@ -42,10 +42,14 @@ would otherwise have to ask for.
 ```
 
 Squash-merge is preferred. GitHub's autofill for the squash commit just
-repeats the individual commit subjects, which is not useful history — the
-squash commit's extended description is rewritten by hand to say why the
-change exists and what was verified, in plain text with no PR-style
-formatting.
+repeats the individual commit subjects as a bulleted list, which is not useful
+history — the squash commit's extended description is rewritten by hand to say
+why the change exists and what was verified.
+
+Plain prose, in paragraphs. No leading `*` or `-`, no headings, no PR-style
+sections: `git log` is read in a terminal, and a body that is a list of commit
+subjects says what a reader could already see from the diff instead of why any
+of it happened.
 
 ## Architecture Decision Records
 

@@ -257,8 +257,17 @@ The two new codepoints were checked against the `cmap` of the vendored
 `Phosphor-Light.ttf` directly, rather than against the `phosphor_flutter`
 package's map alone. A wrong codepoint renders as a box and fails nothing.
 
-**Not yet run:** anything on a device. Every claim above is from the Windows
-test host. The zone split against a real thumb, the five-button row at 360dp,
-and the Light-weight glyphs at 28dp on a physical panel — the question ADR 0019
-left open — are all unverified, and join the Android Chrome gap the README
-already records.
+**A manual pass in Chrome**, using its device emulation for the mobile case,
+against the web build. Every control described here was exercised by hand and
+behaved as this file says: the edges stepping and stopping, the centre still
+starting and pausing, the two jumps landing where they should and greying out
+at the end, the step slider taking effect, and the resume after a step staying
+on the word it stopped on.
+
+**Still not run: anything on a physical device.** Emulation answers the
+questions about layout and gesture regions and does not answer the one ADR 0019
+left open, which is whether the Light weight holds up at 20-24dp against real
+pixels rather than a scaled desktop panel. The five-button row was seen at a
+mobile viewport, but a viewport is not a thumb. That gap, and the Android
+Chrome gap the README already records for everything since the UI pass, both
+stand.
