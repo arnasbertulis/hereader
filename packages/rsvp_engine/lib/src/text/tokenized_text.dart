@@ -66,17 +66,52 @@ class TokenizedText {
   final List<String> _blockIds;
 
   /// Index into [tokens] where each block's first token sits. Ascending, so
-  /// lookups binary-search rather than scan.
+  /// [blockIndexOf] binary-searches rather than scans.
   final List<int> _blockStarts;
+
+  /// Position in [_blockIds] for each id, so a lookup by id does not scan.
+  ///
+  /// The two lookups that take an id — [indexOf], on every resume and every
+  /// conflict candidate, and [startOfBlock], once per table of contents
+  /// entry — used `_blockIds.indexOf`, which is linear. Chapter resolution
+  /// walks forward from a block that tokenized to nothing, so a book whose
+  /// entries land on dropped blocks turned that into a scan per step.
+  ///
+  /// Built once here rather than lazily: the ids are already in hand, one
+  /// map of a thousand-odd entries costs nothing beside the token list it
+  /// sits next to, and a lazy field would need a null check on a path that
+  /// runs while the reader waits for a book to open.
+  final Map<String, int> _blockIndexById;
 
   final int parserVersion;
 
+  /// [blockIds] is a plain parameter rather than an initializing formal
+  /// because the id map is built from it in the same initializer list, and a
+  /// field cannot be read there.
   TokenizedText._({
     required this.tokens,
-    required this._blockIds,
+    required List<String> blockIds,
     required this._blockStarts,
     required this.parserVersion,
-  });
+  }) : _blockIds = blockIds,
+       _blockIndexById = _indexById(blockIds);
+
+  /// First position of each id, matching what `List.indexOf` answered before
+  /// this map replaced it.
+  ///
+  /// A map literal would keep the *last* of a repeated id and the scan it
+  /// replaces kept the first. Ids are supposed to be unique — `Block.makeId`
+  /// derives them from a position within a document, and the golden fixture
+  /// asserts no collisions — but this type takes any `(id, text)` pair from
+  /// any caller, so the invariant is the caller's and the behaviour under a
+  /// broken one should not change silently.
+  static Map<String, int> _indexById(List<String> ids) {
+    final byId = <String, int>{};
+    for (var i = 0; i < ids.length; i++) {
+      byId.putIfAbsent(ids[i], () => i);
+    }
+    return byId;
+  }
 
   /// Tokenize [blocks] in order.
   ///
@@ -158,8 +193,8 @@ class TokenizedText {
   /// than landing a sentence away. Compare [Locator.parserVersion] yourself
   /// if a migration needs to run first.
   int? indexOf(Locator locator) {
-    final block = _blockIds.indexOf(locator.blockId);
-    if (block == -1) return null;
+    final block = _blockIndexById[locator.blockId];
+    if (block == null) return null;
 
     final start = _blockStarts[block];
     final end = block + 1 < _blockStarts.length
@@ -180,9 +215,13 @@ class TokenizedText {
   }
 
   /// First token index of a block, or null if the block is unknown.
+  ///
+  /// Unknown covers two cases the caller has to tell apart itself: a block
+  /// from a different edition, and a block of this text that tokenized to
+  /// nothing and so was never recorded.
   int? startOfBlock(String blockId) {
-    final block = _blockIds.indexOf(blockId);
-    return block == -1 ? null : _blockStarts[block];
+    final block = _blockIndexById[blockId];
+    return block == null ? null : _blockStarts[block];
   }
 
   /// Fraction of the way through, for a progress indicator.
