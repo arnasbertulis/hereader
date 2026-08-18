@@ -7,6 +7,15 @@
 # `flutter analyze` runs in CI on every push and fails on any issue here,
 # so a rule added is a rule enforced.
 
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
 include: package:flutter_lints/flutter.yaml
 
 linter:
