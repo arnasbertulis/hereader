@@ -926,16 +926,45 @@ class LibraryRepository {
   /// A pointer that no longer resolves is cleared rather than left. A profile
   /// deleted on another device arrives here as a tombstone, and keeping the
   /// dead id would mean falling back on every single open forever after.
+  /// Resolves the one profile named rather than building the whole list.
+  ///
+  /// This used to call [allProfiles] and scan it, which reads every stored
+  /// row and runs two `jsonDecode`s on each to find one. [watchActiveProfile]
+  /// re-runs it on any write to either table it watches, and `preferences`
+  /// takes a write from the sync engine three times a run, from the library
+  /// whenever sort or the format filter changes, and from every appearance
+  /// choice — so the cost landed on writes that have nothing to do with which
+  /// profile is active.
+  ///
+  /// A preset does not touch the database at all. Presets are code (ADR
+  /// 0008), so the `builtin.` namespace answers from [Presets.byId] without a
+  /// query, which is the common case: it is what a reader who has never made
+  /// a profile of their own is on.
   Future<ReadingProfile> activeProfile() async {
     final id = await preference(activeProfileKey);
     if (id == null) return Presets.standard;
 
-    for (final profile in await allProfiles()) {
-      if (profile.id == id) return profile;
+    if (id.startsWith(ReadingProfile.builtInIdPrefix)) {
+      // A pointer at a preset this build does not have is as dead as one at
+      // a deleted row, and is cleared on the same reasoning.
+      final preset = Presets.byId(id);
+      if (preset != null) return preset;
+
+      await _clearActiveProfile();
+      return Presets.standard;
     }
 
-    await _clearActiveProfile();
-    return Presets.standard;
+    final row =
+        await (_db.select(_db.storedProfiles)
+              ..where((p) => p.id.equals(id) & p.deleted.equals(false)))
+            .getSingleOrNull();
+
+    if (row == null) {
+      await _clearActiveProfile();
+      return Presets.standard;
+    }
+
+    return _toProfile(row);
   }
 
   /// [activeProfile], re-read whenever the answer could have changed.
@@ -949,8 +978,10 @@ class LibraryRepository {
   /// is discarded, because a built-in preset has no row to return.
   ///
   /// Emits on any write to either table rather than only on a change to
-  /// this profile. Both reads behind it are indexed lookups, and a filter
-  /// would need an equality [ReadingProfile] does not define.
+  /// this profile, because a filter would need an equality [ReadingProfile]
+  /// does not define. That makes what each emission costs the thing worth
+  /// keeping small, which is why [activeProfile] resolves one row by id
+  /// instead of reading and decoding every profile the reader has.
   Stream<ReadingProfile> watchActiveProfile() {
     final pointer = _db.select(_db.preferences)
       ..where((p) => p.key.equals(activeProfileKey));
