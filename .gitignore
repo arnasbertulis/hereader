@@ -15,6 +15,9 @@ doc/api/
 .env*
 !**/.env.example
 
+# ignore claude
+.claude/*
+
 # Avoid committing generated Javascript files:
 *.dart.js
 # Produced by the --dump-info flag.
