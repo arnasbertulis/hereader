@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'data/library_repository.dart';
 import 'reading/home_screen.dart';
 import 'reading/library_screen.dart';
+import 'reading/reading_display.dart';
 import 'reading/settings_screen.dart';
 import 'sync/api_client.dart';
 import 'sync/sync_engine.dart';
@@ -51,6 +52,7 @@ class AppShell extends StatefulWidget {
   final SyncEngine sync;
   final ApiClient api;
   final AppearanceController appearance;
+  final ReadingDisplayController display;
 
   /// Which tab shows first. Present for tests, which would otherwise have to
   /// tap their way to the tab they are about to assert on.
@@ -66,6 +68,7 @@ class AppShell extends StatefulWidget {
     required this.sync,
     required this.api,
     required this.appearance,
+    required this.display,
     this.initialTab = homeTab,
   });
 
@@ -126,16 +129,19 @@ class _AppShellState extends State<AppShell> {
           sync: widget.sync,
           onSeeAll: () => _select(AppShell.libraryTab),
           issueStamp: widget.sync.issueStamp,
+          display: widget.display,
         ),
         LibraryScreen(
           repository: widget.repository,
           sync: widget.sync,
           issueStamp: widget.sync.issueStamp,
+          display: widget.display,
         ),
         SettingsScreen(
           repository: widget.repository,
           issueStamp: widget.sync.issueStamp,
           appearance: widget.appearance,
+          display: widget.display,
           api: widget.api,
           sync: widget.sync,
         ),

@@ -195,4 +195,64 @@ void main() {
       expect(find.byTooltip('Chapters'), findsNothing);
     });
   });
+
+  /// The walk the panel's highlight and the saved hint both go through.
+  ///
+  /// Lifted out of `ReaderScreen` when the hint started reading it: the panel
+  /// and the tile answer the same question, and two functions computing one
+  /// figure disagree eventually rather than maybe.
+  group('chapter spans', () {
+    const chapters = [
+      Chapter(title: 'Act I', depth: 0, tokenIndex: 10),
+      Chapter(title: 'Scene I', depth: 1, tokenIndex: 10),
+      Chapter(title: 'Scene II', depth: 1, tokenIndex: 40),
+      Chapter(title: 'Act II', depth: 0, tokenIndex: 90),
+    ];
+
+    test('front matter is in no chapter', () {
+      expect(chapterIndexAt(chapters, 0), -1);
+      expect(chapterIndexAt(chapters, 9), -1);
+    });
+
+    test('a book with no contents is in no chapter', () {
+      expect(chapterIndexAt(const [], 500), -1);
+    });
+
+    test('the last entry of a shared start wins', () {
+      // Act I and Scene I resolve to the same token, which is ordinary: a
+      // part and its first chapter routinely do. The reader is in the
+      // narrower one, and that is the one worth naming on a tile.
+      expect(chapterIndexAt(chapters, 10), 1);
+      expect(chapters[chapterIndexAt(chapters, 39)].title, 'Scene I');
+    });
+
+    test('the last chapter holds everything after it', () {
+      expect(chapterIndexAt(chapters, 90), 3);
+      expect(chapterIndexAt(chapters, 100000), 3);
+    });
+
+    test('a chapter ends where the next one starts', () {
+      expect(chapterEndAt(chapters, 2, 500), 90);
+    });
+
+    test('a shared start does not make an empty chapter', () {
+      // Taking `at + 1` blindly would end Act I at token 10, the token it
+      // begins on, and report a chapter with nothing in it.
+      expect(chapterEndAt(chapters, 0, 500), 40);
+      expect(chapterEndAt(chapters, 1, 500), 40);
+    });
+
+    test('the last chapter ends at the end of the book', () {
+      expect(chapterEndAt(chapters, 3, 500), 500);
+    });
+
+    test('no chapter ends at the end of the book', () {
+      // -1 is what chapterIndexAt gives in front matter. Defined rather than
+      // thrown: a caller with no chapter draws no chapter-scoped figure, so
+      // this shape never reaches a screen, and the arithmetic behind a tile
+      // should have no case that can crash it.
+      expect(chapterEndAt(chapters, -1, 500), 500);
+      expect(chapterEndAt(const [], 0, 500), 500);
+    });
+  });
 }

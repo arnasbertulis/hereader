@@ -309,6 +309,53 @@ List<Chapter> chaptersOf(EpubBook book, TokenizedText text) {
   return chapters;
 }
 
+/// Which chapter contains [tokenIndex]: the last one starting at or before
+/// it.
+///
+/// -1 before the first entry begins, which is where front matter sits, and
+/// for a book that declares no table of contents at all.
+///
+/// Public, and used by both the panel's highlight and the hint saved with the
+/// reading position. Those two answer the same question, and two functions
+/// computing one figure disagree eventually rather than maybe.
+int chapterIndexAt(List<Chapter> chapters, int tokenIndex) {
+  var found = -1;
+  for (var i = 0; i < chapters.length; i++) {
+    if (chapters[i].tokenIndex > tokenIndex) break;
+    found = i;
+  }
+  return found;
+}
+
+/// The token the chapter at [at] ends before: the next entry's start, or
+/// [total] for the last one.
+///
+/// Exclusive, so the span of a chapter is `end - start` and the tokens still
+/// ahead of a reader inside it are `end - (index + 1)`, matching how
+/// `BookSummary.progress` counts words already seen.
+///
+/// Walks forward to the first entry starting *strictly* later rather than
+/// taking `at + 1`. Two entries resolving to one block is ordinary — a cover
+/// and a title page routinely do, and ADR 0010 keeps both rather than
+/// second-guessing a structure the book declared — and taking the neighbour
+/// blindly would report a chapter of zero tokens.
+///
+/// Returns [total] for an [at] outside the list, including the -1
+/// [chapterIndexAt] gives for front matter. A caller with no chapter has no
+/// chapter-scoped figure to draw, so this is a shape that never reaches the
+/// screen; it is defined rather than thrown so the arithmetic has no case
+/// that can crash a tile.
+int chapterEndAt(List<Chapter> chapters, int at, int total) {
+  if (at < 0 || at >= chapters.length) return total;
+
+  final start = chapters[at].tokenIndex;
+  for (var i = at + 1; i < chapters.length; i++) {
+    if (chapters[i].tokenIndex > start) return chapters[i].tokenIndex;
+  }
+
+  return total;
+}
+
 /// Abbreviation handling is language-specific. Only the default set exists
 /// today, so this is a seam rather than a feature.
 Tokenizer _tokenizerFor(String? language) => Tokenizer();

@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:epub_reader/epub_reader.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
 import '../sync/sync_engine.dart';
@@ -16,6 +17,7 @@ import 'book_progress.dart';
 import 'library_book.dart';
 import 'note_editor_screen.dart';
 import 'paste_reader_screen.dart';
+import 'reading_display.dart';
 
 /// Identifies the add button, for a test that would otherwise match its
 /// tooltip. Same argument as `readerPlayButtonKey`: the tooltip is copy, and
@@ -65,10 +67,15 @@ enum _LibraryFilter {
 const double _targetTileWidth = 172;
 
 /// Unscaled height of everything under a cover: two lines of title, one of
-/// author, the progress row, and the gaps between them. Scaled with the
-/// reader's text size to give the tile its height, since a fixed aspect ratio
-/// clips the moment text grows.
-const double _textBlockHeight = 96;
+/// author, the progress row, the chapter and time line, and the gaps between
+/// them. Scaled with the reader's text size to give the tile its height,
+/// since a fixed aspect ratio clips the moment text grows.
+///
+/// 96 until the place line arrived above the bar. A tile is measured rather
+/// than laid out to fit, so a line added in there without a number added here
+/// is a line the grid clips — the line itself and the gap that separates it
+/// from the measurement under it.
+const double _textBlockHeight = 118;
 
 /// Room under the last row for the add button to float over nothing.
 ///
@@ -86,11 +93,17 @@ class LibraryScreen extends StatefulWidget {
   /// clock, an auth store and a device id it has no use for.
   final Future<String> Function() issueStamp;
 
+  /// Whether a tile's time counts down to the end of the chapter or the end
+  /// of the book. Listened to for the reason Home listens: Settings is a
+  /// sibling tab kept alive beside this one.
+  final ReadingDisplayController display;
+
   const LibraryScreen({
     super.key,
     required this.repository,
     required this.sync,
     required this.issueStamp,
+    required this.display,
   });
 
   @override
@@ -113,6 +126,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// change.
   final _covers = <String, Future<Uint8List?>>{};
 
+  /// Pacing of the profile the reader has active, for the time on each tile.
+  ///
+  /// The same subscription Home holds, and for the same reason: the active
+  /// profile is a pointer in `preferences` naming a row in `stored_profiles`,
+  /// so a figure derived from it goes stale on two separate writes and
+  /// `watchActiveProfile` joins both tables to catch either.
+  ///
+  /// Null until the first emission. A tile shows its bar and its percentage
+  /// for that frame and gains the line after, rather than showing a figure it
+  /// would immediately correct.
+  PacingConfig? _pacing;
+
+  StreamSubscription<ReadingProfile>? _profile;
+
   LibraryRepository get _repo => widget.repository;
 
   @override
@@ -120,6 +147,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
     super.initState();
     _opener = BookOpener(repository: widget.repository, sync: widget.sync);
     unawaited(_restorePreferences());
+
+    _profile = _repo.watchActiveProfile().listen((profile) {
+      if (mounted) setState(() => _pacing = profile.pacing);
+    });
+
+    widget.display.addListener(_onDisplayChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.display.removeListener(_onDisplayChanged);
+    _profile?.cancel();
+    super.dispose();
+  }
+
+  void _onDisplayChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _restorePreferences() async {
@@ -457,6 +501,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   child: _BookShelf(
                     books: filtered,
                     coverOf: _coverOf,
+                    pacing: _pacing,
+                    scope: widget.display.timeLeftScope,
                     onOpen: _busy ? null : _open,
                     onRemove: _confirmRemove,
                     onEditNote: _editNote,
@@ -661,6 +707,8 @@ class _AddButton extends StatelessWidget {
 class _BookShelf extends StatelessWidget {
   final List<BookSummary> books;
   final Future<Uint8List?> Function(String bookId) coverOf;
+  final PacingConfig? pacing;
+  final TimeLeftScope scope;
   final ValueChanged<BookSummary>? onOpen;
   final ValueChanged<BookSummary> onRemove;
   final ValueChanged<BookSummary> onEditNote;
@@ -668,6 +716,8 @@ class _BookShelf extends StatelessWidget {
   const _BookShelf({
     required this.books,
     required this.coverOf,
+    required this.pacing,
+    required this.scope,
     required this.onOpen,
     required this.onRemove,
     required this.onEditNote,
@@ -706,6 +756,8 @@ class _BookShelf extends StatelessWidget {
             itemBuilder: (context, i) => _BookRow(
               book: books[i],
               cover: coverOf(books[i].id),
+              pacing: pacing,
+              scope: scope,
               onOpen: onOpen,
               onRemove: onRemove,
               onEditNote: onEditNote,
@@ -738,6 +790,8 @@ class _BookShelf extends StatelessWidget {
             book: books[i],
             cover: coverOf(books[i].id),
             width: tileWidth,
+            pacing: pacing,
+            scope: scope,
             onOpen: onOpen,
             onRemove: onRemove,
             onEditNote: onEditNote,
@@ -753,6 +807,8 @@ class _BookTile extends StatelessWidget {
   final BookSummary book;
   final Future<Uint8List?> cover;
   final double width;
+  final PacingConfig? pacing;
+  final TimeLeftScope scope;
   final ValueChanged<BookSummary>? onOpen;
   final ValueChanged<BookSummary> onRemove;
   final ValueChanged<BookSummary> onEditNote;
@@ -761,6 +817,8 @@ class _BookTile extends StatelessWidget {
     required this.book,
     required this.cover,
     required this.width,
+    required this.pacing,
+    required this.scope,
     required this.onOpen,
     required this.onRemove,
     required this.onEditNote,
@@ -776,7 +834,7 @@ class _BookTile extends StatelessWidget {
         // percentage separately it is four stops to learn one book.
         Semantics(
           button: true,
-          label: semanticsForBook(book),
+          label: semanticsForBook(book, pacing: pacing, scope: scope),
           excludeSemantics: true,
           child: InkWell(
             onTap: onOpen == null ? null : () => onOpen!(book),
@@ -815,6 +873,16 @@ class _BookTile extends StatelessWidget {
                     ),
                   ),
                 const SizedBox(height: AppSpacing.xs),
+                // Above the bar, not below it. The chapter belongs with the
+                // author line it continues — both name what the book is —
+                // while the bar and its percentage are a measurement and read
+                // as the base of the tile.
+                //
+                // No fallback: the words that stand in for a bar when there
+                // is no measurable place are already beside it, one line
+                // down.
+                BookPlaceLine(book: book, pacing: pacing, scope: scope),
+                const SizedBox(height: AppSpacing.xs),
                 BookProgressLine(book: book),
               ],
             ),
@@ -834,6 +902,8 @@ class _BookTile extends StatelessWidget {
 class _BookRow extends StatelessWidget {
   final BookSummary book;
   final Future<Uint8List?> cover;
+  final PacingConfig? pacing;
+  final TimeLeftScope scope;
   final ValueChanged<BookSummary>? onOpen;
   final ValueChanged<BookSummary> onRemove;
   final ValueChanged<BookSummary> onEditNote;
@@ -841,6 +911,8 @@ class _BookRow extends StatelessWidget {
   const _BookRow({
     required this.book,
     required this.cover,
+    required this.pacing,
+    required this.scope,
     required this.onOpen,
     required this.onRemove,
     required this.onEditNote,
@@ -856,7 +928,7 @@ class _BookRow extends StatelessWidget {
         Expanded(
           child: Semantics(
             button: true,
-            label: semanticsForBook(book),
+            label: semanticsForBook(book, pacing: pacing, scope: scope),
             excludeSemantics: true,
             child: InkWell(
               onTap: onOpen == null ? null : () => onOpen!(book),
@@ -898,6 +970,12 @@ class _BookRow extends StatelessWidget {
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
                           ),
+                        const SizedBox(height: AppSpacing.xs),
+                        BookPlaceLine(
+                          book: book,
+                          pacing: pacing,
+                          scope: scope,
+                        ),
                         const SizedBox(height: AppSpacing.sm),
                         BookProgressLine(book: book),
                       ],

@@ -13,6 +13,7 @@ import 'about_screen.dart';
 import 'account_screen.dart';
 import 'appearance_screen.dart';
 import 'profiles_screen.dart';
+import 'reading_display.dart';
 import 'reading_settings_screen.dart';
 import 'sync_screen.dart';
 
@@ -38,6 +39,10 @@ class SettingsScreen extends StatefulWidget {
 
   final AppearanceController appearance;
 
+  /// For the Reading row, which now states a value as well as naming a
+  /// section.
+  final ReadingDisplayController display;
+
   /// For the Account row, which reads the session, and Sync, which runs one.
   final ApiClient api;
   final SyncEngine sync;
@@ -47,6 +52,7 @@ class SettingsScreen extends StatefulWidget {
     required this.repository,
     required this.issueStamp,
     required this.appearance,
+    required this.display,
     required this.api,
     required this.sync,
   });
@@ -144,8 +150,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   _IndexRow(
                     icon: Icons.auto_stories_outlined,
                     title: 'Reading',
-                    value: 'How the app saves your place and takes keys',
-                    onTap: () => _push(const ReadingSettingsScreen()),
+                    value: describeReading(widget.display.timeLeftScope),
+                    onTap: () =>
+                        _push(ReadingSettingsScreen(display: widget.display)),
                   ),
                   _IndexRow(
                     icon: Icons.sync_outlined,
@@ -192,6 +199,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return '$name · $mine of your own';
   }
 }
+
+/// The Reading section's one setting, as the index states it.
+///
+/// The section holds more than this, but the rest is fixed behaviour the
+/// reader cannot change, and a row that summarises what it cannot alter tells
+/// them nothing about whether to open it.
+String describeReading(TimeLeftScope scope) => switch (scope) {
+  TimeLeftScope.chapter => 'Time left counts this chapter',
+  TimeLeftScope.book => 'Time left counts the whole book',
+};
 
 /// The theme and accent, as the settings index states them.
 ///

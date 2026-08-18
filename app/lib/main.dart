@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'app_shell.dart';
 import 'data/database.dart';
 import 'data/library_repository.dart';
+import 'reading/reading_display.dart';
 import 'startup_failure.dart';
 import 'sync/api_client.dart';
 import 'sync/auth_store.dart';
@@ -70,6 +71,15 @@ Future<void> _start() async {
     );
     await appearance.restore();
 
+    // Restored on the same path and for a milder version of the same reason:
+    // reading it after the first frame would draw the continue tile with the
+    // default scope and correct it a frame later, in front of the reader.
+    final display = ReadingDisplayController(
+      repository: repository,
+      issueStamp: sync.issueStamp,
+    );
+    await display.restore();
+
     // Not awaited: a slow or unreachable server must not delay the library
     // appearing. Reading works whether or not this succeeds.
     unawaited(sync.syncNow());
@@ -80,6 +90,7 @@ Future<void> _start() async {
         sync: sync,
         api: api,
         appearance: appearance,
+        display: display,
       ),
     );
   } catch (error, stack) {
@@ -107,6 +118,7 @@ class HereaderApp extends StatefulWidget {
   final SyncEngine sync;
   final ApiClient api;
   final AppearanceController appearance;
+  final ReadingDisplayController display;
 
   const HereaderApp({
     super.key,
@@ -114,6 +126,7 @@ class HereaderApp extends StatefulWidget {
     required this.sync,
     required this.api,
     required this.appearance,
+    required this.display,
   });
 
   @override
@@ -190,6 +203,7 @@ class _HereaderAppState extends State<HereaderApp> {
             sync: widget.sync,
             api: widget.api,
             appearance: widget.appearance,
+            display: widget.display,
           ),
         );
       },

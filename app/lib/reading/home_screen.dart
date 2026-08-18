@@ -17,6 +17,7 @@ import 'book_progress.dart';
 import 'library_book.dart';
 import 'note_editor_screen.dart';
 import 'paste_reader_screen.dart';
+import 'reading_display.dart';
 
 /// How many books the recent row shows, beyond the one in the continue card.
 const int _recentCount = 4;
@@ -64,12 +65,19 @@ class HomeScreen extends StatefulWidget {
   /// standing up a clock, an auth store and a device id it has no use for.
   final Future<String> Function() issueStamp;
 
+  /// Whether the time on the tile counts down to the end of the chapter or
+  /// the end of the book. Listened to rather than read, because Settings is
+  /// a sibling tab kept alive beside this one and a value read at build time
+  /// would still be the old one when the reader faded back.
+  final ReadingDisplayController display;
+
   const HomeScreen({
     super.key,
     required this.repository,
     required this.sync,
     required this.onSeeAll,
     required this.issueStamp,
+    required this.display,
   });
 
   @override
@@ -113,12 +121,19 @@ class _HomeScreenState extends State<HomeScreen> {
     _profile = _repo.watchActiveProfile().listen((profile) {
       if (mounted) setState(() => _pacing = profile.pacing);
     });
+
+    widget.display.addListener(_onDisplayChanged);
   }
 
   @override
   void dispose() {
+    widget.display.removeListener(_onDisplayChanged);
     _profile?.cancel();
     super.dispose();
+  }
+
+  void _onDisplayChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<Uint8List?> _coverOf(String bookId) =>
@@ -284,6 +299,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             book: recent.first,
                             cover: _coverOf(recent.first.id),
                             pacing: _pacing,
+                            scope: widget.display.timeLeftScope,
                             busy: _busy,
                             onOpen: _busy ? null : _open,
                           ),
@@ -386,6 +402,7 @@ class _ContinueSection extends StatelessWidget {
   final BookSummary book;
   final Future<Uint8List?> cover;
   final PacingConfig? pacing;
+  final TimeLeftScope scope;
   final bool busy;
   final ValueChanged<BookSummary>? onOpen;
 
@@ -393,6 +410,7 @@ class _ContinueSection extends StatelessWidget {
     required this.book,
     required this.cover,
     required this.pacing,
+    required this.scope,
     required this.busy,
     required this.onOpen,
   });
@@ -405,6 +423,7 @@ class _ContinueSection extends StatelessWidget {
         book: book,
         cover: cover,
         pacing: pacing,
+        scope: scope,
         busy: busy,
         onOpen: onOpen,
       ),
@@ -432,6 +451,7 @@ class _ContinueTile extends StatelessWidget {
   final BookSummary book;
   final Future<Uint8List?> cover;
   final PacingConfig? pacing;
+  final TimeLeftScope scope;
   final bool busy;
   final ValueChanged<BookSummary>? onOpen;
 
@@ -439,6 +459,7 @@ class _ContinueTile extends StatelessWidget {
     required this.book,
     required this.cover,
     required this.pacing,
+    required this.scope,
     required this.busy,
     required this.onOpen,
   });
@@ -451,16 +472,9 @@ class _ContinueTile extends StatelessWidget {
     final dark = theme.brightness == Brightness.dark;
     final progress = progressOf(book);
 
-    // The estimate where there is one, and the words that stand in for a
-    // bar where there is not. Both answer "how far in am I"; neither is
-    // worth its own line, and a book whose word count predates the column
-    // falls back rather than showing nothing.
-    final config = pacing;
-    final remaining = config == null ? null : remainingLabel(book, config);
-
     return Semantics(
       button: true,
-      label: semanticsForBook(book),
+      label: semanticsForBook(book, pacing: pacing, scope: scope),
       excludeSemantics: true,
       child: Container(
         key: homeContinueTileKey,
@@ -557,13 +571,15 @@ class _ContinueTile extends StatelessWidget {
                                 ),
                               ),
                             const SizedBox(height: AppSpacing.xs),
-                            Text(
-                              remaining ?? progress.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: scheme.onSurfaceVariant,
-                              ),
+                            // The chapter and the estimate, and the words
+                            // that stand in for a bar where there is
+                            // neither. All of them answer "how far in am I";
+                            // none is worth a line of its own.
+                            BookPlaceLine(
+                              book: book,
+                              pacing: pacing,
+                              scope: scope,
+                              fallback: progress.label,
                             ),
                           ],
                         ),

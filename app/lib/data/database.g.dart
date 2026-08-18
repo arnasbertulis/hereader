@@ -647,6 +647,28 @@ class $ReadingPositionsTable extends ReadingPositions
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _chapterTitleMeta = const VerificationMeta(
+    'chapterTitle',
+  );
+  @override
+  late final GeneratedColumn<String> chapterTitle = GeneratedColumn<String>(
+    'chapter_title',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _chapterEndIndexMeta = const VerificationMeta(
+    'chapterEndIndex',
+  );
+  @override
+  late final GeneratedColumn<int> chapterEndIndex = GeneratedColumn<int>(
+    'chapter_end_index',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _hlcMeta = const VerificationMeta('hlc');
   @override
   late final GeneratedColumn<String> hlc = GeneratedColumn<String>(
@@ -674,6 +696,8 @@ class $ReadingPositionsTable extends ReadingPositions
     charOffset,
     parserVersion,
     tokenIndex,
+    chapterTitle,
+    chapterEndIndex,
     hlc,
     updatedAt,
   ];
@@ -730,6 +754,24 @@ class $ReadingPositionsTable extends ReadingPositions
         tokenIndex.isAcceptableOrUnknown(data['token_index']!, _tokenIndexMeta),
       );
     }
+    if (data.containsKey('chapter_title')) {
+      context.handle(
+        _chapterTitleMeta,
+        chapterTitle.isAcceptableOrUnknown(
+          data['chapter_title']!,
+          _chapterTitleMeta,
+        ),
+      );
+    }
+    if (data.containsKey('chapter_end_index')) {
+      context.handle(
+        _chapterEndIndexMeta,
+        chapterEndIndex.isAcceptableOrUnknown(
+          data['chapter_end_index']!,
+          _chapterEndIndexMeta,
+        ),
+      );
+    }
     if (data.containsKey('hlc')) {
       context.handle(
         _hlcMeta,
@@ -775,6 +817,14 @@ class $ReadingPositionsTable extends ReadingPositions
         DriftSqlType.int,
         data['${effectivePrefix}token_index'],
       ),
+      chapterTitle: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}chapter_title'],
+      ),
+      chapterEndIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}chapter_end_index'],
+      ),
       hlc: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}hlc'],
@@ -814,6 +864,29 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
   /// first word of the book.
   final int? tokenIndex;
 
+  /// The chapter this position is in, as the book itself names it.
+  ///
+  /// Device-local and never synced. A chapter is resolved from this device's
+  /// parse of this copy of the book (ADR 0010), so there is nothing another
+  /// device could do with one, and it is written only by the reader screen —
+  /// every other path that touches this row clears it rather than leaving a
+  /// title from where the reader used to be beside a locator for where they
+  /// are now. See ADR 0018.
+  ///
+  /// Nullable and without a default, for the same reason [tokenIndex] is:
+  /// null is no recorded chapter, which is every row written before this
+  /// column, every book that declares no table of contents, every note, and
+  /// every position that arrived from somewhere else.
+  final String? chapterTitle;
+
+  /// The token that chapter ends before, exclusive.
+  ///
+  /// Null exactly when [chapterTitle] is, and written in the same statement,
+  /// so the pair is never half-true. An end rather than a start: the screens
+  /// that read it are asking how much of the chapter is left, and they
+  /// already hold the index the reader is at.
+  final int? chapterEndIndex;
+
   /// Hybrid logical clock stamp from the device that wrote this. Orders
   /// writes across devices without trusting wall clocks.
   final String hlc;
@@ -824,6 +897,8 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
     required this.charOffset,
     required this.parserVersion,
     this.tokenIndex,
+    this.chapterTitle,
+    this.chapterEndIndex,
     required this.hlc,
     required this.updatedAt,
   });
@@ -836,6 +911,12 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
     map['parser_version'] = Variable<int>(parserVersion);
     if (!nullToAbsent || tokenIndex != null) {
       map['token_index'] = Variable<int>(tokenIndex);
+    }
+    if (!nullToAbsent || chapterTitle != null) {
+      map['chapter_title'] = Variable<String>(chapterTitle);
+    }
+    if (!nullToAbsent || chapterEndIndex != null) {
+      map['chapter_end_index'] = Variable<int>(chapterEndIndex);
     }
     map['hlc'] = Variable<String>(hlc);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -851,6 +932,12 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
       tokenIndex: tokenIndex == null && nullToAbsent
           ? const Value.absent()
           : Value(tokenIndex),
+      chapterTitle: chapterTitle == null && nullToAbsent
+          ? const Value.absent()
+          : Value(chapterTitle),
+      chapterEndIndex: chapterEndIndex == null && nullToAbsent
+          ? const Value.absent()
+          : Value(chapterEndIndex),
       hlc: Value(hlc),
       updatedAt: Value(updatedAt),
     );
@@ -867,6 +954,8 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
       charOffset: serializer.fromJson<int>(json['charOffset']),
       parserVersion: serializer.fromJson<int>(json['parserVersion']),
       tokenIndex: serializer.fromJson<int?>(json['tokenIndex']),
+      chapterTitle: serializer.fromJson<String?>(json['chapterTitle']),
+      chapterEndIndex: serializer.fromJson<int?>(json['chapterEndIndex']),
       hlc: serializer.fromJson<String>(json['hlc']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -880,6 +969,8 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
       'charOffset': serializer.toJson<int>(charOffset),
       'parserVersion': serializer.toJson<int>(parserVersion),
       'tokenIndex': serializer.toJson<int?>(tokenIndex),
+      'chapterTitle': serializer.toJson<String?>(chapterTitle),
+      'chapterEndIndex': serializer.toJson<int?>(chapterEndIndex),
       'hlc': serializer.toJson<String>(hlc),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -891,6 +982,8 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
     int? charOffset,
     int? parserVersion,
     Value<int?> tokenIndex = const Value.absent(),
+    Value<String?> chapterTitle = const Value.absent(),
+    Value<int?> chapterEndIndex = const Value.absent(),
     String? hlc,
     DateTime? updatedAt,
   }) => ReadingPosition(
@@ -899,6 +992,10 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
     charOffset: charOffset ?? this.charOffset,
     parserVersion: parserVersion ?? this.parserVersion,
     tokenIndex: tokenIndex.present ? tokenIndex.value : this.tokenIndex,
+    chapterTitle: chapterTitle.present ? chapterTitle.value : this.chapterTitle,
+    chapterEndIndex: chapterEndIndex.present
+        ? chapterEndIndex.value
+        : this.chapterEndIndex,
     hlc: hlc ?? this.hlc,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -915,6 +1012,12 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
       tokenIndex: data.tokenIndex.present
           ? data.tokenIndex.value
           : this.tokenIndex,
+      chapterTitle: data.chapterTitle.present
+          ? data.chapterTitle.value
+          : this.chapterTitle,
+      chapterEndIndex: data.chapterEndIndex.present
+          ? data.chapterEndIndex.value
+          : this.chapterEndIndex,
       hlc: data.hlc.present ? data.hlc.value : this.hlc,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -928,6 +1031,8 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
           ..write('charOffset: $charOffset, ')
           ..write('parserVersion: $parserVersion, ')
           ..write('tokenIndex: $tokenIndex, ')
+          ..write('chapterTitle: $chapterTitle, ')
+          ..write('chapterEndIndex: $chapterEndIndex, ')
           ..write('hlc: $hlc, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -941,6 +1046,8 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
     charOffset,
     parserVersion,
     tokenIndex,
+    chapterTitle,
+    chapterEndIndex,
     hlc,
     updatedAt,
   );
@@ -953,6 +1060,8 @@ class ReadingPosition extends DataClass implements Insertable<ReadingPosition> {
           other.charOffset == this.charOffset &&
           other.parserVersion == this.parserVersion &&
           other.tokenIndex == this.tokenIndex &&
+          other.chapterTitle == this.chapterTitle &&
+          other.chapterEndIndex == this.chapterEndIndex &&
           other.hlc == this.hlc &&
           other.updatedAt == this.updatedAt);
 }
@@ -963,6 +1072,8 @@ class ReadingPositionsCompanion extends UpdateCompanion<ReadingPosition> {
   final Value<int> charOffset;
   final Value<int> parserVersion;
   final Value<int?> tokenIndex;
+  final Value<String?> chapterTitle;
+  final Value<int?> chapterEndIndex;
   final Value<String> hlc;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -972,6 +1083,8 @@ class ReadingPositionsCompanion extends UpdateCompanion<ReadingPosition> {
     this.charOffset = const Value.absent(),
     this.parserVersion = const Value.absent(),
     this.tokenIndex = const Value.absent(),
+    this.chapterTitle = const Value.absent(),
+    this.chapterEndIndex = const Value.absent(),
     this.hlc = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -982,6 +1095,8 @@ class ReadingPositionsCompanion extends UpdateCompanion<ReadingPosition> {
     required int charOffset,
     required int parserVersion,
     this.tokenIndex = const Value.absent(),
+    this.chapterTitle = const Value.absent(),
+    this.chapterEndIndex = const Value.absent(),
     required String hlc,
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -997,6 +1112,8 @@ class ReadingPositionsCompanion extends UpdateCompanion<ReadingPosition> {
     Expression<int>? charOffset,
     Expression<int>? parserVersion,
     Expression<int>? tokenIndex,
+    Expression<String>? chapterTitle,
+    Expression<int>? chapterEndIndex,
     Expression<String>? hlc,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -1007,6 +1124,8 @@ class ReadingPositionsCompanion extends UpdateCompanion<ReadingPosition> {
       if (charOffset != null) 'char_offset': charOffset,
       if (parserVersion != null) 'parser_version': parserVersion,
       if (tokenIndex != null) 'token_index': tokenIndex,
+      if (chapterTitle != null) 'chapter_title': chapterTitle,
+      if (chapterEndIndex != null) 'chapter_end_index': chapterEndIndex,
       if (hlc != null) 'hlc': hlc,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -1019,6 +1138,8 @@ class ReadingPositionsCompanion extends UpdateCompanion<ReadingPosition> {
     Value<int>? charOffset,
     Value<int>? parserVersion,
     Value<int?>? tokenIndex,
+    Value<String?>? chapterTitle,
+    Value<int?>? chapterEndIndex,
     Value<String>? hlc,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -1029,6 +1150,8 @@ class ReadingPositionsCompanion extends UpdateCompanion<ReadingPosition> {
       charOffset: charOffset ?? this.charOffset,
       parserVersion: parserVersion ?? this.parserVersion,
       tokenIndex: tokenIndex ?? this.tokenIndex,
+      chapterTitle: chapterTitle ?? this.chapterTitle,
+      chapterEndIndex: chapterEndIndex ?? this.chapterEndIndex,
       hlc: hlc ?? this.hlc,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -1053,6 +1176,12 @@ class ReadingPositionsCompanion extends UpdateCompanion<ReadingPosition> {
     if (tokenIndex.present) {
       map['token_index'] = Variable<int>(tokenIndex.value);
     }
+    if (chapterTitle.present) {
+      map['chapter_title'] = Variable<String>(chapterTitle.value);
+    }
+    if (chapterEndIndex.present) {
+      map['chapter_end_index'] = Variable<int>(chapterEndIndex.value);
+    }
     if (hlc.present) {
       map['hlc'] = Variable<String>(hlc.value);
     }
@@ -1073,6 +1202,8 @@ class ReadingPositionsCompanion extends UpdateCompanion<ReadingPosition> {
           ..write('charOffset: $charOffset, ')
           ..write('parserVersion: $parserVersion, ')
           ..write('tokenIndex: $tokenIndex, ')
+          ..write('chapterTitle: $chapterTitle, ')
+          ..write('chapterEndIndex: $chapterEndIndex, ')
           ..write('hlc: $hlc, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -4075,6 +4206,8 @@ typedef $$ReadingPositionsTableCreateCompanionBuilder =
       required int charOffset,
       required int parserVersion,
       Value<int?> tokenIndex,
+      Value<String?> chapterTitle,
+      Value<int?> chapterEndIndex,
       required String hlc,
       required DateTime updatedAt,
       Value<int> rowid,
@@ -4086,6 +4219,8 @@ typedef $$ReadingPositionsTableUpdateCompanionBuilder =
       Value<int> charOffset,
       Value<int> parserVersion,
       Value<int?> tokenIndex,
+      Value<String?> chapterTitle,
+      Value<int?> chapterEndIndex,
       Value<String> hlc,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -4144,6 +4279,16 @@ class $$ReadingPositionsTableFilterComposer
 
   ColumnFilters<int> get tokenIndex => $composableBuilder(
     column: $table.tokenIndex,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get chapterTitle => $composableBuilder(
+    column: $table.chapterTitle,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get chapterEndIndex => $composableBuilder(
+    column: $table.chapterEndIndex,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4210,6 +4355,16 @@ class $$ReadingPositionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get chapterTitle => $composableBuilder(
+    column: $table.chapterTitle,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get chapterEndIndex => $composableBuilder(
+    column: $table.chapterEndIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get hlc => $composableBuilder(
     column: $table.hlc,
     builder: (column) => ColumnOrderings(column),
@@ -4268,6 +4423,16 @@ class $$ReadingPositionsTableAnnotationComposer
 
   GeneratedColumn<int> get tokenIndex => $composableBuilder(
     column: $table.tokenIndex,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get chapterTitle => $composableBuilder(
+    column: $table.chapterTitle,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get chapterEndIndex => $composableBuilder(
+    column: $table.chapterEndIndex,
     builder: (column) => column,
   );
 
@@ -4336,6 +4501,8 @@ class $$ReadingPositionsTableTableManager
                 Value<int> charOffset = const Value.absent(),
                 Value<int> parserVersion = const Value.absent(),
                 Value<int?> tokenIndex = const Value.absent(),
+                Value<String?> chapterTitle = const Value.absent(),
+                Value<int?> chapterEndIndex = const Value.absent(),
                 Value<String> hlc = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -4345,6 +4512,8 @@ class $$ReadingPositionsTableTableManager
                 charOffset: charOffset,
                 parserVersion: parserVersion,
                 tokenIndex: tokenIndex,
+                chapterTitle: chapterTitle,
+                chapterEndIndex: chapterEndIndex,
                 hlc: hlc,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -4356,6 +4525,8 @@ class $$ReadingPositionsTableTableManager
                 required int charOffset,
                 required int parserVersion,
                 Value<int?> tokenIndex = const Value.absent(),
+                Value<String?> chapterTitle = const Value.absent(),
+                Value<int?> chapterEndIndex = const Value.absent(),
                 required String hlc,
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -4365,6 +4536,8 @@ class $$ReadingPositionsTableTableManager
                 charOffset: charOffset,
                 parserVersion: parserVersion,
                 tokenIndex: tokenIndex,
+                chapterTitle: chapterTitle,
+                chapterEndIndex: chapterEndIndex,
                 hlc: hlc,
                 updatedAt: updatedAt,
                 rowid: rowid,

@@ -82,6 +82,29 @@ class ReadingPositions extends Table {
   /// first word of the book.
   IntColumn get tokenIndex => integer().nullable()();
 
+  /// The chapter this position is in, as the book itself names it.
+  ///
+  /// Device-local and never synced. A chapter is resolved from this device's
+  /// parse of this copy of the book (ADR 0010), so there is nothing another
+  /// device could do with one, and it is written only by the reader screen —
+  /// every other path that touches this row clears it rather than leaving a
+  /// title from where the reader used to be beside a locator for where they
+  /// are now. See ADR 0018.
+  ///
+  /// Nullable and without a default, for the same reason [tokenIndex] is:
+  /// null is no recorded chapter, which is every row written before this
+  /// column, every book that declares no table of contents, every note, and
+  /// every position that arrived from somewhere else.
+  TextColumn get chapterTitle => text().nullable()();
+
+  /// The token that chapter ends before, exclusive.
+  ///
+  /// Null exactly when [chapterTitle] is, and written in the same statement,
+  /// so the pair is never half-true. An end rather than a start: the screens
+  /// that read it are asking how much of the chapter is left, and they
+  /// already hold the index the reader is at.
+  IntColumn get chapterEndIndex => integer().nullable()();
+
   /// Hybrid logical clock stamp from the device that wrote this. Orders
   /// writes across devices without trusting wall clocks.
   TextColumn get hlc => text()();
@@ -286,7 +309,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -348,6 +371,18 @@ class AppDatabase extends _$AppDatabase {
         // never been edited through it, which is exactly what null means
         // here. Nothing needs to change for it to already be correct.
         await m.addColumn(books, books.updatedAt);
+      }
+      if (from < 10) {
+        // No backfill, and none is possible: a chapter comes out of parsing
+        // the book, and working one out for every stored position here would
+        // unzip and tokenize the whole library during the first frame after
+        // an update — on web, on the main thread. Null is also the honest
+        // value, since no chapter was recorded when these rows were written.
+        //
+        // ReadingPositions only. A held position (PendingPositions) arrived
+        // from another device and never had a chapter to carry.
+        await m.addColumn(readingPositions, readingPositions.chapterTitle);
+        await m.addColumn(readingPositions, readingPositions.chapterEndIndex);
       }
     },
     beforeOpen: (details) async {
