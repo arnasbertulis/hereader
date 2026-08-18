@@ -127,9 +127,16 @@ class _PositionConflictSheetState extends State<PositionConflictSheet> {
     TokenizedText? text;
 
     try {
-      final bytes = await widget.repository.bytesOf(widget.conflict.bookId);
-      if (bytes != null) {
-        text = (await const BookImporter().import(bytes)).text;
+      final stored = await widget.repository.storedBookOf(
+        widget.conflict.bookId,
+      );
+      if (stored != null) {
+        text = (await const BookImporter().reopenStored(
+          stored.bytes,
+          sourceFormat: BookSourceFormat.fromName(stored.sourceFormat),
+          id: widget.conflict.bookId,
+          title: stored.title,
+        )).text;
       }
     } catch (_) {
       // The book is not on this device, or will not parse. Both positions

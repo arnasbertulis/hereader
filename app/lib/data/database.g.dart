@@ -55,6 +55,18 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
     type: DriftSqlType.blob,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _sourceFormatMeta = const VerificationMeta(
+    'sourceFormat',
+  );
+  @override
+  late final GeneratedColumn<String> sourceFormat = GeneratedColumn<String>(
+    'source_format',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('epub'),
+  );
   static const VerificationMeta _importedAtMeta = const VerificationMeta(
     'importedAt',
   );
@@ -65,6 +77,17 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
     false,
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
   );
   static const VerificationMeta _wordCountMeta = const VerificationMeta(
     'wordCount',
@@ -85,7 +108,9 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
     author,
     language,
     bytes,
+    sourceFormat,
     importedAt,
+    updatedAt,
     wordCount,
   ];
   @override
@@ -133,6 +158,15 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
     } else if (isInserting) {
       context.missing(_bytesMeta);
     }
+    if (data.containsKey('source_format')) {
+      context.handle(
+        _sourceFormatMeta,
+        sourceFormat.isAcceptableOrUnknown(
+          data['source_format']!,
+          _sourceFormatMeta,
+        ),
+      );
+    }
     if (data.containsKey('imported_at')) {
       context.handle(
         _importedAtMeta,
@@ -140,6 +174,12 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
       );
     } else if (isInserting) {
       context.missing(_importedAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
     }
     if (data.containsKey('word_count')) {
       context.handle(
@@ -176,10 +216,18 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
         DriftSqlType.blob,
         data['${effectivePrefix}bytes'],
       )!,
+      sourceFormat: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_format'],
+      )!,
       importedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}imported_at'],
       )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      ),
       wordCount: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}word_count'],
@@ -201,10 +249,28 @@ class Book extends DataClass implements Insertable<Book> {
   final String? author;
   final String? language;
 
-  /// The original EPUB. Large books make for large rows; acceptable for
-  /// text, noted as a limit for heavily illustrated volumes.
+  /// The original EPUB, or a note's text as UTF-8. Large books make for
+  /// large rows; acceptable for text, noted as a limit for heavily
+  /// illustrated volumes.
   final Uint8List bytes;
+
+  /// 'epub' or 'note'. Decides how [bytes] is parsed on open: an EPUB is a
+  /// zip archive, a note is UTF-8 text run through the same
+  /// [kParserVersion]'d normalizer a spine document gets. Defaulted to
+  /// 'epub' rather than left nullable, since every row on disk before this
+  /// column existed was one.
+  final String sourceFormat;
   final DateTime importedAt;
+
+  /// When a note's own text was last written, distinct from [importedAt].
+  ///
+  /// Null rather than defaulted to [importedAt] at creation: those are two
+  /// different facts that happen to coincide at first, and a default would
+  /// conflate "just imported" with "edited the instant it arrived". Null
+  /// means never edited since import, which every EPUB stays forever and a
+  /// note stays until its first edit — the library reads one or the other
+  /// off whichever of the two columns is the more recent true fact.
+  final DateTime? updatedAt;
 
   /// Cached so the library list does not parse every book to draw itself.
   final int wordCount;
@@ -214,7 +280,9 @@ class Book extends DataClass implements Insertable<Book> {
     this.author,
     this.language,
     required this.bytes,
+    required this.sourceFormat,
     required this.importedAt,
+    this.updatedAt,
     required this.wordCount,
   });
   @override
@@ -229,7 +297,11 @@ class Book extends DataClass implements Insertable<Book> {
       map['language'] = Variable<String>(language);
     }
     map['bytes'] = Variable<Uint8List>(bytes);
+    map['source_format'] = Variable<String>(sourceFormat);
     map['imported_at'] = Variable<DateTime>(importedAt);
+    if (!nullToAbsent || updatedAt != null) {
+      map['updated_at'] = Variable<DateTime>(updatedAt);
+    }
     map['word_count'] = Variable<int>(wordCount);
     return map;
   }
@@ -245,7 +317,11 @@ class Book extends DataClass implements Insertable<Book> {
           ? const Value.absent()
           : Value(language),
       bytes: Value(bytes),
+      sourceFormat: Value(sourceFormat),
       importedAt: Value(importedAt),
+      updatedAt: updatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(updatedAt),
       wordCount: Value(wordCount),
     );
   }
@@ -261,7 +337,9 @@ class Book extends DataClass implements Insertable<Book> {
       author: serializer.fromJson<String?>(json['author']),
       language: serializer.fromJson<String?>(json['language']),
       bytes: serializer.fromJson<Uint8List>(json['bytes']),
+      sourceFormat: serializer.fromJson<String>(json['sourceFormat']),
       importedAt: serializer.fromJson<DateTime>(json['importedAt']),
+      updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
       wordCount: serializer.fromJson<int>(json['wordCount']),
     );
   }
@@ -274,7 +352,9 @@ class Book extends DataClass implements Insertable<Book> {
       'author': serializer.toJson<String?>(author),
       'language': serializer.toJson<String?>(language),
       'bytes': serializer.toJson<Uint8List>(bytes),
+      'sourceFormat': serializer.toJson<String>(sourceFormat),
       'importedAt': serializer.toJson<DateTime>(importedAt),
+      'updatedAt': serializer.toJson<DateTime?>(updatedAt),
       'wordCount': serializer.toJson<int>(wordCount),
     };
   }
@@ -285,7 +365,9 @@ class Book extends DataClass implements Insertable<Book> {
     Value<String?> author = const Value.absent(),
     Value<String?> language = const Value.absent(),
     Uint8List? bytes,
+    String? sourceFormat,
     DateTime? importedAt,
+    Value<DateTime?> updatedAt = const Value.absent(),
     int? wordCount,
   }) => Book(
     id: id ?? this.id,
@@ -293,7 +375,9 @@ class Book extends DataClass implements Insertable<Book> {
     author: author.present ? author.value : this.author,
     language: language.present ? language.value : this.language,
     bytes: bytes ?? this.bytes,
+    sourceFormat: sourceFormat ?? this.sourceFormat,
     importedAt: importedAt ?? this.importedAt,
+    updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
     wordCount: wordCount ?? this.wordCount,
   );
   Book copyWithCompanion(BooksCompanion data) {
@@ -303,9 +387,13 @@ class Book extends DataClass implements Insertable<Book> {
       author: data.author.present ? data.author.value : this.author,
       language: data.language.present ? data.language.value : this.language,
       bytes: data.bytes.present ? data.bytes.value : this.bytes,
+      sourceFormat: data.sourceFormat.present
+          ? data.sourceFormat.value
+          : this.sourceFormat,
       importedAt: data.importedAt.present
           ? data.importedAt.value
           : this.importedAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       wordCount: data.wordCount.present ? data.wordCount.value : this.wordCount,
     );
   }
@@ -318,7 +406,9 @@ class Book extends DataClass implements Insertable<Book> {
           ..write('author: $author, ')
           ..write('language: $language, ')
           ..write('bytes: $bytes, ')
+          ..write('sourceFormat: $sourceFormat, ')
           ..write('importedAt: $importedAt, ')
+          ..write('updatedAt: $updatedAt, ')
           ..write('wordCount: $wordCount')
           ..write(')'))
         .toString();
@@ -331,7 +421,9 @@ class Book extends DataClass implements Insertable<Book> {
     author,
     language,
     $driftBlobEquality.hash(bytes),
+    sourceFormat,
     importedAt,
+    updatedAt,
     wordCount,
   );
   @override
@@ -343,7 +435,9 @@ class Book extends DataClass implements Insertable<Book> {
           other.author == this.author &&
           other.language == this.language &&
           $driftBlobEquality.equals(other.bytes, this.bytes) &&
+          other.sourceFormat == this.sourceFormat &&
           other.importedAt == this.importedAt &&
+          other.updatedAt == this.updatedAt &&
           other.wordCount == this.wordCount);
 }
 
@@ -353,7 +447,9 @@ class BooksCompanion extends UpdateCompanion<Book> {
   final Value<String?> author;
   final Value<String?> language;
   final Value<Uint8List> bytes;
+  final Value<String> sourceFormat;
   final Value<DateTime> importedAt;
+  final Value<DateTime?> updatedAt;
   final Value<int> wordCount;
   final Value<int> rowid;
   const BooksCompanion({
@@ -362,7 +458,9 @@ class BooksCompanion extends UpdateCompanion<Book> {
     this.author = const Value.absent(),
     this.language = const Value.absent(),
     this.bytes = const Value.absent(),
+    this.sourceFormat = const Value.absent(),
     this.importedAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
     this.wordCount = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -372,7 +470,9 @@ class BooksCompanion extends UpdateCompanion<Book> {
     this.author = const Value.absent(),
     this.language = const Value.absent(),
     required Uint8List bytes,
+    this.sourceFormat = const Value.absent(),
     required DateTime importedAt,
+    this.updatedAt = const Value.absent(),
     this.wordCount = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -385,7 +485,9 @@ class BooksCompanion extends UpdateCompanion<Book> {
     Expression<String>? author,
     Expression<String>? language,
     Expression<Uint8List>? bytes,
+    Expression<String>? sourceFormat,
     Expression<DateTime>? importedAt,
+    Expression<DateTime>? updatedAt,
     Expression<int>? wordCount,
     Expression<int>? rowid,
   }) {
@@ -395,7 +497,9 @@ class BooksCompanion extends UpdateCompanion<Book> {
       if (author != null) 'author': author,
       if (language != null) 'language': language,
       if (bytes != null) 'bytes': bytes,
+      if (sourceFormat != null) 'source_format': sourceFormat,
       if (importedAt != null) 'imported_at': importedAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
       if (wordCount != null) 'word_count': wordCount,
       if (rowid != null) 'rowid': rowid,
     });
@@ -407,7 +511,9 @@ class BooksCompanion extends UpdateCompanion<Book> {
     Value<String?>? author,
     Value<String?>? language,
     Value<Uint8List>? bytes,
+    Value<String>? sourceFormat,
     Value<DateTime>? importedAt,
+    Value<DateTime?>? updatedAt,
     Value<int>? wordCount,
     Value<int>? rowid,
   }) {
@@ -417,7 +523,9 @@ class BooksCompanion extends UpdateCompanion<Book> {
       author: author ?? this.author,
       language: language ?? this.language,
       bytes: bytes ?? this.bytes,
+      sourceFormat: sourceFormat ?? this.sourceFormat,
       importedAt: importedAt ?? this.importedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
       wordCount: wordCount ?? this.wordCount,
       rowid: rowid ?? this.rowid,
     );
@@ -441,8 +549,14 @@ class BooksCompanion extends UpdateCompanion<Book> {
     if (bytes.present) {
       map['bytes'] = Variable<Uint8List>(bytes.value);
     }
+    if (sourceFormat.present) {
+      map['source_format'] = Variable<String>(sourceFormat.value);
+    }
     if (importedAt.present) {
       map['imported_at'] = Variable<DateTime>(importedAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
     if (wordCount.present) {
       map['word_count'] = Variable<int>(wordCount.value);
@@ -461,7 +575,9 @@ class BooksCompanion extends UpdateCompanion<Book> {
           ..write('author: $author, ')
           ..write('language: $language, ')
           ..write('bytes: $bytes, ')
+          ..write('sourceFormat: $sourceFormat, ')
           ..write('importedAt: $importedAt, ')
+          ..write('updatedAt: $updatedAt, ')
           ..write('wordCount: $wordCount, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -3485,7 +3601,9 @@ typedef $$BooksTableCreateCompanionBuilder =
       Value<String?> author,
       Value<String?> language,
       required Uint8List bytes,
+      Value<String> sourceFormat,
       required DateTime importedAt,
+      Value<DateTime?> updatedAt,
       Value<int> wordCount,
       Value<int> rowid,
     });
@@ -3496,7 +3614,9 @@ typedef $$BooksTableUpdateCompanionBuilder =
       Value<String?> author,
       Value<String?> language,
       Value<Uint8List> bytes,
+      Value<String> sourceFormat,
       Value<DateTime> importedAt,
+      Value<DateTime?> updatedAt,
       Value<int> wordCount,
       Value<int> rowid,
     });
@@ -3577,8 +3697,18 @@ class $$BooksTableFilterComposer extends Composer<_$AppDatabase, $BooksTable> {
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get sourceFormat => $composableBuilder(
+    column: $table.sourceFormat,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<DateTime> get importedAt => $composableBuilder(
     column: $table.importedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3672,8 +3802,18 @@ class $$BooksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get sourceFormat => $composableBuilder(
+    column: $table.sourceFormat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get importedAt => $composableBuilder(
     column: $table.importedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -3707,10 +3847,18 @@ class $$BooksTableAnnotationComposer
   GeneratedColumn<Uint8List> get bytes =>
       $composableBuilder(column: $table.bytes, builder: (column) => column);
 
+  GeneratedColumn<String> get sourceFormat => $composableBuilder(
+    column: $table.sourceFormat,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get importedAt => $composableBuilder(
     column: $table.importedAt,
     builder: (column) => column,
   );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
   GeneratedColumn<int> get wordCount =>
       $composableBuilder(column: $table.wordCount, builder: (column) => column);
@@ -3802,7 +3950,9 @@ class $$BooksTableTableManager
                 Value<String?> author = const Value.absent(),
                 Value<String?> language = const Value.absent(),
                 Value<Uint8List> bytes = const Value.absent(),
+                Value<String> sourceFormat = const Value.absent(),
                 Value<DateTime> importedAt = const Value.absent(),
+                Value<DateTime?> updatedAt = const Value.absent(),
                 Value<int> wordCount = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BooksCompanion(
@@ -3811,7 +3961,9 @@ class $$BooksTableTableManager
                 author: author,
                 language: language,
                 bytes: bytes,
+                sourceFormat: sourceFormat,
                 importedAt: importedAt,
+                updatedAt: updatedAt,
                 wordCount: wordCount,
                 rowid: rowid,
               ),
@@ -3822,7 +3974,9 @@ class $$BooksTableTableManager
                 Value<String?> author = const Value.absent(),
                 Value<String?> language = const Value.absent(),
                 required Uint8List bytes,
+                Value<String> sourceFormat = const Value.absent(),
                 required DateTime importedAt,
+                Value<DateTime?> updatedAt = const Value.absent(),
                 Value<int> wordCount = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BooksCompanion.insert(
@@ -3831,7 +3985,9 @@ class $$BooksTableTableManager
                 author: author,
                 language: language,
                 bytes: bytes,
+                sourceFormat: sourceFormat,
                 importedAt: importedAt,
+                updatedAt: updatedAt,
                 wordCount: wordCount,
                 rowid: rowid,
               ),

@@ -36,6 +36,7 @@ void main() {
     author: 'William Shakespeare',
     bytes: _bytes([1, 2, 3]),
     wordCount: 25000,
+    sourceFormat: 'epub',
     coverBytes: cover,
   );
 

@@ -62,10 +62,10 @@ class BookOpener {
         }
       }
 
-      final bytes = await repository.bytesOf(bookId);
+      final stored = await repository.storedBookOf(bookId);
       if (!context.mounted) return;
 
-      if (bytes == null) {
+      if (stored == null) {
         _report(context, 'That book is not on this device.');
         return;
       }
@@ -73,15 +73,20 @@ class BookOpener {
       // Re-parsed rather than cached: the parser is the single source of
       // truth for block ids and offsets, so a normalizer change applies to
       // books already in the library instead of invalidating them.
-      final parsed = await const BookImporter().import(bytes);
+      final parsed = await const BookImporter().reopenStored(
+        stored.bytes,
+        sourceFormat: BookSourceFormat.fromName(stored.sourceFormat),
+        id: bookId,
+        title: stored.title,
+      );
 
       // Read fresh rather than trusting a summary captured when the list was
       // last built. A conflict settled moments ago would otherwise be
       // ignored and the reader sent to the old position.
-      final stored = await repository.positionOf(bookId);
+      final position = await repository.positionOf(bookId);
       if (!context.mounted) return;
 
-      final book = parsed.withPosition(stored);
+      final book = parsed.withPosition(position);
 
       if (book.positionUnresolvable) {
         // Silently restarting looks identical to losing the reader's place.

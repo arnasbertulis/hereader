@@ -23,11 +23,29 @@ class Books extends Table {
   TextColumn get author => text().nullable()();
   TextColumn get language => text().nullable()();
 
-  /// The original EPUB. Large books make for large rows; acceptable for
-  /// text, noted as a limit for heavily illustrated volumes.
+  /// The original EPUB, or a note's text as UTF-8. Large books make for
+  /// large rows; acceptable for text, noted as a limit for heavily
+  /// illustrated volumes.
   BlobColumn get bytes => blob()();
 
+  /// 'epub' or 'note'. Decides how [bytes] is parsed on open: an EPUB is a
+  /// zip archive, a note is UTF-8 text run through the same
+  /// [kParserVersion]'d normalizer a spine document gets. Defaulted to
+  /// 'epub' rather than left nullable, since every row on disk before this
+  /// column existed was one.
+  TextColumn get sourceFormat => text().withDefault(const Constant('epub'))();
+
   DateTimeColumn get importedAt => dateTime()();
+
+  /// When a note's own text was last written, distinct from [importedAt].
+  ///
+  /// Null rather than defaulted to [importedAt] at creation: those are two
+  /// different facts that happen to coincide at first, and a default would
+  /// conflate "just imported" with "edited the instant it arrived". Null
+  /// means never edited since import, which every EPUB stays forever and a
+  /// note stays until its first edit — the library reads one or the other
+  /// off whichever of the two columns is the more recent true fact.
+  DateTimeColumn get updatedAt => dateTime().nullable()();
 
   /// Cached so the library list does not parse every book to draw itself.
   IntColumn get wordCount => integer().withDefault(const Constant(0))();
@@ -268,7 +286,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -317,6 +335,19 @@ class AppDatabase extends _$AppDatabase {
         // and walk every book in the library during the first frame after an
         // update.
         await m.createTable(bookCovers);
+      }
+      if (from < 8) {
+        // Backfilled to 'epub' rather than left null: every row on disk
+        // before notes existed was an EPUB, and a default here means
+        // existing books keep opening through the same parse path they
+        // always have.
+        await m.addColumn(books, books.sourceFormat);
+      }
+      if (from < 9) {
+        // No backfill: every row on disk before this column existed has
+        // never been edited through it, which is exactly what null means
+        // here. Nothing needs to change for it to already be correct.
+        await m.addColumn(books, books.updatedAt);
       }
     },
     beforeOpen: (details) async {

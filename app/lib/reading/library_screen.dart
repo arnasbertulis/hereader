@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:epub_reader/epub_reader.dart';
@@ -8,10 +9,12 @@ import 'package:flutter/material.dart';
 import '../data/library_repository.dart';
 import '../sync/sync_engine.dart';
 import '../theme/app_tokens.dart';
+import 'add_menu.dart';
 import 'book_cover.dart';
 import 'book_opener.dart';
 import 'book_progress.dart';
 import 'library_book.dart';
+import 'note_editor_screen.dart';
 import 'paste_reader_screen.dart';
 
 /// Identifies the add button, for a test that would otherwise match its
@@ -29,6 +32,35 @@ const _sortKey = 'ui.library_sort';
 /// compound one would need parsing on the way back out.
 const _sortReversedKey = 'ui.library_sort_reversed';
 
+/// Which formats the shelf shows. Device-local for the same reason sort is.
+const _filterKey = 'ui.library_filter';
+
+/// Which books are on screen. Filtering happens client-side, over the same
+/// list [LibraryRepository.watchLibrary] already streams for sorting: a
+/// second, format-scoped query would need to answer "is the *unfiltered*
+/// library empty" separately from "does anything match this filter" anyway,
+/// since the two states show different things, so there is nothing a SQL
+/// `where` would save here.
+enum _LibraryFilter {
+  all('All'),
+  epub('Books'),
+  note('Notes');
+
+  const _LibraryFilter(this.label);
+
+  final String label;
+
+  static _LibraryFilter byName(String? name) =>
+      values.firstWhere((f) => f.name == name, orElse: () => all);
+
+  bool matches(BookSummary book) {
+    if (this == all) return true;
+
+    final wants = this == epub ? BookSourceFormat.epub : BookSourceFormat.note;
+    return BookSourceFormat.fromName(book.sourceFormat) == wants;
+  }
+}
+
 /// Width a tile aims for before the column count is worked out.
 const double _targetTileWidth = 172;
 
@@ -44,9 +76,6 @@ const double _textBlockHeight = 96;
 /// the old 32 put the final row's menu glyph underneath it. This is the one
 /// number on the screen that exists because of another widget's size.
 const double _shelfBottomPadding = 88;
-
-/// What the add menu came back with.
-enum _AddChoice { epub, paste }
 
 class LibraryScreen extends StatefulWidget {
   final LibraryRepository repository;
@@ -72,6 +101,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   bool _busy = false;
   LibrarySort _sort = LibrarySort.recentlyAdded;
   bool _reversed = false;
+  _LibraryFilter _filter = _LibraryFilter.all;
 
   /// The one path into the reader. Home's continue card takes the same
   /// object rather than its own copy of the sequence.
@@ -89,20 +119,31 @@ class _LibraryScreenState extends State<LibraryScreen> {
   void initState() {
     super.initState();
     _opener = BookOpener(repository: widget.repository, sync: widget.sync);
-    unawaited(_restoreSort());
+    unawaited(_restorePreferences());
   }
 
-  Future<void> _restoreSort() async {
-    final stored = await _repo.preference(_sortKey);
+  Future<void> _restorePreferences() async {
+    final sortName = await _repo.preference(_sortKey);
     final reversed = await _repo.preference(_sortReversedKey);
+    final filterName = await _repo.preference(_filterKey);
     if (!mounted) return;
 
     setState(() {
-      _sort = LibrarySort.byName(stored);
+      _sort = LibrarySort.byName(sortName);
       // Anything other than the string this writes reads as the near end,
       // which is where a reader who has never touched the control is.
       _reversed = reversed == 'true';
+      _filter = _LibraryFilter.byName(filterName);
     });
+  }
+
+  Future<void> _chooseFilter(_LibraryFilter filter) async {
+    if (filter == _filter) return;
+
+    setState(() => _filter = filter);
+
+    final hlc = await widget.issueStamp();
+    await _repo.setPreference(_filterKey, filter.name, hlc: hlc);
   }
 
   Future<void> _chooseSort(LibrarySort sort) async {
@@ -144,18 +185,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// of actions, which is what kept paste reachable from one screen and not
   /// the other for as long as it did.
   Future<void> _openAddMenu() async {
-    final choice = await showDialog<_AddChoice>(
+    final choice = await showDialog<AddChoice>(
       context: context,
-      builder: (_) => const _AddMenu(),
+      builder: (_) => const AddMenu(),
     );
 
     if (choice == null || !mounted) return;
 
     switch (choice) {
-      case _AddChoice.epub:
+      case AddChoice.epub:
         await _import();
-      case _AddChoice.paste:
+      case AddChoice.paste:
         _openPaste();
+      case AddChoice.note:
+        await _openNote();
     }
   }
 
@@ -183,6 +226,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         language: book.language,
         bytes: bytes,
         wordCount: book.text.length,
+        sourceFormat: 'epub',
         coverBytes: book.coverBytes,
       );
 
@@ -190,6 +234,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
       // memoized future would keep handing out the old one. Cheaper to drop
       // every entry on an import than to work out which id changed.
       _covers.clear();
+
+      // Filtered to Notes, an EPUB import would otherwise land on a shelf
+      // that excludes it — the reader taps Add, picks a file, and sees
+      // nothing happen. Showing everything is the confirmation that
+      // something did.
+      if (_filter == _LibraryFilter.note) {
+        await _chooseFilter(_LibraryFilter.all);
+      }
     } on EpubException catch (e) {
       _report(e.message);
     } finally {
@@ -220,6 +272,61 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _openNote() async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => NoteEditorScreen(repository: _repo, sync: widget.sync),
+      ),
+    );
+
+    // A saved note is a new book, and its cover slot (there is none) should
+    // not be missing from the memoized map the way a stale one would be.
+    // Cheap enough to always clear: the same guard _import already applies.
+    _covers.clear();
+
+    // Guarded by `saved`, unlike the import branch's own reset: backing out
+    // of the editor without writing anything pops null, and resetting the
+    // filter on a cancelled add would be the same wrong surprise this fix
+    // exists to remove — just triggered by nothing happening rather than by
+    // something happening the reader could not see.
+    if (saved == true && _filter == _LibraryFilter.epub) {
+      await _chooseFilter(_LibraryFilter.all);
+    }
+  }
+
+  /// Opens an existing note back up for editing.
+  ///
+  /// Reads the stored bytes first rather than handing the editor a bookId to
+  /// resolve itself: the editor's job is to compare what it started with
+  /// against what it ends with, and it needs the original text in hand to do
+  /// that regardless of who fetches it.
+  Future<void> _editNote(BookSummary summary) async {
+    final stored = await _repo.storedBookOf(summary.id);
+    if (stored == null || !mounted) return;
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => NoteEditorScreen(
+          repository: _repo,
+          sync: widget.sync,
+          noteId: summary.id,
+          initialTitle: summary.title,
+          initialBody: utf8.decode(stored.bytes, allowMalformed: true),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _addForFilter(_LibraryFilter filter) {
+    return switch (filter) {
+      _LibraryFilter.epub => _import(),
+      _LibraryFilter.note => _openNote(),
+      // Unreachable from the filtered-empty state (see _FilteredEmptyState),
+      // but the general add menu is the correct fallback if it ever is.
+      _LibraryFilter.all => _openAddMenu(),
+    };
   }
 
   Future<void> _confirmRemove(BookSummary summary) async {
@@ -258,76 +365,105 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      // No app bar. Its title repeated the tab label underneath it, and the
-      // three actions it carried have gone: sync to settings, import and
-      // paste into the add menu.
-      body: SafeArea(
-        // The shell owns the bottom edge, and its own Scaffold has already
-        // taken the inset for the nav bar.
-        bottom: false,
-        child: Column(
-          children: [
-            // A fixed slot rather than a widget that comes and goes. The bar
-            // used to live under an app bar that reserved its own space;
-            // here it would push the whole shelf down four pixels every time
-            // a book opened.
-            SizedBox(
-              height: 4,
-              child: _busy
-                  ? const LinearProgressIndicator(
-                      minHeight: 4,
-                      semanticsLabel: 'Working',
-                    )
-                  : null,
-            ),
-            Expanded(
-              child: StreamBuilder<List<BookSummary>>(
-                stream: _repo.watchLibrary(sort: _sort, reversed: _reversed),
-                builder: (context, snapshot) {
-                  final books = snapshot.data;
-                  if (books == null) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (books.isEmpty) {
-                    return _EmptyLibrary(onAdd: _busy ? null : _openAddMenu);
-                  }
+    // Wraps the whole Scaffold, not just the shelf: the FAB is a sibling of
+    // the body in the widget this returns, so it needs the same snapshot the
+    // body already keys its empty state off of, not a copy of its own.
+    return StreamBuilder<List<BookSummary>>(
+      stream: _repo.watchLibrary(sort: _sort, reversed: _reversed),
+      builder: (context, snapshot) {
+        final books = snapshot.data;
 
-                  return Column(
-                    children: [
-                      _SortRow(
-                        sort: _sort,
-                        reversed: _reversed,
-                        onSort: _busy ? null : _chooseSort,
-                        onFlip: _busy ? null : _flipSort,
-                      ),
-                      Expanded(
-                        child: RefreshIndicator(
-                          // Pull to sync: the periodic timer is five minutes,
-                          // which is a long time to wait when you have just
-                          // put down another device. The status readout lives
-                          // in settings now; this is the gesture, not a
-                          // second copy of the state.
-                          onRefresh: widget.sync.syncNow,
-                          child: _BookShelf(
-                            books: books,
-                            coverOf: _coverOf,
-                            onOpen: _busy ? null : _open,
-                            onRemove: _confirmRemove,
-                          ),
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
+        return Scaffold(
+          // No app bar. Its title repeated the tab label underneath it, and
+          // the three actions it carried have gone: sync to settings,
+          // import and paste into the add menu.
+          body: SafeArea(
+            // The shell owns the bottom edge, and its own Scaffold has
+            // already taken the inset for the nav bar.
+            bottom: false,
+            child: Column(
+              children: [
+                // A fixed slot rather than a widget that comes and goes. The
+                // bar used to live under an app bar that reserved its own
+                // space; here it would push the whole shelf down four
+                // pixels every time a book opened.
+                SizedBox(
+                  height: 4,
+                  child: _busy
+                      ? const LinearProgressIndicator(
+                          minHeight: 4,
+                          semanticsLabel: 'Working',
+                        )
+                      : null,
+                ),
+                Expanded(child: _body(books)),
+              ],
             ),
-          ],
+          ),
+          // Hidden rather than disabled while the library is empty:
+          // _EmptyLibrary already carries the one button this screen needs
+          // then, and a second control offering the same action reads as
+          // this one being broken rather than as this one being redundant.
+          // Null during the loading frame too, so the button never appears
+          // for an instant only to vanish once the first snapshot lands.
+          floatingActionButton: (books == null || books.isEmpty)
+              ? null
+              : _AddButton(onPressed: _busy ? null : _openAddMenu),
+        );
+      },
+    );
+  }
+
+  Widget _body(List<BookSummary>? books) {
+    if (books == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    // The whole library, not this filter's slice of it: a reader with three
+    // notes and the Books filter selected has an empty shelf, not an empty
+    // library, and the two want different words and a different escape
+    // route. The controls row below only ever renders once there is at
+    // least one book on the device to filter or sort among, so a filter
+    // with nothing under it never strands the reader without a way back to
+    // All.
+    if (books.isEmpty) {
+      return _EmptyLibrary(onAdd: _busy ? null : _openAddMenu);
+    }
+
+    final filtered = books.where(_filter.matches).toList();
+
+    return Column(
+      children: [
+        _ControlsRow(
+          filter: _filter,
+          onFilter: _busy ? null : _chooseFilter,
+          sort: _sort,
+          reversed: _reversed,
+          onSort: _busy ? null : _chooseSort,
+          onFlip: _busy ? null : _flipSort,
         ),
-      ),
-      floatingActionButton: _AddButton(
-        onPressed: _busy ? null : _openAddMenu,
-      ),
+        Expanded(
+          child: filtered.isEmpty
+              ? _FilteredEmptyState(
+                  filter: _filter,
+                  onAdd: _busy ? null : () => _addForFilter(_filter),
+                )
+              : RefreshIndicator(
+                  // Pull to sync: the periodic timer is five minutes, which
+                  // is a long time to wait when you have just put down
+                  // another device. The status readout lives in settings
+                  // now; this is the gesture, not a second copy of the
+                  // state.
+                  onRefresh: widget.sync.syncNow,
+                  child: _BookShelf(
+                    books: filtered,
+                    coverOf: _coverOf,
+                    onOpen: _busy ? null : _open,
+                    onRemove: _confirmRemove,
+                    onEditNote: _editNote,
+                  ),
+                ),
+        ),
+      ],
     );
   }
 }
@@ -336,23 +472,30 @@ class _LibraryScreenState extends State<LibraryScreen> {
 double _screenPadding(BuildContext context) =>
     MediaQuery.sizeOf(context).width >= 600 ? AppSpacing.xl : AppSpacing.lg;
 
-/// The field to sort on, and which end of it to start from.
+/// Which books are on screen, and how they are ordered: the format filter at
+/// the leading edge, the sort field and direction at the trailing one.
 ///
-/// Two controls rather than one list of every combination. Six entries in a
-/// menu is a list the reader reads to find the one they want; a field and an
-/// end is two decisions they already have in mind. It also stops the menu
-/// growing by two every time a sort is added.
+/// Was `_SortRow`, sort only. The filter joins it here rather than living in
+/// a row of its own above or below: both decide what the shelf underneath
+/// shows, and a reader who has just switched to Notes is a reasonable
+/// candidate to reach for Sort next.
 ///
-/// A `Wrap` rather than a `Row`. At 360dp with doubled text the two labels do
-/// not fit on one line, and a low-vision app clipping the word that says
-/// which order the shelf is in has failed at the one thing this row does.
-class _SortRow extends StatelessWidget {
+/// The outer `Wrap` uses `WrapAlignment.spaceBetween` rather than a `Row`,
+/// for the same reason the sort controls already used a `Wrap` of their own:
+/// at 360dp with doubled text the filter and the sort controls do not fit on
+/// one line, and this wraps the filter onto its own line above sort rather
+/// than clipping or overlapping either one.
+class _ControlsRow extends StatelessWidget {
+  final _LibraryFilter filter;
+  final ValueChanged<_LibraryFilter>? onFilter;
   final LibrarySort sort;
   final bool reversed;
   final ValueChanged<LibrarySort>? onSort;
   final VoidCallback? onFlip;
 
-  const _SortRow({
+  const _ControlsRow({
+    required this.filter,
+    required this.onFilter,
     required this.sort,
     required this.reversed,
     required this.onSort,
@@ -371,17 +514,17 @@ class _SortRow extends StatelessWidget {
         AppSpacing.sm,
       ),
       child: Wrap(
-        alignment: WrapAlignment.end,
+        alignment: WrapAlignment.spaceBetween,
         crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: AppSpacing.xs,
+        runSpacing: AppSpacing.xs,
         children: [
-          PopupMenuButton<LibrarySort>(
-            enabled: onSort != null,
-            tooltip: 'Sort by',
-            initialValue: sort,
-            onSelected: onSort,
+          PopupMenuButton<_LibraryFilter>(
+            enabled: onFilter != null,
+            tooltip: 'Show',
+            initialValue: filter,
+            onSelected: onFilter,
             itemBuilder: (context) => [
-              for (final option in LibrarySort.values)
+              for (final option in _LibraryFilter.values)
                 PopupMenuItem(value: option, child: Text(option.label)),
             ],
             child: Padding(
@@ -392,20 +535,51 @@ class _SortRow extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(sort.label, style: theme.textTheme.labelLarge),
+                  Text(filter.label, style: theme.textTheme.labelLarge),
                   const Icon(Icons.arrow_drop_down),
                 ],
               ),
             ),
           ),
-          // The label says which end the list starts from rather than
-          // "ascending", which means the newest books under one field and
-          // the letter A under another. Pressing it reads as swapping the
-          // ends, and the label changes to the end you land on.
-          TextButton.icon(
-            onPressed: onFlip,
-            icon: const Icon(Icons.swap_vert, size: 20),
-            label: Text(sort.endLabel(reversed: reversed)),
+          Wrap(
+            alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: AppSpacing.xs,
+            children: [
+              PopupMenuButton<LibrarySort>(
+                enabled: onSort != null,
+                tooltip: 'Sort by',
+                initialValue: sort,
+                onSelected: onSort,
+                itemBuilder: (context) => [
+                  for (final option in LibrarySort.values)
+                    PopupMenuItem(value: option, child: Text(option.label)),
+                ],
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: AppSpacing.md,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(sort.label, style: theme.textTheme.labelLarge),
+                      const Icon(Icons.arrow_drop_down),
+                    ],
+                  ),
+                ),
+              ),
+              // The label says which end the list starts from rather than
+              // "ascending", which means the newest books under one field
+              // and the letter A under another. Pressing it reads as
+              // swapping the ends, and the label changes to the end you
+              // land on.
+              TextButton.icon(
+                onPressed: onFlip,
+                icon: const Icon(Icons.swap_vert, size: 20),
+                label: Text(sort.endLabel(reversed: reversed)),
+              ),
+            ],
           ),
         ],
       ),
@@ -478,146 +652,6 @@ class _AddButton extends StatelessWidget {
   }
 }
 
-/// Two ways to start reading, one above the other.
-///
-/// Halves rather than a list of rows. There are two of these and there is no
-/// third coming that is not a file or a paste, so each one takes half the
-/// panel and the whole half is the tap target. A reader who cannot reliably
-/// hit a small target gets a box the size of a hand instead of a 48dp row.
-///
-/// Each half says what it does and what happens to it afterwards. The
-/// difference between the two is not the source of the text, it is whether
-/// the thing survives closing the app, and a reader finding that out later
-/// is a reader who lost something.
-class _AddMenu extends StatelessWidget {
-  const _AddMenu();
-
-  /// Wide enough to hold two lines of explanation on a phone, capped before
-  /// it becomes a dialog the width of a monitor holding two words.
-  static const double _maxWidth = 480;
-
-  /// Tall enough that each half is a target rather than a row. Grows with
-  /// the reader's text size; the whole panel scrolls once it has to.
-  static const double _minHalfHeight = 148;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final size = MediaQuery.sizeOf(context);
-
-    return Semantics(
-      scopesRoute: true,
-      namesRoute: true,
-      explicitChildNodes: true,
-      label: 'Add something to read',
-      child: Dialog(
-        // Clipped so an ink ripple in either half stops at the rounded
-        // corner rather than painting over it.
-        clipBehavior: Clip.antiAlias,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        backgroundColor: theme.colorScheme.surfaceContainerLow,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadii.md),
-          side: BorderSide(
-            color: theme.colorScheme.outlineVariant,
-            width: theme.dividerTheme.thickness ?? AppHairline.width,
-          ),
-        ),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: _maxWidth,
-            maxHeight: size.height * 0.8,
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _AddMenuHalf(
-                  choice: _AddChoice.epub,
-                  icon: Icons.upload_file,
-                  title: 'Add an EPUB',
-                  detail: 'A book file from this device. It stays in your '
-                      'library and remembers your place.',
-                  minHeight: _minHalfHeight,
-                ),
-                // Takes its colour and weight from the app's one divider
-                // theme, so it thickens with the rest of them under high
-                // contrast.
-                const Divider(),
-                _AddMenuHalf(
-                  choice: _AddChoice.paste,
-                  icon: Icons.content_paste,
-                  title: 'Paste text',
-                  detail: 'Read anything you have copied. Nothing is saved, '
-                      'and it is gone when you close it.',
-                  minHeight: _minHalfHeight,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AddMenuHalf extends StatelessWidget {
-  final _AddChoice choice;
-  final IconData icon;
-  final String title;
-  final String detail;
-  final double minHeight;
-
-  const _AddMenuHalf({
-    required this.choice,
-    required this.icon,
-    required this.title,
-    required this.detail,
-    required this.minHeight,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
-    return Semantics(
-      button: true,
-      label: '$title. $detail',
-      excludeSemantics: true,
-      child: InkWell(
-        onTap: () => Navigator.of(context).pop(choice),
-        child: Container(
-          width: double.infinity,
-          constraints: BoxConstraints(minHeight: minHeight),
-          padding: const EdgeInsets.all(AppSpacing.xl),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 40, color: scheme.onSurface),
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.titleMedium,
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                detail,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// The books themselves, as a grid or as a single column of rows.
 ///
 /// One column is not a narrow grid. A cover stretched across a phone at 200%
@@ -629,12 +663,14 @@ class _BookShelf extends StatelessWidget {
   final Future<Uint8List?> Function(String bookId) coverOf;
   final ValueChanged<BookSummary>? onOpen;
   final ValueChanged<BookSummary> onRemove;
+  final ValueChanged<BookSummary> onEditNote;
 
   const _BookShelf({
     required this.books,
     required this.coverOf,
     required this.onOpen,
     required this.onRemove,
+    required this.onEditNote,
   });
 
   @override
@@ -672,6 +708,7 @@ class _BookShelf extends StatelessWidget {
               cover: coverOf(books[i].id),
               onOpen: onOpen,
               onRemove: onRemove,
+              onEditNote: onEditNote,
             ),
           );
         }
@@ -703,6 +740,7 @@ class _BookShelf extends StatelessWidget {
             width: tileWidth,
             onOpen: onOpen,
             onRemove: onRemove,
+            onEditNote: onEditNote,
           ),
         );
       },
@@ -710,13 +748,14 @@ class _BookShelf extends StatelessWidget {
   }
 }
 
-/// A book in the grid: cover, title, author, place.
+/// A book in the grid: cover, title, author (or a note's date), place.
 class _BookTile extends StatelessWidget {
   final BookSummary book;
   final Future<Uint8List?> cover;
   final double width;
   final ValueChanged<BookSummary>? onOpen;
   final ValueChanged<BookSummary> onRemove;
+  final ValueChanged<BookSummary> onEditNote;
 
   const _BookTile({
     required this.book,
@@ -724,6 +763,7 @@ class _BookTile extends StatelessWidget {
     required this.width,
     required this.onOpen,
     required this.onRemove,
+    required this.onEditNote,
   });
 
   @override
@@ -765,6 +805,15 @@ class _BookTile extends StatelessWidget {
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
+                  )
+                else if (noteDateLabel(book) case final date?)
+                  Text(
+                    date,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 const SizedBox(height: AppSpacing.xs),
                 BookProgressLine(book: book),
@@ -775,7 +824,7 @@ class _BookTile extends StatelessWidget {
         Positioned(
           top: 0,
           right: 0,
-          child: _TileMenu(book: book, onRemove: onRemove),
+          child: _TileMenu(book: book, onRemove: onRemove, onEdit: onEditNote),
         ),
       ],
     );
@@ -788,12 +837,14 @@ class _BookRow extends StatelessWidget {
   final Future<Uint8List?> cover;
   final ValueChanged<BookSummary>? onOpen;
   final ValueChanged<BookSummary> onRemove;
+  final ValueChanged<BookSummary> onEditNote;
 
   const _BookRow({
     required this.book,
     required this.cover,
     required this.onOpen,
     required this.onRemove,
+    required this.onEditNote,
   });
 
   @override
@@ -839,6 +890,15 @@ class _BookRow extends StatelessWidget {
                             style: theme.textTheme.labelSmall?.copyWith(
                               color: theme.colorScheme.onSurfaceVariant,
                             ),
+                          )
+                        else if (noteDateLabel(book) case final date?)
+                          Text(
+                            date,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
                           ),
                         const SizedBox(height: AppSpacing.sm),
                         BookProgressLine(book: book),
@@ -850,7 +910,7 @@ class _BookRow extends StatelessWidget {
             ),
           ),
         ),
-        _TileMenu(book: book, onRemove: onRemove),
+        _TileMenu(book: book, onRemove: onRemove, onEdit: onEditNote),
       ],
     );
   }
@@ -858,25 +918,38 @@ class _BookRow extends StatelessWidget {
 
 /// Actions that are not opening the book.
 ///
-/// Behind a menu rather than beside the title, because the only one of them
-/// is destructive and a mis-tap on a shelf should not start a removal.
+/// Behind a menu rather than beside the title, because one of them is
+/// destructive and a mis-tap on a shelf should not start a removal.
+///
+/// Edit only appears for a note. An EPUB's bytes are the file the reader
+/// picked; there is no text field for those to come back through, and
+/// nothing to write even if there were.
 class _TileMenu extends StatelessWidget {
   final BookSummary book;
   final ValueChanged<BookSummary> onRemove;
+  final ValueChanged<BookSummary> onEdit;
 
-  const _TileMenu({required this.book, required this.onRemove});
+  const _TileMenu({
+    required this.book,
+    required this.onRemove,
+    required this.onEdit,
+  });
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final isNote =
+        BookSourceFormat.fromName(book.sourceFormat) == BookSourceFormat.note;
 
     return PopupMenuButton<String>(
       tooltip: 'More for ${book.title}',
       // A named value rather than a nullable one: PopupMenuButton reads a
       // null result as a dismissal and never calls onSelected.
-      onSelected: (_) => onRemove(book),
-      itemBuilder: (context) => const [
-        PopupMenuItem<String>(value: 'remove', child: Text('Remove')),
+      onSelected: (value) => value == 'edit' ? onEdit(book) : onRemove(book),
+      itemBuilder: (context) => [
+        if (isNote)
+          const PopupMenuItem<String>(value: 'edit', child: Text('Edit')),
+        const PopupMenuItem<String>(value: 'remove', child: Text('Remove')),
       ],
       icon: DecoratedBox(
         // The icon sits over a cover it knows nothing about, so it carries
@@ -913,13 +986,13 @@ class _EmptyLibrary extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'No books yet',
+              'Nothing here yet',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              'Add an EPUB to start reading, or paste text to try it out. '
-              'Books stay on this device.',
+              'Add an EPUB or write a note to start reading, or paste text '
+              'to try it out. Books and notes stay on this device.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium,
             ),
@@ -929,6 +1002,73 @@ class _EmptyLibrary extends StatelessWidget {
               style: FilledButton.styleFrom(minimumSize: const Size(200, 56)),
               icon: const Icon(Icons.add),
               label: const Text('Add something to read'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// What a filtered shelf shows when nothing on it matches the filter.
+///
+/// Distinct from [_EmptyLibrary]: the library itself is not empty, only this
+/// slice of it is, so this names the filter rather than repeating the
+/// library's own empty pitch, and the [_ControlsRow] stays on screen above
+/// it — switching back to All is always one tap away, never a dead end.
+///
+/// The button goes straight to the one action this filter can be missing:
+/// file picking under Books, the note editor under Notes. It does not open
+/// the general add menu, which would ask the reader to repeat a choice this
+/// screen already told it.
+class _FilteredEmptyState extends StatelessWidget {
+  final _LibraryFilter filter;
+  final VoidCallback? onAdd;
+
+  const _FilteredEmptyState({required this.filter, required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) {
+    final (heading, detail, buttonLabel) = switch (filter) {
+      _LibraryFilter.epub => (
+        'No EPUBs yet',
+        'Everything in this library so far is a note. Add a book file, '
+            'or switch back to All to see the rest.',
+        'Add an EPUB',
+      ),
+      _LibraryFilter.note => (
+        'No notes yet',
+        'Everything in this library so far is a book file. Write a note, '
+            'or switch back to All to see the rest.',
+        'Write a note',
+      ),
+      // build() only reaches this widget once the pre-filter list is
+      // already non-empty, and the All filter matches everything in it —
+      // so an empty result under All never happens.
+      _LibraryFilter.all => throw StateError(
+        '_FilteredEmptyState is unreachable for the all filter',
+      ),
+    };
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xxl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(heading, style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              detail,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: AppSpacing.xl),
+            FilledButton.icon(
+              onPressed: onAdd,
+              style: FilledButton.styleFrom(minimumSize: const Size(200, 56)),
+              icon: const Icon(Icons.add),
+              label: Text(buttonLabel),
             ),
           ],
         ),

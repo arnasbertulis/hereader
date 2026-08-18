@@ -1,6 +1,25 @@
+import 'dart:convert';
+import 'dart:math';
+
 import 'package:epub_reader/epub_reader.dart';
 import 'package:flutter/foundation.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
+
+/// How a book's stored [Uint8List] is parsed: an EPUB archive, or a note's
+/// UTF-8 text.
+///
+/// Stored on [Books] as [name], not a raw string threaded through by hand,
+/// so an unrecognised value on disk (a build ahead of this one, or a hand
+/// edit) has one place to fall back rather than every call site guessing.
+enum BookSourceFormat {
+  epub,
+  note;
+
+  static BookSourceFormat fromName(String name) => values.firstWhere(
+    (f) => f.name == name,
+    orElse: () => BookSourceFormat.epub,
+  );
+}
 
 /// A place in the book the reader can jump to by name.
 ///
@@ -111,6 +130,21 @@ class LibraryBook {
     if (position == null) return contentStartIndex;
     return text.indexOf(position!) ?? contentStartIndex;
   }
+
+  /// An id for a newly written note.
+  ///
+  /// Same shape as `ReadingProfile.newId`: a millisecond timestamp plus 32
+  /// random bits from two 16-bit draws multiplied together rather than one
+  /// `nextInt(1 << 32)`, which is exact under dart2js — see that method's
+  /// own comment for why a shift-based version is not. Not shared code with
+  /// it: the two live in different packages, and duplicating four lines
+  /// costs less than a cross-package dependency for a generator this small.
+  static String newNoteId() {
+    final random = Random.secure();
+    final entropy = random.nextInt(0x10000) * 0x10000 + random.nextInt(0x10000);
+    return 'note.${DateTime.now().toUtc().millisecondsSinceEpoch}'
+        '.${entropy.toRadixString(16).padLeft(8, '0')}';
+  }
 }
 
 /// Parses and tokenizes a book. Top-level because [compute] cannot send a
@@ -163,6 +197,72 @@ LibraryBook _parseBook(Uint8List bytes) {
     chapters: chaptersOf(book, text),
     coverBytes: book.coverBytes,
   );
+}
+
+/// A note's own href, namespacing its block ids the way a spine document's
+/// href namespaces an EPUB's. One note is one document; there is nothing
+/// else for it to collide with.
+const _noteHref = 'note';
+
+/// Blank-line boundary between paragraphs in raw note text.
+final _blankLine = RegExp(r'\n\s*\n');
+
+/// Turns raw note text into the XHTML-ish string [HtmlNormalizer] expects,
+/// so a note produces real [Block]s through the same normalizer a spine
+/// document does rather than a bespoke path of its own.
+///
+/// Paragraphs are blank-line-separated, the way a `<p>` boundary would be. A
+/// single line break inside one paragraph is not a boundary: it collapses
+/// the same way [HtmlNormalizer] already collapses any other block's
+/// internal whitespace, since nothing here marks a soft wrap as meaningful.
+String _noteHtml(String text) {
+  final buffer = StringBuffer();
+
+  for (final paragraph in text.split(_blankLine)) {
+    final trimmed = paragraph.trim();
+    if (trimmed.isEmpty) continue;
+
+    buffer
+      ..write('<p>')
+      ..write(
+        trimmed
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;'),
+      )
+      ..write('</p>');
+  }
+
+  return buffer.toString();
+}
+
+/// Parses a note. Top-level and record-typed for the same reason as
+/// [_parseBook]: [compute] cannot send a closure, and takes one argument.
+///
+/// Unlike an EPUB, nothing in a note's own bytes can supply an id or a
+/// title — there is no OPF to read one from — so both travel in with the
+/// bytes rather than being derived from them.
+LibraryBook _parseNote(({Uint8List bytes, String id, String title}) input) {
+  final source = utf8.decode(input.bytes, allowMalformed: true);
+
+  final normalized = const HtmlNormalizer().normalize(
+    _noteHtml(source),
+    href: _noteHref,
+  );
+
+  final text = TokenizedText.from(
+    normalized.blocks.map((b) => (id: b.id, text: b.text)),
+    parserVersion: kParserVersion,
+  );
+
+  // Reuses EpubException rather than a note-specific type: it is already
+  // what BookImporter throws and every caller already catches, and a note
+  // with no readable words is the same failure for the reader either way.
+  if (text.isEmpty) {
+    throw const EpubException('The note contains no readable words.');
+  }
+
+  return LibraryBook(id: input.id, title: input.title, text: text);
 }
 
 /// Turns the parsed table of contents into something the reader can jump to.
@@ -219,11 +319,13 @@ String _idFor(EpubMetadata metadata) {
   return '${metadata.title}|${metadata.author ?? ""}';
 }
 
-/// Imports EPUB files into the library.
+/// Imports EPUB files into the library, and parses notes on write and on
+/// every reopen.
 class BookImporter {
   const BookImporter();
 
-  /// Parses [bytes] off the UI isolate on native targets, and on it on web.
+  /// Parses freshly picked EPUB [bytes] off the UI isolate on native
+  /// targets, and on it on web.
   ///
   /// See the note on [_parseBook]: `compute()` runs inline in a browser. The
   /// asymmetry is deliberate to leave visible rather than hidden behind a
@@ -237,6 +339,36 @@ class BookImporter {
       rethrow;
     } catch (e) {
       throw const EpubException('The file could not be read as an EPUB.');
+    }
+  }
+
+  /// Parses a note's text into a [LibraryBook], the way [import] parses an
+  /// EPUB. Called both when the note is first written, to learn its word
+  /// count before the row exists, and every time it is reopened.
+  Future<LibraryBook> openNote(
+    Uint8List bytes, {
+    required String id,
+    required String title,
+  }) => compute(_parseNote, (bytes: bytes, id: id, title: title));
+
+  /// Re-parses a book already in the library, dispatching on the format it
+  /// was stored under.
+  ///
+  /// An EPUB's title and id come back out of its own bytes, unchanged from
+  /// when it was imported — [import] already ignores anything the caller
+  /// might think it knows about them. A note's bytes carry neither, so the
+  /// caller's own copy of them has to travel in instead.
+  Future<LibraryBook> reopenStored(
+    Uint8List bytes, {
+    required BookSourceFormat sourceFormat,
+    required String id,
+    required String title,
+  }) {
+    switch (sourceFormat) {
+      case BookSourceFormat.epub:
+        return import(bytes);
+      case BookSourceFormat.note:
+        return openNote(bytes, id: id, title: title);
     }
   }
 }
