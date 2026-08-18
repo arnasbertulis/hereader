@@ -170,6 +170,21 @@ rewind on every single word.
 Resuming from `paused` steps back by `rewindWords`; an explicit `rewind()` does
 not, so holding a back button does not compound one on top of the other.
 
+`stopAt(index)` is the move a reader made deliberately: it stops where it lands
+and suppresses exactly one resume rewind, because someone who has just stepped
+onto a word does not want to be moved off it when they start again. Any
+`pause()` clears the suppression. `awaitingAdvance` is the one state it does
+not turn into a pause, for the reason above.
+
+`TokenizedText` answers where the next sentence and the next paragraph start,
+since those are questions about the text rather than about the clock, and only
+it knows where the blocks are. A sentence end is a token whose `pauseAfter` is
+`sentence` *or* `paragraph` — the tokenizer takes the longer of the punctuation
+pause and the whitespace pause, so a full stop followed by a blank line reports
+only the paragraph and the sentence underneath it would otherwise be stepped
+over. A paragraph ends at the nearer of the next block and the next in-block
+`PauseAfter.paragraph`, which covers both normalized blocks and raw prose.
+
 Timing chains `Timer` directly rather than driving from a `Ticker`, so
 `fake_async` can step a whole paragraph in microseconds. The side effect is
 that word onset does not quantise to frame delivery, which matters on the web,

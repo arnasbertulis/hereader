@@ -229,4 +229,68 @@ class TokenizedText {
     if (tokens.isEmpty) return 0;
     return ((tokenIndex + 1) / tokens.length).clamp(0.0, 1.0);
   }
+
+  /// First token of the next sentence after [tokenIndex], or null when
+  /// [tokenIndex] is inside the last one.
+  ///
+  /// Matches [PauseAfter.paragraph] as well as [PauseAfter.sentence].
+  /// `Tokenizer` takes the longer of the pause its punctuation implies and
+  /// the pause its trailing whitespace implies, so a `.` followed by a blank
+  /// line reports `paragraph` and the sentence end underneath it is
+  /// invisible. A scan matching only `sentence` would step clean over it and
+  /// land at the end of the sentence after.
+  ///
+  /// A block-final `.` is not that case and reports `sentence`: blocks are
+  /// tokenized one at a time, so there is no whitespace after the last token
+  /// of one for the rule above to read. The masking is reachable only from a
+  /// blank line inside a single block, which is what a caller handing this
+  /// type prose that never went through a normalizer produces.
+  ///
+  /// Null rather than the last index, so a caller can tell "there is no next
+  /// sentence" from "the next sentence is one word long" and offer no control
+  /// rather than one that does nothing.
+  int? nextSentenceStart(int tokenIndex) {
+    final from = tokenIndex < 0 ? 0 : tokenIndex;
+
+    for (var i = from; i < tokens.length - 1; i++) {
+      final pause = tokens[i].pauseAfter;
+      if (pause == PauseAfter.sentence || pause == PauseAfter.paragraph) {
+        return i + 1;
+      }
+    }
+    return null;
+  }
+
+  /// First token of the next paragraph after [tokenIndex], or null when
+  /// [tokenIndex] is inside the last one.
+  ///
+  /// A paragraph ends at whichever comes first of two things, because the two
+  /// sources of one apply to different texts:
+  ///
+  /// - **The next block.** `HtmlNormalizer` emits one block per `<p>`, so for
+  ///   an EPUB — and for a note, which goes through the same normalizer — the
+  ///   block boundary *is* the paragraph boundary and this is the only source
+  ///   that ever fires.
+  /// - **A token marked [PauseAfter.paragraph].** The tokenizer sets that from
+  ///   two or more newlines inside one block's text, which is what a caller
+  ///   handing this type unnormalized prose produces.
+  ///
+  /// Taking the smaller of the two means neither source can be the wrong one
+  /// for the text in hand.
+  int? nextParagraphStart(int tokenIndex) {
+    if (tokenIndex < 0 || tokenIndex >= tokens.length) return null;
+
+    final block = blockIndexOf(tokenIndex);
+    final blockEnd = block + 1 < _blockStarts.length
+        ? _blockStarts[block + 1]
+        : tokens.length;
+
+    // Bounded by the block, so this scans one paragraph rather than the book
+    // when the block boundary is the answer.
+    for (var i = tokenIndex; i < blockEnd - 1; i++) {
+      if (tokens[i].pauseAfter == PauseAfter.paragraph) return i + 1;
+    }
+
+    return blockEnd < tokens.length ? blockEnd : null;
+  }
 }

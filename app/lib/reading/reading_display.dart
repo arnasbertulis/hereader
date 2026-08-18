@@ -27,7 +27,32 @@ import '../data/library_repository.dart';
 /// Preference keys, in the `ui.` namespace `activeProfileKey` established.
 abstract final class ReadingDisplayKeys {
   static const timeLeftScope = 'ui.time_left_scope';
+  static const stepWords = 'ui.step_words';
 }
+
+/// How far one deliberate step moves, in words.
+///
+/// The reading surface's left and right quarters and the Left and Right keys
+/// all move by this. See ADR 0020.
+///
+/// Not `ReadingProfile.rewindWords`, which answers a different question: how
+/// far a *resume* re-enters the sentence after a pause. That belongs to a
+/// reading style and so travels with the profile; this belongs to the input —
+/// a thumb on a phone and an arrow key on a desktop want different grains —
+/// and so stays on the device, like every other `ui.` key.
+const kDefaultStepWords = 1;
+const kMinStepWords = 1;
+const kMaxStepWords = 10;
+
+/// A minimum of one, not zero. At zero both edge zones become controls that
+/// visibly do nothing, and the centre already covers stopping where you are.
+///
+/// Never throws, and clamps rather than falling back: a value written by a
+/// build that offered a wider range should degrade to the nearest one this
+/// build can honour, which is nearer the reader's intent than the default is.
+int decodeStepWords(String? value) =>
+    int.tryParse(value ?? '')?.clamp(kMinStepWords, kMaxStepWords) ??
+    kDefaultStepWords;
 
 /// What the time-left figure counts down to.
 enum TimeLeftScope { chapter, book }
@@ -50,14 +75,18 @@ TimeLeftScope decodeTimeLeftScope(String? value) => switch (value) {
   _ => TimeLeftScope.chapter,
 };
 
-/// How the reader's place is described on a tile, and the controller that
-/// stores it.
+/// What Settings › Reading writes, and the controller that holds it.
 ///
-/// One setting, which is why this is a small class rather than a section of
-/// an existing one. It is a `ChangeNotifier` rather than a value read per
-/// screen because the shell keeps every tab alive in a cross-fading stack:
-/// a preference Home read once when it was built would still be the old one
-/// after the reader changed it in Settings and faded back.
+/// A `ChangeNotifier` rather than a value read per screen because the shell
+/// keeps every tab alive in a cross-fading stack: a preference Home read once
+/// when it was built would still be the old one after the reader changed it in
+/// Settings and faded back.
+///
+/// [stepWords] has no such consumer in the shell — the reader is a route
+/// pushed above it, and `ReaderScreen` reads the key itself at open through
+/// the repository it already holds, decoded by the same [decodeStepWords].
+/// It lives here because this is where the settings page writes, and one key
+/// with one decoder read from two places is not two definitions of it.
 class ReadingDisplayController extends ChangeNotifier {
   final LibraryRepository repository;
 
@@ -65,6 +94,7 @@ class ReadingDisplayController extends ChangeNotifier {
   final Future<String> Function() issueStamp;
 
   TimeLeftScope _timeLeftScope = TimeLeftScope.chapter;
+  int _stepWords = kDefaultStepWords;
 
   ReadingDisplayController({
     required this.repository,
@@ -73,14 +103,18 @@ class ReadingDisplayController extends ChangeNotifier {
 
   TimeLeftScope get timeLeftScope => _timeLeftScope;
 
-  /// Reads the stored value. Called from `_start()` before `runApp`,
+  int get stepWords => _stepWords;
+
+  /// Reads the stored values. Called from `_start()` before `runApp`,
   /// alongside `AppearanceController.restore`.
   Future<void> restore() async {
-    final stored = await repository.preference(
+    final scope = await repository.preference(
       ReadingDisplayKeys.timeLeftScope,
     );
+    final step = await repository.preference(ReadingDisplayKeys.stepWords);
 
-    _timeLeftScope = decodeTimeLeftScope(stored);
+    _timeLeftScope = decodeTimeLeftScope(scope);
+    _stepWords = decodeStepWords(step);
 
     notifyListeners();
   }
@@ -98,6 +132,24 @@ class ReadingDisplayController extends ChangeNotifier {
     );
 
     _timeLeftScope = scope;
+    notifyListeners();
+  }
+
+  /// Clamped rather than asserted. The slider cannot produce a value outside
+  /// the range, so an out-of-range one means a caller this class cannot see,
+  /// and pinning it is a better answer than throwing on a settings screen.
+  Future<void> setStepWords(int words) async {
+    final next = words.clamp(kMinStepWords, kMaxStepWords);
+    if (next == _stepWords) return;
+
+    await repository.setPreference(
+      ReadingDisplayKeys.stepWords,
+      '$next',
+      hlc: await issueStamp(),
+      sync: false,
+    );
+
+    _stepWords = next;
     notifyListeners();
   }
 }

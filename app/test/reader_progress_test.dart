@@ -2,7 +2,6 @@ import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
 import 'package:app/reading/library_book.dart';
 import 'package:app/reading/reader_screen.dart';
-import 'package:app/reading/rsvp_view.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -78,13 +77,10 @@ void main() {
     // alone would skip this, because a rewind while paused emits without
     // changing state.
     //
-    // Driven from the arrow key rather than from a button. ADR 0015 took
-    // the rewind button off the reading surface ahead of the left and right
-    // tap zones, so the binding is the only rewind a reader has and nothing
-    // else in the suite exercises it. That makes this test assert two
-    // things at once, which is usually the sign of a bad test; here it is
-    // the honest shape, because the button it used to press no longer
-    // exists and the behaviour it was checking still does.
+    // Driven from the arrow key. The tap zones ADR 0015 deferred exist now
+    // (ADR 0020) and `reader_tap_zones_test.dart` covers them; this stays on
+    // the key because a reader on a keyboard or a switch has no zone to
+    // reach for, and the two paths are separately breakable.
     testWidgets('follows a rewind taken while paused', (tester) async {
       await tester.pumpWidget(reader());
       await tester.pumpAndSettle();
@@ -92,7 +88,7 @@ void main() {
       await tester.tap(find.byKey(readerPlayButtonKey));
       await tester.pump(const Duration(seconds: 2));
 
-      await tester.tap(find.byType(RsvpView));
+      await tester.tap(find.byKey(readerTapCentreKey));
       await tester.pumpAndSettle();
 
       final afterPause = _progress(tester);
@@ -122,7 +118,7 @@ void main() {
       await tester.tap(find.byKey(readerPlayButtonKey));
       await tester.pump(const Duration(seconds: 2));
 
-      await tester.tap(find.byType(RsvpView));
+      await tester.tap(find.byKey(readerTapCentreKey));
       await tester.pumpAndSettle();
 
       expect(_progress(tester), greaterThan(atOpen));

@@ -7,6 +7,7 @@ import '../data/library_repository.dart';
 import '../theme/app_icons.dart';
 import 'profile_presentation.dart';
 import 'rsvp_view.dart';
+import 'setting_slider.dart';
 
 /// Identifies the switch that puts a profile back to following the app theme.
 ///
@@ -204,7 +205,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               ),
             ),
 
-            _SettingSlider(
+            SettingSlider(
               label: 'Reading speed',
               value: pacing.baseWpm,
               valueLabel: '${pacing.baseWpm.round()} wpm',
@@ -215,7 +216,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               onChanged: (v) => _updatePacing((p) => p.copyWith(baseWpm: v)),
             ),
 
-            _SettingSlider(
+            SettingSlider(
               label: 'Length scaling',
               value: pacing.lengthScaleStrength,
               valueLabel: pacing.lengthScaleStrength == 0
@@ -234,7 +235,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                   _updatePacing((p) => p.copyWith(lengthScaleStrength: v)),
             ),
 
-            _SettingSlider(
+            SettingSlider(
               label: 'Pause at commas',
               value: pacing.clausePause.inMilliseconds.toDouble(),
               valueLabel: '${pacing.clausePause.inMilliseconds} ms',
@@ -248,7 +249,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               ),
             ),
 
-            _SettingSlider(
+            SettingSlider(
               label: 'Pause at sentences',
               value: pacing.sentencePause.inMilliseconds.toDouble(),
               valueLabel: '${pacing.sentencePause.inMilliseconds} ms',
@@ -263,7 +264,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               ),
             ),
 
-            _SettingSlider(
+            SettingSlider(
               label: 'Pause at paragraphs',
               value: pacing.paragraphPause.inMilliseconds.toDouble(),
               valueLabel: '${pacing.paragraphPause.inMilliseconds} ms',
@@ -278,7 +279,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               ),
             ),
 
-            _SettingSlider(
+            SettingSlider(
               label: 'Rewind on resume',
               value: _draft.rewindWords.toDouble(),
               valueLabel: _draft.rewindWords == 0
@@ -299,7 +300,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             // -- text --------------------------------------------------
             const _SectionHeader('Text'),
 
-            _SettingSlider(
+            SettingSlider(
               label: 'Type size',
               value: presentation.fontSizePt,
               valueLabel: '${presentation.fontSizePt.round()} pt',
@@ -311,7 +312,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                   _updatePresentation((p) => p.copyWith(fontSizePt: v)),
             ),
 
-            _SettingSlider(
+            SettingSlider(
               label: 'Letter spacing',
               value: presentation.letterSpacingEm,
               valueLabel: presentation.letterSpacingEm == 0
@@ -329,7 +330,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                   _updatePresentation((p) => p.copyWith(letterSpacingEm: v)),
             ),
 
-            _SettingSlider(
+            SettingSlider(
               label: 'Position across',
               value: presentation.anchorX,
               valueLabel: '${(presentation.anchorX * 100).round()}%',
@@ -344,7 +345,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                   _updatePresentation((p) => p.copyWith(anchorX: v)),
             ),
 
-            _SettingSlider(
+            SettingSlider(
               label: 'Position down',
               value: presentation.anchorY,
               valueLabel: '${(presentation.anchorY * 100).round()}%',
@@ -356,7 +357,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                   _updatePresentation((p) => p.copyWith(anchorY: v)),
             ),
 
-            _SettingSlider(
+            SettingSlider(
               label: 'Fade between words',
               value: presentation.transitionMs.toDouble(),
               valueLabel: presentation.transitionMs == 0
@@ -749,101 +750,6 @@ class _ContrastReadout extends StatelessWidget {
   }
 }
 
-class _SettingSlider extends StatelessWidget {
-  final String label;
-  final String valueLabel;
-  final double value;
-  final double min;
-  final double max;
-  final int? divisions;
-  final bool enabled;
-  final String? help;
-
-  /// Shown below [help], in the error colour. For a value that is legal and
-  /// saveable but produces something the reader probably did not intend.
-  final String? warning;
-  final ValueChanged<double> onChanged;
-
-  const _SettingSlider({
-    required this.label,
-    required this.valueLabel,
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.onChanged,
-    this.divisions,
-    this.enabled = true,
-    this.help,
-    this.warning,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final dim = theme.disabledColor;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(label, style: enabled ? null : TextStyle(color: dim)),
-              Text(
-                valueLabel,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: enabled ? null : dim,
-                ),
-              ),
-            ],
-          ),
-          Slider(
-            // Clamped because a profile written by another build may sit
-            // outside the range this one offers, and Slider throws rather
-            // than pinning.
-            value: value.clamp(min, max),
-            min: min,
-            max: max,
-            divisions: divisions,
-            label: valueLabel,
-            onChanged: enabled ? onChanged : null,
-          ),
-          if (help != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Text(help!, style: theme.textTheme.bodySmall),
-            ),
-          if (warning != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    AppIcons.settingWarns,
-                    size: 16,
-                    color: theme.colorScheme.error,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      warning!,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.error,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
 /// Background colour, as red, green and blue.
 ///
 /// Sliders rather than a colour wheel: this app is used by people who cannot
@@ -902,7 +808,7 @@ class _BackgroundField extends StatelessWidget {
             ],
           ),
         ),
-        _SettingSlider(
+        SettingSlider(
           label: 'Red',
           value: red.toDouble(),
           valueLabel: '$red',
@@ -912,7 +818,7 @@ class _BackgroundField extends StatelessWidget {
           enabled: enabled,
           onChanged: (v) => onChanged(argbFrom(v.round(), green, blue)),
         ),
-        _SettingSlider(
+        SettingSlider(
           label: 'Green',
           value: green.toDouble(),
           valueLabel: '$green',
@@ -922,7 +828,7 @@ class _BackgroundField extends StatelessWidget {
           enabled: enabled,
           onChanged: (v) => onChanged(argbFrom(red, v.round(), blue)),
         ),
-        _SettingSlider(
+        SettingSlider(
           label: 'Blue',
           value: blue.toDouble(),
           valueLabel: '$blue',
