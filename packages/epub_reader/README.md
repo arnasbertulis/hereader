@@ -41,7 +41,8 @@ whole book, on the grounds that one broken chapter should not make a book
 unopenable.
 
 The normalizer can also be used directly on a single document, which is how it
-is tested:
+is tested — and how the app parses a note, so a note's text goes through the
+same walk a chapter does rather than through a path of its own:
 
 ```dart
 final document = const HtmlNormalizer().normalize(
@@ -61,6 +62,15 @@ reading position costs a paragraph rather than a chapter.
 `Block.id` derives from the spine href and the block's position within that
 document, never from its content. Two identical paragraphs would collide under
 a content hash, and correcting a typo would move the reader's saved position.
+
+The hash is 32-bit FNV-1a with its multiplication step decomposed into shifts.
+`dart2js` represents a Dart `int` as a JS double, exact only to 2^53, so the
+64-bit version this started as silently failed to compile for web. `Block`
+carries literal expected ids in its tests on both targets — the compiler
+caught the 64-bit break and in doing so concealed that nothing asserted what
+the hash actually returned, and an error in the shift decomposition would have
+compiled cleanly, produced different ids and invalidated every stored position
+on every device.
 
 `Block.text` is normalized: whitespace collapsed to single spaces, inline
 markup flattened, entities decoded. Character offsets in a stored locator
@@ -92,7 +102,8 @@ EPUB 3 declares it in a navigation document flagged `properties="nav"` in the
 manifest; EPUB 2 declares it in an NCX named by the spine's `toc` attribute.
 The newer form wins where a book carries both, which is most of them. Nothing
 is inferred when a book declares neither: a list derived from headings looks
-like a table of contents and is not one.
+like a table of contents and is not one. See
+[ADR 0010](../../docs/adr/0010-chapter-navigation.md).
 
 Fragments matter and are resolved. Converters chunk a book by act rather than
 by scene, so several entries commonly point into the same spine document
@@ -100,9 +111,31 @@ differing only after the `#`. `NormalizedDocument.anchors` records where each
 fragment falls in the block list, which is what stops those entries collapsing
 onto one destination.
 
+Anchors are collected in the same walk that emits blocks, held pending and
+attached to the next block emitted. One rule covers three shapes: an id on the
+block itself, on a container wrapping it — where Gutenberg's converter puts
+chapter fragments — or on an empty inline anchor inside it. An anchor on a
+block dropped for length carries forward to the next block kept, and the first
+claim on an index wins.
+
 Reading it never throws. An entry pointing at a missing document, at one that
 produced no text, or at one the spine marks `linear="no"` is dropped, and a
 book with an unreadable navigation document is still a readable book.
+
+## Covers
+
+`EpubBook.coverBytes` is the declared cover image exactly as the archive
+stored it, and `EpubMetadata.coverHref` is where it came from. EPUB 3 marks it
+with `properties="cover-image"` on the manifest item; EPUB 2 uses a
+`<meta name="cover">` pointing at a manifest id. Both appear in the wild and
+both are read.
+
+A cover the book cannot supply is null rather than an exception. A spine
+document that will not load makes a book unreadable; a missing cover does not,
+and the app draws a face from the title instead.
+
+Carried out of the parse rather than extracted later, because the parse has
+already unzipped the archive and worked out which entry the cover is.
 
 ## What is dropped
 
@@ -116,7 +149,12 @@ Spine items that are not markup, such as SVG cover wrappers, are skipped.
 
 ```bash
 dart test
+dart test -p chrome
 ```
+
+Both are required in CI, and the browser run is why the block-id hash is
+written the way it is. See
+[ADR 0009](../../docs/adr/0009-web-platform-coverage.md).
 
 The normalizer and front matter detection are pure, so they test against
 string literals. The container parser is tested against EPUBs built in memory
@@ -125,15 +163,17 @@ binaries.
 
 `test/fixtures/` holds one real Project Gutenberg book. Synthetic fixtures
 only confirm the assumptions this package already makes; that one was written
-by someone else's toolchain, and its asserted block and character counts are
-observed output. If a normalizer change moves them, that is a real change to
-stored reading positions: update the numbers and bump `kParserVersion` in the
-same commit.
+by someone else's toolchain, and its asserted block and character counts —
+1154 blocks, 157920 characters — are observed output. If a normalizer change
+moves them, that is a real change to stored reading positions: update the
+numbers and bump `kParserVersion` in the same commit. The same fixture is what
+the table of contents test resolves 35 entries against, each landing on a
+distinct block in reading order.
 
 ## Status
 
 Built: `Block`, `HtmlNormalizer`, `EpubParser`, front matter detection, table
-of contents parsing with fragment resolution.
+of contents parsing with fragment resolution, cover extraction.
 
 Not yet built: using the OPF language tag to select a per-language tokenizer
 configuration.
