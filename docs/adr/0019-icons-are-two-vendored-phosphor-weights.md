@@ -154,7 +154,15 @@ that, the two Phosphor subsets add 11584. Net, about 7KB.
 The build also emits a pre-existing warning about `cupertino_icons`, confirmed
 present on `main` before this change and unrelated to it.
 
-Not yet run: the screens themselves, on any platform. Every glyph in the roster
-resolved and every subset built, and neither of those says the right picture is
-in the right place. That is a run with eyes on it, and this section will be
-rewritten when it has happened.
+Checked by hand on Windows, and this paragraph replaces one that said "not yet
+run" while it had not been. The screens draw as intended: no empty box from a
+codepoint outside the subset, and no glyph landing on the wrong role. Those
+are the two failures nothing else here can see, since a widget test matches an
+`IconData` by value rather than by shape.
+
+Outstanding: Android Chrome, along with everything else since the UI pass. The
+icons are static glyphs rather than anything animated or translated, so the
+frame throttle recorded under known limitations does not reach them — an
+expectation, not a result. What is worth an actual look there is size: Light's
+strokes were chosen against a physical pixel at 20-24dp, and the device that
+argument is about is a phone.
