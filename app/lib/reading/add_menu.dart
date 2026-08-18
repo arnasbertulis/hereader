@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 
 /// What the add menu came back with.
@@ -71,7 +72,7 @@ class AddMenu extends StatelessWidget {
               children: [
                 _AddMenuOption(
                   choice: AddChoice.epub,
-                  icon: Icons.upload_file,
+                  icon: AppIcons.importFile,
                   title: 'Add an EPUB',
                   detail:
                       'A book file from this device. It stays in your '
@@ -84,7 +85,7 @@ class AddMenu extends StatelessWidget {
                 const Divider(),
                 _AddMenuOption(
                   choice: AddChoice.note,
-                  icon: Icons.edit_note,
+                  icon: AppIcons.writeNote,
                   title: 'Write a note',
                   detail:
                       'Type something to read. It stays in your '
@@ -94,7 +95,7 @@ class AddMenu extends StatelessWidget {
                 const Divider(),
                 _AddMenuOption(
                   choice: AddChoice.paste,
-                  icon: Icons.content_paste,
+                  icon: AppIcons.pasteText,
                   title: 'Paste text',
                   detail:
                       'Read anything you have copied. Nothing is saved, '

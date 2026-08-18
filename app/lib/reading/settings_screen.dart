@@ -7,6 +7,7 @@ import '../sync/auth_store.dart';
 import '../sync/last_synced.dart';
 import '../sync/sync_engine.dart';
 import '../theme/app_colors.dart';
+import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import '../theme/appearance.dart';
 import 'about_screen.dart';
@@ -119,7 +120,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     stream: widget.api.auth.sessions,
                     initialData: widget.api.auth.current,
                     builder: (context, session) => _IndexRow(
-                      icon: Icons.person_outline,
+                      icon: AppIcons.sectionAccount,
                       title: 'Account',
                       value: session.data == null
                           ? 'Not signed in'
@@ -130,7 +131,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   _IndexRow(
-                    icon: Icons.text_fields_outlined,
+                    icon: AppIcons.sectionProfiles,
                     title: 'Reading profiles',
                     value: _profilesValue(profiles),
                     onTap: () => _push(
@@ -141,21 +142,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   _IndexRow(
-                    icon: Icons.palette_outlined,
+                    icon: AppIcons.sectionAppearance,
                     title: 'Appearance',
                     value: describeAppearance(widget.appearance.settings),
                     onTap: () =>
                         _push(AppearanceScreen(controller: widget.appearance)),
                   ),
                   _IndexRow(
-                    icon: Icons.auto_stories_outlined,
+                    icon: AppIcons.sectionReading,
                     title: 'Reading',
                     value: describeReading(widget.display.timeLeftScope),
                     onTap: () =>
                         _push(ReadingSettingsScreen(display: widget.display)),
                   ),
                   _IndexRow(
-                    icon: Icons.sync_outlined,
+                    icon: AppIcons.sectionSync,
                     title: 'Sync',
                     value: widget.api.auth.isSignedIn
                         ? describeLastSynced(_lastSynced)
@@ -169,7 +170,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ),
                   _IndexRow(
-                    icon: Icons.info_outline,
+                    icon: AppIcons.sectionAbout,
                     title: 'About',
                     value:
                         'Licence, research, and what this app does not claim',
@@ -260,7 +261,7 @@ class _IndexRow extends StatelessWidget {
           color: theme.colorScheme.onSurfaceVariant,
         ),
       ),
-      trailing: const Icon(Icons.chevron_right),
+      trailing: const Icon(AppIcons.openSection),
       onTap: onTap,
     );
   }

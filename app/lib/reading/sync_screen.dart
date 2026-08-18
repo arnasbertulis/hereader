@@ -4,6 +4,7 @@ import '../data/library_repository.dart';
 import '../sync/api_client.dart';
 import '../sync/last_synced.dart';
 import '../sync/sync_engine.dart';
+import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 
 /// What sync has done, and a way to make it run now.
@@ -134,13 +135,13 @@ class _SyncScreenState extends State<SyncScreen> {
   }
 
   IconData _iconFor(SyncStatus status, bool signedIn) {
-    if (!signedIn) return Icons.cloud_off_outlined;
+    if (!signedIn) return AppIcons.syncSignedOut;
 
     return switch (status) {
-      SyncStatus.syncing => Icons.sync,
-      SyncStatus.offline => Icons.cloud_off,
-      SyncStatus.failed => Icons.error_outline,
-      _ => Icons.cloud_done_outlined,
+      SyncStatus.syncing => AppIcons.syncRunning,
+      SyncStatus.offline => AppIcons.syncOffline,
+      SyncStatus.failed => AppIcons.syncFailed,
+      _ => AppIcons.syncIdle,
     };
   }
 

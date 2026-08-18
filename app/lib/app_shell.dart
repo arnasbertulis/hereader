@@ -8,6 +8,7 @@ import 'reading/reading_display.dart';
 import 'reading/settings_screen.dart';
 import 'sync/api_client.dart';
 import 'sync/sync_engine.dart';
+import 'theme/app_icons.dart';
 import 'theme/app_tokens.dart';
 import 'theme/appearance.dart';
 
@@ -85,18 +86,18 @@ class _AppShellState extends State<AppShell> {
   /// list and one more key in [_digits].
   static const _destinations = <_Destination>[
     _Destination(
-      icon: Icons.home_outlined,
-      selectedIcon: Icons.home,
+      icon: AppIcons.tabHome,
+      selectedIcon: AppIcons.tabHomeSelected,
       label: 'Home',
     ),
     _Destination(
-      icon: Icons.menu_book_outlined,
-      selectedIcon: Icons.menu_book,
+      icon: AppIcons.tabLibrary,
+      selectedIcon: AppIcons.tabLibrarySelected,
       label: 'Library',
     ),
     _Destination(
-      icon: Icons.tune_outlined,
-      selectedIcon: Icons.tune,
+      icon: AppIcons.tabSettings,
+      selectedIcon: AppIcons.tabSettingsSelected,
       label: 'Settings',
     ),
   ];

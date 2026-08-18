@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import 'reading_display.dart';
 
@@ -70,7 +71,7 @@ class ReadingSettingsScreen extends StatelessWidget {
             ),
             const Divider(),
             const ListTile(
-              leading: Icon(Icons.bookmark_outline),
+              leading: Icon(AppIcons.placeIsSaved),
               title: Text('Your place is saved as you read'),
               subtitle: Text(
                 'Every fifteen seconds while words are moving, at every pause, '
@@ -78,7 +79,7 @@ class ReadingSettingsScreen extends StatelessWidget {
               ),
             ),
             const ListTile(
-              leading: Icon(Icons.pause_circle_outline),
+              leading: Icon(AppIcons.pausesWhenHidden),
               title: Text('Playback pauses when the app is hidden'),
               subtitle: Text(
                 'Switching apps stops the words rather than running the book '
@@ -86,7 +87,7 @@ class ReadingSettingsScreen extends StatelessWidget {
               ),
             ),
             const ListTile(
-              leading: Icon(Icons.first_page_outlined),
+              leading: Icon(AppIcons.frontMatterOffered),
               title: Text('Front matter is offered, not skipped for you'),
               subtitle: Text(
                 'A book that opens on a title page and a licence offers to '
@@ -95,7 +96,7 @@ class ReadingSettingsScreen extends StatelessWidget {
               ),
             ),
             const ListTile(
-              leading: Icon(Icons.list_alt_outlined),
+              leading: Icon(AppIcons.chaptersFromTheBook),
               title: Text('Chapters come from the book'),
               subtitle: Text(
                 'The chapter list is the one the publisher wrote. A book that '

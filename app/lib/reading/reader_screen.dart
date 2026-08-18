@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
+import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
 import 'library_book.dart';
@@ -644,17 +645,18 @@ class _ReaderScreenState extends State<ReaderScreen> {
                             // so it drew a coloured circle over a background
                             // the reader had chosen.
                             //
-                            // `Icons.menu` rather than `menu_book_outlined`:
-                            // the book glyph is what the Library tab uses in
-                            // `app_shell.dart`, and the same picture meaning
-                            // "your books" in one place and "this book's
-                            // chapters" in another is a picture meaning two
-                            // things.
+                            // A list rather than a book: the book glyph is
+                            // what the Library tab uses, and the same
+                            // picture meaning "your books" in one place and
+                            // "this book's chapters" in another is a picture
+                            // meaning two things. Both are named in
+                            // `AppIcons`, which is where that distinction is
+                            // visible side by side.
                             child: IconButton(
                               onPressed: _openChapters,
                               iconSize: _secondaryIconSize,
                               color: ink,
-                              icon: const Icon(Icons.menu),
+                              icon: const Icon(AppIcons.chapters),
                               tooltip: 'Chapters',
                             ),
                           ),
@@ -940,7 +942,7 @@ class _Controls extends StatelessWidget {
                   onPressed: onClose,
                   iconSize: _secondaryIconSize,
                   color: ink,
-                  icon: const Icon(Icons.close),
+                  icon: const Icon(AppIcons.closeBook),
                   tooltip: 'Back to library',
                 ),
                 IconButton(
@@ -948,14 +950,14 @@ class _Controls extends StatelessWidget {
                   onPressed: onToggle,
                   iconSize: _primaryIconSize,
                   color: ink,
-                  icon: Icon(stopping ? Icons.pause : Icons.play_arrow),
+                  icon: Icon(stopping ? AppIcons.pause : AppIcons.play),
                   tooltip: toggleLabel,
                 ),
                 IconButton(
                   onPressed: onProfile,
                   iconSize: _secondaryIconSize,
                   color: ink,
-                  icon: const Icon(Icons.tune),
+                  icon: const Icon(AppIcons.readingProfile),
                   tooltip: 'Reading profile',
                 ),
               ],

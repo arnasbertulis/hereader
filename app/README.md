@@ -59,6 +59,9 @@ lib/
 │  └─ sign_in_screen.dart       Sign in or register, always skippable
 ├─ theme/
 │  ├─ app_colors.dart           Neutral ramps, the six accents, buildScheme
+│  ├─ app_icons.dart            Every glyph the app draws, named by role.
+│  │                             Two vendored Phosphor weights, Light and
+│  │                             Fill, addressed by const IconData
 │  ├─ app_tokens.dart           Spacing, radii, durations, hairline widths,
 │  │                             and the app's two shadows
 │  ├─ app_typography.dart       The type scale
@@ -156,6 +159,15 @@ lib/
 Settings subpages sit in `reading/` beside the reader rather than in a folder
 of their own. Most of them configure a reading profile, and the ones that do
 not are reached from the same index.
+
+Icons are named by role rather than by picture. `theme/app_icons.dart` is the
+only file that knows a codepoint or a font family, so `AppIcons.chapters` is
+what a screen asks for and the weight is decided once. The set is Phosphor at
+Light, with Fill standing in for selection on the six glyphs that need a
+selected state. The fonts are vendored under `assets/fonts/` because
+`phosphor_flutter` extends `IconData`, which is now a final class and so
+rejects the package on import. See
+[ADR 0019](../docs/adr/0019-icons-are-two-vendored-phosphor-weights.md).
 
 App chrome and the reading surface are themed separately and on purpose.
 `theme/` builds the app around the books from a neutral ramp plus one accent
