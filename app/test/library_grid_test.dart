@@ -62,6 +62,7 @@ void main() {
     author: author,
     bytes: Uint8List.fromList([1, 2, 3]),
     wordCount: wordCount,
+    sourceFormat: 'epub',
     coverBytes: cover,
   );
 
@@ -112,12 +113,15 @@ void main() {
 
     await pump(tester);
 
+    // tokenIndex 370 is the 371st word read out of 1000, per BookSummary's
+    // own (index + 1) / wordCount — the same correction the reader screen's
+    // progress bar already applied.
     expect(find.text('37%'), findsOneWidget);
 
     final bar = tester.widget<LinearProgressIndicator>(
       find.byType(LinearProgressIndicator),
     );
-    expect(bar.value, closeTo(0.37, 0.001));
+    expect(bar.value, closeTo(0.371, 0.0001));
 
     await _disposeTree(tester);
   });
@@ -327,9 +331,11 @@ void main() {
     testWidgets('the empty library opens the same menu', (tester) async {
       await pump(tester);
 
-      expect(find.text('No books yet'), findsOneWidget);
+      expect(find.text('Nothing here yet'), findsOneWidget);
 
-      await tester.tap(find.widgetWithText(FilledButton, 'Add something to read'));
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Add something to read'),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Add an EPUB'), findsOneWidget);
@@ -391,7 +397,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
     await tester.pumpAndSettle();
 
-    expect(find.text('No books yet'), findsOneWidget);
+    expect(find.text('Nothing here yet'), findsOneWidget);
 
     await _disposeTree(tester);
   });

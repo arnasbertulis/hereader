@@ -28,6 +28,14 @@ Future<List<String>> _tableNames(AppDatabase db) async {
 /// a database built from the current schema already had what the step was
 /// about to add. A step that only takes something away hides that.
 Future<void> _revertTo(AppDatabase db, int version) async {
+  if (version < 9) {
+    await db.customStatement('alter table books drop column updated_at');
+  }
+
+  if (version < 8) {
+    await db.customStatement('alter table books drop column source_format');
+  }
+
   if (version < 7) {
     await db.customStatement('drop table book_covers');
   }
@@ -82,6 +90,7 @@ void main() {
         author: 'William Shakespeare',
         bytes: Uint8List.fromList([1, 2, 3]),
         wordCount: 25000,
+        sourceFormat: 'epub',
       );
 
       await _revertTo(legacy, 4);
@@ -108,53 +117,59 @@ void main() {
     },
   );
 
-  test('upgrading from version 5 adds the token index and keeps places', () async {
-    final legacy = AppDatabase(NativeDatabase(file));
-    final before = LibraryRepository(legacy);
+  test(
+    'upgrading from version 5 adds the token index and keeps places',
+    () async {
+      final legacy = AppDatabase(NativeDatabase(file));
+      final before = LibraryRepository(legacy);
 
-    await before.addBook(
-      id: 'book-1',
-      title: 'Romeo and Juliet',
-      author: 'William Shakespeare',
-      bytes: Uint8List.fromList([1, 2, 3]),
-      wordCount: 25000,
-    );
+      await before.addBook(
+        id: 'book-1',
+        title: 'Romeo and Juliet',
+        author: 'William Shakespeare',
+        bytes: Uint8List.fromList([1, 2, 3]),
+        wordCount: 25000,
+        sourceFormat: 'epub',
+      );
 
-    // Saved the way a version 5 client saved: a locator and a stamp, with
-    // nowhere to put a hint.
-    await before.savePosition(
-      bookId: 'book-1',
-      locator: Locator(blockId: 'block-7', charOffset: 40, parserVersion: 1),
-      hlc: '0000000000001-00000-old',
-    );
+      // Saved the way a version 5 client saved: a locator and a stamp, with
+      // nowhere to put a hint.
+      await before.savePosition(
+        bookId: 'book-1',
+        locator: Locator(blockId: 'block-7', charOffset: 40, parserVersion: 1),
+        hlc: '0000000000001-00000-old',
+      );
 
-    await _revertTo(legacy, 5);
-    await legacy.close();
+      await _revertTo(legacy, 5);
+      await legacy.close();
 
-    final upgraded = AppDatabase(NativeDatabase(file));
-    addTearDown(upgraded.close);
+      final upgraded = AppDatabase(NativeDatabase(file));
+      addTearDown(upgraded.close);
 
-    final rows = await upgraded.select(upgraded.readingPositions).get();
-    expect(rows, hasLength(1));
-    expect(rows.single.blockId, 'block-7');
+      final rows = await upgraded.select(upgraded.readingPositions).get();
+      expect(rows, hasLength(1));
+      expect(rows.single.blockId, 'block-7');
 
-    // Null, not zero. This row predates the column, so how far into the book
-    // the reader had reached was never recorded, and zero would put them at
-    // the first word.
-    expect(rows.single.tokenIndex, isNull);
+      // Null, not zero. This row predates the column, so how far into the book
+      // the reader had reached was never recorded, and zero would put them at
+      // the first word.
+      expect(rows.single.tokenIndex, isNull);
 
-    // The column is writable, not merely declared. An addColumn that ran
-    // against the wrong table would still leave the assertions above true.
-    await LibraryRepository(upgraded).savePosition(
-      bookId: 'book-1',
-      locator: Locator(blockId: 'block-9', charOffset: 0, parserVersion: 1),
-      hlc: '0000000000002-00000-new',
-      tokenIndex: 812,
-    );
+      // The column is writable, not merely declared. An addColumn that ran
+      // against the wrong table would still leave the assertions above true.
+      await LibraryRepository(upgraded).savePosition(
+        bookId: 'book-1',
+        locator: Locator(blockId: 'block-9', charOffset: 0, parserVersion: 1),
+        hlc: '0000000000002-00000-new',
+        tokenIndex: 812,
+      );
 
-    final after = await upgraded.select(upgraded.readingPositions).getSingle();
-    expect(after.tokenIndex, 812);
-  });
+      final after = await upgraded
+          .select(upgraded.readingPositions)
+          .getSingle();
+      expect(after.tokenIndex, 812);
+    },
+  );
 
   test('upgrading from version 6 makes room for covers', () async {
     final legacy = AppDatabase(NativeDatabase(file));
@@ -165,6 +180,7 @@ void main() {
       author: 'William Shakespeare',
       bytes: Uint8List.fromList([1, 2, 3]),
       wordCount: 25000,
+      sourceFormat: 'epub',
     );
 
     await _revertTo(legacy, 6);
@@ -187,11 +203,97 @@ void main() {
       title: 'Romeo and Juliet',
       bytes: Uint8List.fromList([1, 2, 3]),
       wordCount: 25000,
+      sourceFormat: 'epub',
       coverBytes: Uint8List.fromList([9, 9, 9]),
     );
 
     final covers = await upgraded.select(upgraded.bookCovers).get();
     expect(covers.single.bytes, [9, 9, 9]);
+  });
+
+  test('upgrading from version 7 backfills every book to epub, and notes are '
+      'writable after', () async {
+    final legacy = AppDatabase(NativeDatabase(file));
+
+    await LibraryRepository(legacy).addBook(
+      id: 'book-1',
+      title: 'Romeo and Juliet',
+      author: 'William Shakespeare',
+      bytes: Uint8List.fromList([1, 2, 3]),
+      wordCount: 25000,
+      sourceFormat: 'epub',
+    );
+
+    await _revertTo(legacy, 7);
+    await legacy.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+
+    // Backfilled rather than left null: every row on disk before this
+    // column existed was an EPUB, and a book that opened through the EPUB
+    // path yesterday has to keep opening through it today.
+    final books = await upgraded.select(upgraded.books).get();
+    expect(books, hasLength(1));
+    expect(books.single.sourceFormat, 'epub');
+
+    // Writable, and with a value a version-7 client could never have
+    // written. A default that only applied at the schema level, and not
+    // to what a later insert can carry, would leave the assertion above
+    // true while notes still could not be stored.
+    await LibraryRepository(upgraded).addBook(
+      id: 'note-1',
+      title: 'A note',
+      bytes: Uint8List.fromList([4, 5, 6]),
+      wordCount: 10,
+      sourceFormat: 'note',
+    );
+
+    final note = await (upgraded.select(
+      upgraded.books,
+    )..where((b) => b.id.equals('note-1'))).getSingle();
+    expect(note.sourceFormat, 'note');
+  });
+
+  test('upgrading from version 8 leaves updatedAt null, and editNote can set '
+      'it', () async {
+    final legacy = AppDatabase(NativeDatabase(file));
+
+    await LibraryRepository(legacy).addBook(
+      id: 'note-1',
+      title: 'A note',
+      bytes: Uint8List.fromList([1, 2, 3]),
+      wordCount: 10,
+      sourceFormat: 'note',
+    );
+
+    await _revertTo(legacy, 8);
+    await legacy.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+
+    // No backfill: this row was written before the column existed, and it
+    // has never been edited through it either, which is exactly what null
+    // means. A default of the import time would claim an edit that never
+    // happened.
+    final before = await upgraded.select(upgraded.books).getSingle();
+    expect(before.updatedAt, isNull);
+
+    // Writable, and distinct from importedAt once it is written. A column
+    // that only ever equalled importedAt would leave the assertion above
+    // true while an edit still could not be timestamped.
+    await LibraryRepository(upgraded).editNote(
+      id: 'note-1',
+      title: 'A note, edited',
+      bytes: Uint8List.fromList([4, 5, 6]),
+      wordCount: 10,
+      resetProgress: false,
+    );
+
+    final after = await upgraded.select(upgraded.books).getSingle();
+    expect(after.updatedAt, isNotNull);
+    expect(after.importedAt, before.importedAt);
   });
 
   test('a fresh database is never given sync_state', () async {

@@ -122,6 +122,32 @@ void main() {
     await _disposeTree(tester);
   });
 
+  testWidgets(
+    "Home's empty state opens the same three-way menu the library's add "
+    'button does',
+    (tester) async {
+      final harness = _Harness.create();
+      addTearDown(harness.close);
+
+      await tester.pumpWidget(harness.app);
+      await tester.pumpAndSettle();
+
+      // Used to be two buttons of Home's own — EPUB and paste, with no way
+      // to reach the note editor from here at all. One button opening the
+      // library's own menu is what fixed that, rather than teaching this
+      // screen a third button of its own to keep in step with the other
+      // two.
+      await tester.tap(find.text('Add something to read'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Add an EPUB'), findsOneWidget);
+      expect(find.text('Write a note'), findsOneWidget);
+      expect(find.text('Paste text'), findsOneWidget);
+
+      await _disposeTree(tester);
+    },
+  );
+
   testWidgets('shows a book that is already stored', (tester) async {
     final harness = _Harness.create();
     addTearDown(harness.close);
@@ -132,6 +158,7 @@ void main() {
       author: 'William Shakespeare',
       bytes: Uint8List.fromList([1, 2, 3]),
       wordCount: 25000,
+      sourceFormat: 'epub',
     );
 
     await tester.pumpWidget(harness.app);
@@ -169,12 +196,14 @@ void main() {
       title: 'Romeo and Juliet',
       bytes: Uint8List.fromList([1]),
       wordCount: 25000,
+      sourceFormat: 'epub',
     );
     await harness.repository.addBook(
       id: 'added-later',
       title: 'Hamlet',
       bytes: Uint8List.fromList([2]),
       wordCount: 30000,
+      sourceFormat: 'epub',
     );
 
     // Read the older import, which is the whole point of the ordering: the
@@ -234,16 +263,13 @@ void main() {
     // reader somewhere they did not ask to be.
     expect(find.byIcon(Icons.cloud_off_outlined), findsOneWidget);
     expect(find.text('Sync is off'), findsOneWidget);
-    expect(
-      find.text('Sign in under Account to turn sync on.'),
-      findsOneWidget,
-    );
+    expect(find.text('Sign in under Account to turn sync on.'), findsOneWidget);
 
     // And the run button is off, since there is nothing to run against.
     expect(
-      tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, 'Sync now'),
-      ).onPressed,
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Sync now'))
+          .onPressed,
       isNull,
     );
 
@@ -387,9 +413,12 @@ void main() {
     // A pushed route, not a tab. What this covers is a GlobalKey identity
     // change taking the Navigator's stack with it, and a tab never goes on
     // that stack. Settings used to be pushed and is one of the tabs now, so
-    // the paste screen stands in. Home's empty state offers it, and the
-    // library's app bar is offstage behind Home.
-    await tester.tap(find.widgetWithText(TextButton, 'Read pasted text'));
+    // the paste screen stands in. Home's empty state opens the same add
+    // menu the library's own button does, and the library's app bar is
+    // offstage behind Home.
+    await tester.tap(find.text('Add something to read'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Paste text'));
     await tester.pumpAndSettle();
 
     final pasted = find.byType(PasteReaderScreen);
@@ -612,6 +641,7 @@ void main() {
       title: 'Read',
       wordCount: 10,
       importedAt: DateTime.utc(2026, 1, 1),
+      sourceFormat: 'epub',
       lastReadAt: DateTime.utc(2026, 1, 2),
     );
     final imported = BookSummary(
@@ -619,6 +649,7 @@ void main() {
       title: 'Imported',
       wordCount: 10,
       importedAt: DateTime.utc(2026, 1, 3),
+      sourceFormat: 'epub',
     );
 
     // The import is newer than the reading, so it leads. Falling back to a

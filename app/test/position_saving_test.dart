@@ -34,6 +34,7 @@ void main() {
         title: 'A Book',
         bytes: Uint8List.fromList([1, 2, 3]),
         wordCount: 100,
+        sourceFormat: 'epub',
       );
     });
 
@@ -74,6 +75,7 @@ void main() {
         title: 'Another Book',
         bytes: Uint8List.fromList([4, 5, 6]),
         wordCount: 100,
+        sourceFormat: 'epub',
       );
 
       await repo.savePosition(
@@ -198,6 +200,36 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 1));
     });
+
+    testWidgets(
+      'finishing a single-word book is recorded, even though the token '
+      'index never changes',
+      (tester) async {
+        // _lastSavedIndex starts at the resume index (0, the only index
+        // this text has), so the ordinary "index unchanged, nothing to
+        // save" guard would otherwise suppress every write for this text
+        // forever — reaching `finished` is what has to force one through.
+        final text = TokenizedText.from(const [
+          (id: 'one', text: 'Word'),
+        ], parserVersion: 1);
+        final saves = <ReadingResult>[];
+
+        await tester.pumpWidget(
+          reader(LibraryBook(id: 'b', title: 'A Book', text: text), saves),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(readerPlayButtonKey));
+        await tester.pump(const Duration(seconds: 3));
+        await tester.pumpAndSettle();
+
+        expect(saves, isNotEmpty);
+        expect(saves.last.tokenIndex, 0);
+
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump(const Duration(milliseconds: 1));
+      },
+    );
 
     testWidgets('writes nothing while the reader has not moved', (
       tester,

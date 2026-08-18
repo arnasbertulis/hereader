@@ -56,6 +56,7 @@ void main() {
     title: 'A Book',
     bytes: Uint8List.fromList([1]),
     wordCount: 1000,
+    sourceFormat: 'epub',
   );
 
   Future<void> savePosition(String bookId, {int tokenIndex = 100}) async {

@@ -36,6 +36,7 @@ void main() {
     title: 'Romeo and Juliet',
     bytes: Uint8List.fromList([1, 2, 3]),
     wordCount: 25_000,
+    sourceFormat: 'epub',
   );
 
   group('foreign key enforcement', () {

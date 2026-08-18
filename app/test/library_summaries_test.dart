@@ -50,6 +50,7 @@ void main() {
         // theoretical one, and small enough not to slow the suite.
         bytes: Uint8List(256 * 1024),
         wordCount: 25000,
+        sourceFormat: 'epub',
       );
 
   group('the library list', () {

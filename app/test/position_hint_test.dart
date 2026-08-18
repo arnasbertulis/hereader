@@ -39,6 +39,7 @@ void main() {
     author: 'William Shakespeare',
     bytes: Uint8List.fromList([1, 2, 3]),
     wordCount: 25000,
+    sourceFormat: 'epub',
   );
 
   test('a saved position keeps the hint it was given', () async {
