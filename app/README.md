@@ -39,10 +39,11 @@ lib/
 ├─ app_shell.dart               The three tabs, the bar and the rail, and
 │                                the cross-fade between them
 ├─ data/
-│  ├─ database.dart             Drift schema, version 9: books (an EPUB or a
-│  │                             note, told apart by sourceFormat), positions,
-│  │                             pending positions, covers, profiles,
-│  │                             preferences, outbox, conflicts
+│  ├─ database.dart             Drift schema, version 10: books (an EPUB or a
+│  │                             note, told apart by sourceFormat), positions
+│  │                             (with the chapter hint ADR 0018 adds), pending
+│  │                             positions, covers, profiles, preferences,
+│  │                             outbox, conflicts
 │  ├─ database.g.dart           Generated. See build_runner below
 │  └─ library_repository.dart   The only file that knows drift exists
 ├─ sync/
@@ -124,11 +125,15 @@ lib/
    │                             maths it used to hold live in rsvp_engine,
    │                             so they run in a browser
    ├─ settings_screen.dart      An index of sections, each its own subpage
-   ├─ reading_settings_screen.dart  What the app does while a book is open,
-   │                             stated rather than configured. Nothing here
-   │                             writes a preference: a switch that turns off
-   │                             position saving would be a setting whose
-   │                             wrong value costs the reader their place
+   ├─ reading_display.dart      Whether a tile's time counts down to the end
+   │                             of the chapter or the end of the book. One
+   │                             preference, in the AppearanceController
+   │                             shape, because Home and Library both listen
+   ├─ reading_settings_screen.dart  What the app does while a book is open —
+   │                             one setting, and the rest stated rather than
+   │                             configured. What is ruled out here is a
+   │                             setting whose wrong value costs the reader
+   │                             their place, not a preference as such
    ├─ profiles_screen.dart      Profile list, presets separated from forks
    ├─ profile_edit_screen.dart  One profile, with a live preview
    ├─ appearance_screen.dart    Theme, accent and contrast for app chrome.
@@ -298,10 +303,25 @@ Under reader-elicited advance there is no rate at all and the tile says how
 many words are left instead. See
 [ADR 0014](../docs/adr/0014-reading-time-estimate.md).
 
+The chapter beside that figure is the one exception to working everything out
+from two columns. Chapters are resolved from a parse (ADR 0010) and books are
+not parsed until they are opened (ADR 0004), so the reader screen writes the
+chapter down with the position and Home reads it back. It is a display hint on
+the same terms the token index is: never navigated by, stale after a
+`kParserVersion` bump until the next save, and cleared by every write path
+that is not the reader — a position arriving from another device carries no
+chapter, and keeping the old one would name where the reader used to be. See
+[ADR 0018](../docs/adr/0018-chapter-hint-on-a-tile.md).
+
+Which end the figure counts to is `ui.time_left_scope`, and the chapter is
+drawn either way, so the words beside the number always say what the number
+is about.
+
 The active profile is a pointer in `preferences` naming a row in
 `stored_profiles`, so anything derived from it watches both tables.
 `watchActiveProfile` does that with one query whose stream drift invalidates
-on a write to either.
+on a write to either. The library screen holds the same subscription, since
+its tiles carry the same figure.
 
 ## Sync
 

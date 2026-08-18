@@ -28,6 +28,15 @@ Future<List<String>> _tableNames(AppDatabase db) async {
 /// a database built from the current schema already had what the step was
 /// about to add. A step that only takes something away hides that.
 Future<void> _revertTo(AppDatabase db, int version) async {
+  if (version < 10) {
+    await db.customStatement(
+      'alter table reading_positions drop column chapter_title',
+    );
+    await db.customStatement(
+      'alter table reading_positions drop column chapter_end_index',
+    );
+  }
+
   if (version < 9) {
     await db.customStatement('alter table books drop column updated_at');
   }
@@ -294,6 +303,69 @@ void main() {
     final after = await upgraded.select(upgraded.books).getSingle();
     expect(after.updatedAt, isNotNull);
     expect(after.importedAt, before.importedAt);
+  });
+
+  test('upgrading from version 9 adds the chapter and keeps the place ', () async {
+    final legacy = AppDatabase(NativeDatabase(file));
+    final legacyRepo = LibraryRepository(legacy);
+
+    await legacyRepo.addBook(
+      id: 'book-1',
+      title: 'Romeo and Juliet',
+      bytes: Uint8List.fromList([1, 2, 3]),
+      wordCount: 25000,
+      sourceFormat: 'epub',
+    );
+    await legacyRepo.savePosition(
+      bookId: 'book-1',
+      locator: const Locator(
+        blockId: 'block-7',
+        charOffset: 12,
+        parserVersion: 1,
+      ),
+      hlc: '0000000000001-00000-old',
+      tokenIndex: 400,
+    );
+
+    await _revertTo(legacy, 9);
+    await legacy.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+
+    final before = await upgraded.select(upgraded.readingPositions).getSingle();
+
+    // The place itself survives the column being added, which is the part a
+    // reader would notice going wrong.
+    expect(before.blockId, 'block-7');
+    expect(before.charOffset, 12);
+    expect(before.tokenIndex, 400);
+
+    // Null rather than defaulted, and no backfill is even possible: a
+    // chapter comes out of parsing the book, and working one out here would
+    // unzip and tokenize the whole library during the first frame after an
+    // update.
+    expect(before.chapterTitle, isNull);
+    expect(before.chapterEndIndex, isNull);
+
+    // A save after the upgrade stores one. Without this, an addColumn
+    // against the wrong table would leave every assertion above true.
+    await LibraryRepository(upgraded).savePosition(
+      bookId: 'book-1',
+      locator: const Locator(
+        blockId: 'block-9',
+        charOffset: 0,
+        parserVersion: 1,
+      ),
+      hlc: '0000000000002-00000-new',
+      tokenIndex: 900,
+      chapterTitle: 'Act I, Scene II',
+      chapterEndIndex: 1500,
+    );
+
+    final after = await upgraded.select(upgraded.readingPositions).getSingle();
+    expect(after.chapterTitle, 'Act I, Scene II');
+    expect(after.chapterEndIndex, 1500);
   });
 
   test('a fresh database is never given sync_state', () async {

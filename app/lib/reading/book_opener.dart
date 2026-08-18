@@ -138,6 +138,11 @@ class BookOpener {
       // The service has no copy of the book, so it cannot work out how far
       // apart two positions are without this hint.
       tokenIndex: result.tokenIndex,
+      // These two go no further than the database. They let Home and the
+      // library say which chapter the reader is in without parsing a book to
+      // draw a tile. See ADR 0018.
+      chapterTitle: result.chapterTitle,
+      chapterEndIndex: result.chapterEndIndex,
     );
   }
 

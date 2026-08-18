@@ -5,6 +5,7 @@ import 'package:app/data/library_repository.dart';
 import 'package:app/reading/book_cover.dart';
 import 'package:app/reading/library_screen.dart';
 import 'package:app/reading/paste_reader_screen.dart';
+import 'package:app/reading/reading_display.dart';
 import 'package:app/sync/api_client.dart';
 import 'package:app/sync/auth_store.dart';
 import 'package:app/sync/sync_engine.dart';
@@ -84,6 +85,10 @@ void main() {
           repository: repository,
           sync: sync,
           issueStamp: _stamp,
+          display: ReadingDisplayController(
+            repository: repository,
+            issueStamp: _stamp,
+          ),
         ),
       ),
     );
@@ -156,9 +161,15 @@ void main() {
     await pump(tester);
 
     // Four stops to learn one book is three too many. The cover, title,
-    // author and percentage merge into a single button.
+    // author, percentage and time left merge into a single button.
+    //
+    // The figure itself is matched loosely rather than pinned. It comes from
+    // the default profile's pacing, so spelling it out here would make this
+    // test fail the day a preset is retuned, which is not what it is about.
     expect(
-      find.bySemanticsLabel('Romeo and Juliet, Shakespeare, 37 percent read'),
+      find.bySemanticsLabel(
+        RegExp(r'^Romeo and Juliet, Shakespeare, 37 percent read, .+ left$'),
+      ),
       findsOneWidget,
     );
 

@@ -27,11 +27,35 @@ const Key readerPlayButtonKey = Key('reader-play-button');
 /// copy of the book and cannot work out how far apart two positions are
 /// without it. The locator remains the authoritative position; this is only
 /// a hint for judging divergence.
+///
+/// The chapter is a second hint, and a narrower one: it describes this
+/// device's parse of this copy of the book and never leaves the device. See
+/// ADR 0018.
 class ReadingResult {
   final Locator locator;
   final int tokenIndex;
 
-  const ReadingResult({required this.locator, required this.tokenIndex});
+  /// The chapter this position is in, as the book itself names it.
+  ///
+  /// Null in front matter, and null for any book that declares no table of
+  /// contents — a note, or an EPUB carrying neither a navigation document nor
+  /// an NCX. Those readers get a figure with no chapter beside it rather than
+  /// a guessed one: ADR 0010's argument, in the place it reaches next.
+  final String? chapterTitle;
+
+  /// The token that chapter ends before, exclusive.
+  ///
+  /// Null exactly when [chapterTitle] is. Carried rather than a chapter
+  /// index, because the screens that read it hold no table of contents to
+  /// index into — the whole reason this is stored at all.
+  final int? chapterEndIndex;
+
+  const ReadingResult({
+    required this.locator,
+    required this.tokenIndex,
+    this.chapterTitle,
+    this.chapterEndIndex,
+  });
 }
 
 /// Full-screen reading surface for a book.
@@ -231,7 +255,20 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final locator = widget.book.text.locatorAt(_session.index);
     if (locator == null) return null;
 
-    return ReadingResult(locator: locator, tokenIndex: _session.index);
+    // Resolved here rather than by whatever screen displays it. This is the
+    // only place in the app holding both a parsed table of contents and a
+    // token index, and it holds them together for the length of one sitting.
+    final at = _currentChapter;
+    final chapter = at < 0 ? null : _chapters[at];
+
+    return ReadingResult(
+      locator: locator,
+      tokenIndex: _session.index,
+      chapterTitle: chapter?.title,
+      chapterEndIndex: chapter == null
+          ? null
+          : chapterEndAt(_chapters, at, widget.book.text.length),
+    );
   }
 
   /// Writes the current place, if it is not the one already written.
@@ -452,17 +489,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (mounted) navigator.pop();
   }
 
-  /// Which chapter the reader is inside: the last one that starts at or
-  /// before the current token. -1 before the first chapter begins, which is
-  /// where front matter sits.
-  int get _currentChapter {
-    var found = -1;
-    for (var i = 0; i < _chapters.length; i++) {
-      if (_chapters[i].tokenIndex > _session.index) break;
-      found = i;
-    }
-    return found;
-  }
+  /// Which chapter the reader is inside. -1 in front matter.
+  ///
+  /// The panel's highlight and the hint saved with the position both read
+  /// this, which is why the walk itself sits in `library_book.dart` where a
+  /// test can reach it without a widget tree.
+  int get _currentChapter => chapterIndexAt(_chapters, _session.index);
 
   /// What tapping the surface does right now, for a screen reader.
   ///

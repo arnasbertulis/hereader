@@ -71,6 +71,18 @@ class BookSummary {
   /// to navigate by.
   final int? tokenIndex;
 
+  /// The chapter the stored position is in, as the book names it, or null
+  /// when this device has not recorded one.
+  ///
+  /// Null is ordinary rather than exceptional: a note, a book declaring no
+  /// table of contents, a reader still in front matter, and a position that
+  /// arrived from another device all have no chapter. See ADR 0018.
+  final String? chapterTitle;
+
+  /// The token that chapter ends before, exclusive. Null exactly when
+  /// [chapterTitle] is.
+  final int? chapterEndIndex;
+
   const BookSummary({
     required this.id,
     required this.title,
@@ -81,6 +93,8 @@ class BookSummary {
     this.author,
     this.position,
     this.tokenIndex,
+    this.chapterTitle,
+    this.chapterEndIndex,
     this.lastReadAt,
   });
 
@@ -247,6 +261,8 @@ class LibraryRepository {
         positions.charOffset,
         positions.parserVersion,
         positions.tokenIndex,
+        positions.chapterTitle,
+        positions.chapterEndIndex,
         positions.updatedAt,
       ])
       ..orderBy([OrderingTerm.desc(table.importedAt)]);
@@ -271,6 +287,8 @@ class LibraryRepository {
                   parserVersion: row.read(positions.parserVersion)!,
                 ),
           tokenIndex: row.read(positions.tokenIndex),
+          chapterTitle: row.read(positions.chapterTitle),
+          chapterEndIndex: row.read(positions.chapterEndIndex),
           lastReadAt: row.read(positions.updatedAt),
         );
       }).toList();
@@ -476,6 +494,8 @@ class LibraryRepository {
     required Locator locator,
     required String hlc,
     int? tokenIndex,
+    String? chapterTitle,
+    int? chapterEndIndex,
   }) async {
     await _db.transaction(() async {
       final now = DateTime.now().toUtc();
@@ -494,6 +514,13 @@ class LibraryRepository {
               // with a locator for where they are now, and the service
               // measures divergence with it.
               tokenIndex: Value(tokenIndex),
+              // Same rule, and the same reason. The reader screen is the only
+              // caller that knows a chapter, and it passes null whenever it
+              // does not — in front matter, and for a book with no table of
+              // contents. Leaving the column alone would keep the chapter the
+              // reader was in an hour ago beside the place they are now.
+              chapterTitle: Value(chapterTitle),
+              chapterEndIndex: Value(chapterEndIndex),
               hlc: hlc,
               updatedAt: now,
             ),
@@ -501,6 +528,9 @@ class LibraryRepository {
 
       await _coalescePositionEvents(bookId);
 
+      // The chapter is deliberately absent from the payload. It describes
+      // this device's parse of this copy of the book, so no other device
+      // could act on one, and the wire contract is unchanged by ADR 0018.
       await _enqueue(
         entityType: 'position',
         entityId: bookId,
@@ -593,6 +623,15 @@ class LibraryRepository {
               charOffset: locator.charOffset,
               parserVersion: locator.parserVersion,
               tokenIndex: Value(tokenIndex),
+              // Cleared, explicitly, rather than left to the conflict update
+              // to skip. A remote position carries no chapter — nothing puts
+              // one on the wire — so anything already in these columns
+              // describes a place this reader has moved away from, on a
+              // different device. insertOnConflictUpdate leaves columns the
+              // companion omits untouched, which is precisely how a stale
+              // title would survive beside a fresh locator.
+              chapterTitle: const Value(null),
+              chapterEndIndex: const Value(null),
               hlc: hlc,
               updatedAt: DateTime.now().toUtc(),
             ),
@@ -684,6 +723,11 @@ class LibraryRepository {
               charOffset: held.charOffset,
               parserVersion: held.parserVersion,
               tokenIndex: Value(held.tokenIndex),
+              // A held position came off the wire and never had a chapter,
+              // and the book it is about has only just been imported, so
+              // nothing on this device has parsed it yet either.
+              chapterTitle: const Value(null),
+              chapterEndIndex: const Value(null),
               hlc: held.hlc,
               updatedAt: held.updatedAt,
             ),

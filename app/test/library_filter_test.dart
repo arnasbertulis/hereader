@@ -5,6 +5,7 @@ import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
 import 'package:app/reading/library_screen.dart';
 import 'package:app/reading/note_editor_screen.dart';
+import 'package:app/reading/reading_display.dart';
 import 'package:app/sync/api_client.dart';
 import 'package:app/sync/auth_store.dart';
 import 'package:app/sync/sync_engine.dart';
@@ -76,6 +77,10 @@ void main() {
           repository: repository,
           sync: sync,
           issueStamp: () async => '0000000000001-00000-test',
+          display: ReadingDisplayController(
+            repository: repository,
+            issueStamp: () async => '0000000000001-00000-test',
+          ),
         ),
       ),
     );

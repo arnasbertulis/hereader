@@ -7,6 +7,7 @@ import 'package:app/reading/library_screen.dart';
 import 'package:app/reading/paste_reader_screen.dart';
 import 'package:app/reading/profile_edit_screen.dart';
 import 'package:app/reading/profiles_screen.dart';
+import 'package:app/reading/reading_display.dart';
 import 'package:app/reading/settings_screen.dart';
 import 'package:app/sync/api_client.dart';
 import 'package:app/sync/auth_store.dart';
@@ -32,6 +33,7 @@ class _Harness {
   final ApiClient api;
   final SyncEngine sync;
   final AppearanceController appearance;
+  final ReadingDisplayController display;
 
   _Harness._({
     required this.database,
@@ -40,6 +42,7 @@ class _Harness {
     required this.api,
     required this.sync,
     required this.appearance,
+    required this.display,
   });
 
   factory _Harness.create() {
@@ -65,6 +68,10 @@ class _Harness {
         repository: repository,
         issueStamp: _stamp,
       ),
+      display: ReadingDisplayController(
+        repository: repository,
+        issueStamp: _stamp,
+      ),
     );
   }
 
@@ -73,9 +80,11 @@ class _Harness {
     sync: sync,
     api: api,
     appearance: appearance,
+    display: display,
   );
 
   Future<void> close() async {
+    display.dispose();
     appearance.dispose();
     sync.dispose();
     api.dispose();
