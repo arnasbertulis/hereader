@@ -160,6 +160,7 @@ Every substantial decision has an ADR carrying the alternatives that were reject
 | [0016](docs/adr/0016-reader-theme-follows-the-app.md) | The reading surface follows the app unless the profile decides |
 | [0017](docs/adr/0017-local-notes.md) | Local notes are book rows parsed through the same normalizer |
 | [0018](docs/adr/0018-chapter-hint-on-a-tile.md) | The chapter on a tile is a device-local hint written with the position |
+| [0019](docs/adr/0019-icons-are-two-vendored-phosphor-weights.md) | Icons are two vendored Phosphor weights, named by role in one file |
 
 ---
 

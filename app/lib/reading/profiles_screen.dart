@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
+import '../theme/app_icons.dart';
 import 'profile_edit_screen.dart';
 import 'profile_presentation.dart';
 
@@ -234,7 +235,7 @@ class _ProfileRow extends StatelessWidget {
     return ListTile(
       selected: selected,
       leading: Icon(
-        selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+        selected ? AppIcons.chosen : AppIcons.notChosen,
       ),
       title: Text(profile.name),
       subtitle: Text(describeProfile(profile)),

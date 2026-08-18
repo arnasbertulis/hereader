@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import '../theme/appearance.dart';
 import 'custom_accent_screen.dart';
@@ -37,8 +38,8 @@ class AppearanceScreen extends StatelessWidget {
                 ListTile(
                   leading: Icon(
                     option.mode == settings.themeMode
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked,
+                        ? AppIcons.chosen
+                        : AppIcons.notChosen,
                   ),
                   title: Text(option.label),
                   subtitle: Text(option.description),
@@ -211,7 +212,7 @@ class _AccentSwatch extends StatelessWidget {
                   ),
                 ),
                 child: selected
-                    ? Icon(Icons.check, color: onAccent(accent.color))
+                    ? Icon(AppIcons.confirm, color: onAccent(accent.color))
                     : null,
               ),
               const SizedBox(height: AppSpacing.xs),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import '../theme/appearance.dart';
 import '../theme/rgb_sliders.dart';
@@ -52,7 +53,7 @@ class _CustomAccentScreenState extends State<CustomAccentScreen> {
                       width: AppHairline.width,
                     ),
                   ),
-                  child: Icon(Icons.check, color: onAccent(_color)),
+                  child: Icon(AppIcons.confirm, color: onAccent(_color)),
                 ),
                 const SizedBox(width: AppSpacing.md),
                 Expanded(

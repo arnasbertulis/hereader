@@ -14,6 +14,7 @@ import 'package:app/sync/auth_store.dart';
 import 'package:app/sync/last_synced.dart';
 import 'package:app/sync/sync_engine.dart';
 import 'package:app/theme/app_colors.dart';
+import 'package:app/theme/app_icons.dart';
 import 'package:app/theme/app_tokens.dart';
 import 'package:app/theme/appearance.dart';
 import 'package:drift/native.dart';
@@ -270,7 +271,7 @@ void main() {
     // Reading works signed out, so this is an invitation rather than a gate.
     // It says where to go rather than offering a button that would take the
     // reader somewhere they did not ask to be.
-    expect(find.byIcon(Icons.cloud_off_outlined), findsOneWidget);
+    expect(find.byIcon(AppIcons.syncSignedOut), findsOneWidget);
     expect(find.text('Sync is off'), findsOneWidget);
     expect(find.text('Sign in under Account to turn sync on.'), findsOneWidget);
 
@@ -459,7 +460,7 @@ void main() {
     await tester.pumpWidget(harness.app);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.tune_outlined));
+    await tester.tap(find.byIcon(AppIcons.tabSettings));
     await tester.pumpAndSettle();
 
     expect(find.byType(SettingsScreen), findsOneWidget);
@@ -552,7 +553,7 @@ void main() {
     await tester.pumpWidget(harness.app);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.tune_outlined));
+    await tester.tap(find.byIcon(AppIcons.tabSettings));
     await tester.pumpAndSettle();
 
     for (final section in const [
@@ -581,7 +582,7 @@ void main() {
     await tester.pumpWidget(harness.app);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.tune_outlined));
+    await tester.tap(find.byIcon(AppIcons.tabSettings));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Reading profiles'));

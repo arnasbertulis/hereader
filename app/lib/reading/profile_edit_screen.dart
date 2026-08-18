@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
+import '../theme/app_icons.dart';
 import 'profile_presentation.dart';
 import 'rsvp_view.dart';
 
@@ -506,7 +507,7 @@ class _PresetBanner extends StatelessWidget {
           const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: onCopy,
-            icon: const Icon(Icons.copy),
+            icon: const Icon(AppIcons.forkProfile),
             label: const Text('Make an editable copy'),
           ),
         ],
@@ -672,7 +673,7 @@ class _PreviewState extends State<_Preview> {
                 bottom: 8,
                 child: IconButton.filledTonal(
                   onPressed: _toggle,
-                  icon: Icon(running ? Icons.pause : Icons.play_arrow),
+                  icon: Icon(running ? AppIcons.pause : AppIcons.play),
                   tooltip: running ? 'Stop the preview' : 'Preview reading',
                 ),
               ),
@@ -730,7 +731,7 @@ class _ContrastReadout extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            warn ? Icons.warning_amber : Icons.check_circle_outline,
+            warn ? AppIcons.contrastWarns : AppIcons.contrastPasses,
             size: 20,
             color: warn ? colors.onErrorContainer : null,
           ),
@@ -821,7 +822,7 @@ class _SettingSlider extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
-                    Icons.warning_amber,
+                    AppIcons.settingWarns,
                     size: 16,
                     color: theme.colorScheme.error,
                   ),

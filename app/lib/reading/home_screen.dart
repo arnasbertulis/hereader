@@ -9,6 +9,7 @@ import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
 import '../sync/sync_engine.dart';
+import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import 'add_menu.dart';
 import 'book_cover.dart';
@@ -322,7 +323,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 if (recent.length > _recentCount + 1)
                                   IconButton(
                                     onPressed: widget.onSeeAll,
-                                    icon: const Icon(Icons.arrow_forward),
+                                    icon: const Icon(AppIcons.seeAll),
                                     tooltip: 'All books',
                                   ),
                               ],
@@ -623,7 +624,7 @@ class _OpenGlyph extends StatelessWidget {
                 dimension: 20,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
-            : Icon(Icons.play_circle_outline, size: 32, color: colour),
+            : Icon(AppIcons.resume, size: 32, color: colour),
       ),
     );
   }
@@ -794,7 +795,7 @@ class _NothingOpenYet extends StatelessWidget {
           child: FilledButton.icon(
             onPressed: onAdd,
             style: FilledButton.styleFrom(minimumSize: const Size(200, 56)),
-            icon: const Icon(Icons.add),
+            icon: const Icon(AppIcons.add),
             label: const Text('Add something to read'),
           ),
         ),

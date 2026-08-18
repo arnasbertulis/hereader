@@ -9,6 +9,7 @@ import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
 import '../sync/sync_engine.dart';
+import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import 'add_menu.dart';
 import 'book_cover.dart';
@@ -582,7 +583,7 @@ class _ControlsRow extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(filter.label, style: theme.textTheme.labelLarge),
-                  const Icon(Icons.arrow_drop_down),
+                  const Icon(AppIcons.openMenu),
                 ],
               ),
             ),
@@ -610,7 +611,7 @@ class _ControlsRow extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(sort.label, style: theme.textTheme.labelLarge),
-                      const Icon(Icons.arrow_drop_down),
+                      const Icon(AppIcons.openMenu),
                     ],
                   ),
                 ),
@@ -622,7 +623,7 @@ class _ControlsRow extends StatelessWidget {
               // land on.
               TextButton.icon(
                 onPressed: onFlip,
-                icon: const Icon(Icons.swap_vert, size: 20),
+                icon: const Icon(AppIcons.flipSortDirection, size: 20),
                 label: Text(sort.endLabel(reversed: reversed)),
               ),
             ],
@@ -692,7 +693,7 @@ class _AddButton extends StatelessWidget {
         backgroundColor: scheme.primary,
         foregroundColor: scheme.onPrimary,
         tooltip: 'Add something to read',
-        child: const Icon(Icons.add, size: 32),
+        child: const Icon(AppIcons.add, size: 32),
       ),
     );
   }
@@ -1036,7 +1037,7 @@ class _TileMenu extends StatelessWidget {
         ),
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.xs),
-          child: Icon(Icons.more_vert, size: 20, color: scheme.onSurface),
+          child: Icon(AppIcons.tileMenu, size: 20, color: scheme.onSurface),
         ),
       ),
     );
@@ -1076,7 +1077,7 @@ class _EmptyLibrary extends StatelessWidget {
             FilledButton.icon(
               onPressed: onAdd,
               style: FilledButton.styleFrom(minimumSize: const Size(200, 56)),
-              icon: const Icon(Icons.add),
+              icon: const Icon(AppIcons.add),
               label: const Text('Add something to read'),
             ),
           ],
@@ -1143,7 +1144,7 @@ class _FilteredEmptyState extends StatelessWidget {
             FilledButton.icon(
               onPressed: onAdd,
               style: FilledButton.styleFrom(minimumSize: const Size(200, 56)),
-              icon: const Icon(Icons.add),
+              icon: const Icon(AppIcons.add),
               label: Text(buttonLabel),
             ),
           ],

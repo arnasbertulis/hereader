@@ -6,6 +6,7 @@ import '../sync/api_client.dart';
 import '../sync/auth_store.dart';
 import '../sync/sign_in_screen.dart';
 import '../sync/sync_engine.dart';
+import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 
 /// The session, the device, and the way in and out of an account.
@@ -74,7 +75,7 @@ class AccountScreen extends StatelessWidget {
             children: [
               ListTile(
                 leading: Icon(
-                  signedIn ? Icons.person : Icons.person_outline,
+                  signedIn ? AppIcons.accountSignedIn : AppIcons.accountSignedOut,
                 ),
                 title: Text(signedIn ? 'Signed in' : 'Not signed in'),
                 // No address. AuthStore holds tokens and a device id and
@@ -106,7 +107,7 @@ class AccountScreen extends StatelessWidget {
               FutureBuilder<String>(
                 future: api.auth.deviceId(),
                 builder: (context, id) => ListTile(
-                  leading: const Icon(Icons.devices_outlined),
+                  leading: const Icon(AppIcons.device),
                   title: const Text('This device'),
                   subtitle: Text(id.data ?? 'Reading'),
                 ),
