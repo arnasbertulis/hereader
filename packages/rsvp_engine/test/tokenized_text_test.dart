@@ -282,5 +282,43 @@ void main() {
         expect(text.indexOf(text.locatorAt(i)!), i, reason: 'failed at $i');
       }
     });
+
+    test('resolves every block by id', () {
+      // The id lookups moved from a linear scan to a map. What that could
+      // break is which entry a lookup lands on, so this checks all 1200
+      // rather than a sample.
+      for (var i = 0; i < 1200; i++) {
+        expect(text.startOfBlock('block$i'), isNotNull, reason: 'lost block$i');
+      }
+    });
+  });
+
+  group('a repeated block id', () {
+    // Ids are supposed to be unique and this type cannot enforce that: it
+    // takes any (id, text) pair from any caller. The scan the id map
+    // replaced answered with the first match, so this pins that a map does
+    // too rather than silently answering with the last.
+    late TokenizedText text;
+
+    setUp(() {
+      text = _text(const [
+        (id: 'dup', text: 'First block here.'),
+        (id: 'other', text: 'Second block.'),
+        (id: 'dup', text: 'Third block, same id as the first.'),
+      ]);
+    });
+
+    test('startOfBlock answers with the first', () {
+      expect(text.startOfBlock('dup'), 0);
+    });
+
+    test('indexOf resolves into the first', () {
+      const locator = Locator(blockId: 'dup', charOffset: 0, parserVersion: _v);
+      expect(text.indexOf(locator), 0);
+    });
+
+    test('an unknown id is still null', () {
+      expect(text.startOfBlock('missing'), isNull);
+    });
   });
 }
