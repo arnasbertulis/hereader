@@ -35,9 +35,10 @@ lib/
 ├─ app_shell.dart               The three tabs, the bar and the rail, and
 │                                the cross-fade between them
 ├─ data/
-│  ├─ database.dart             Drift schema: books, positions, pending
-│  │                             positions, covers, profiles, preferences,
-│  │                             outbox, conflicts
+│  ├─ database.dart             Drift schema: books (an EPUB or a note,
+│  │                             told apart by sourceFormat), positions,
+│  │                             pending positions, covers, profiles,
+│  │                             preferences, outbox, conflicts
 │  ├─ database.g.dart           Generated. See build_runner below
 │  └─ library_repository.dart   The only file that knows drift exists
 ├─ sync/
@@ -68,14 +69,25 @@ lib/
 │                                read before the first frame, notified from
 └─ reading/
    ├─ home_screen.dart          The book you were last in, and four you read
-   │                             before it
-   ├─ library_screen.dart       Import, list, open, remove
-   ├─ library_book.dart         Import pipeline and the in-memory book model
+   │                             before it. Empty state opens the same
+   │                             AddMenu the library does
+   ├─ library_screen.dart       Import, list, open, remove, edit a note,
+   │                             filter by format
+   ├─ library_book.dart         Import pipeline, the in-memory book model,
+   │                             and BookSourceFormat — an EPUB parses
+   │                             through EpubParser, a note through
+   │                             HtmlNormalizer directly
+   ├─ add_menu.dart             The three-way add dialog (EPUB/note/paste),
+   │                             shared by the library's add button and
+   │                             Home's empty state
+   ├─ note_editor_screen.dart   Write a note, or edit one already stored
    ├─ book_cover.dart           Covers, and the generated face for a book
    │                             that declares none
    ├─ book_progress.dart        What the reader is told about their place:
-   │                             the bar, the percentage, and the time left
-   ├─ book_opener.dart          The one path from a book id to the reader
+   │                             the bar, the percentage, the time left, and
+   │                             a note's own Added/Edited date
+   ├─ book_opener.dart          The one path from a book id to the reader,
+   │                             dispatching the reopen by source format
    ├─ paste_reader_screen.dart  Read arbitrary pasted text
    ├─ reader_screen.dart        Full-screen reading surface
    ├─ rsvp_view.dart            Draws one token at the profile's anchor. The
@@ -194,13 +206,37 @@ replace it and are not built yet, so a keyboard, a switch, or a screen reader
 is the only way back until then. See
 [ADR 0015](../docs/adr/0015-reader-chrome-is-monochrome-over-the-profile.md).
 
+## Notes
+
+A note is a row in `books` like any other, told apart by `sourceFormat`:
+its text lives as UTF-8 in the same `bytes` column an EPUB's zip goes in.
+On open — writing it for the first time, or reopening a stored one — the
+text is split into blank-line-separated paragraphs, escaped, wrapped in
+`<p>` tags, and run through the same `HtmlNormalizer` a spine document goes
+through, so a note gets real, stable block ids and the same locator
+guarantee ADR 0002 gives a book, rather than a bespoke path of its own.
+Title and id cannot come from the bytes the way an EPUB's do — there is no
+OPF — so both travel in from whoever is asking to reopen it.
+
+Editing rewrites title, bytes and word count through a plain update, never
+through `addBook`'s upsert, which would bump `importedAt` on every edit.
+Whether an edit resets the reader's saved position is decided by the editor
+screen, not the repository: it holds both the old and new text, so it can
+tell a title-only change from one that actually moved the words underneath
+a saved place, and only the second asks the reader to confirm — and only
+when there was a place to lose. See
+[ADR 0017](../docs/adr/0017-local-notes.md).
+
 ## What the home screen knows
 
 The tile says how far into the book the reader is and roughly how long is
 left, and it works both out without parsing anything. A saved position
-carries how many tokens into the book it is and the book row carries how many
-there are, so progress is one division and the words still ahead are one
-subtraction. See [ADR 0013](../docs/adr/0013-progress-token-index.md).
+carries how many tokens into the book it is and the book row carries how
+many there are, so progress is `(tokenIndex + 1) / wordCount` — the count of
+words already seen, not the index of the one on screen, which is the
+correction that stops a finished book or note from reading as 99% forever —
+and the words still ahead are one subtraction against the same count. See
+[ADR 0013](../docs/adr/0013-progress-token-index.md).
 
 Turning those words into minutes needs a rate, and the rate is whatever the
 reader's active profile is set to, so the figure moves when they retune it.
@@ -269,6 +305,11 @@ profile now reaches both polarity defaults on one device.
 **Web imports block the interface.** `compute()` does not offload on Flutter
 web; see the note under how a book gets read.
 
+**A note's date does not reach a screen reader.** The library tile shows
+"Added" or "Edited" and a date in a note's empty author slot, but
+`semanticsForBook` was not extended to announce it, so the fact is on
+screen and nowhere else.
+
 ## Testing
 
 ```bash
@@ -312,3 +353,16 @@ A second quirk, found the same way: `scrollUntilVisible` resolves its default
 `scrollable` argument to the one `Scrollable` in the tree and throws when it
 finds several. A screen with a `TextField` on it has two, since `EditableText`
 builds its own. Name the scrollable rather than letting it default.
+
+A third: a widget test awaiting `BookImporter`'s real `compute()` isolate
+never sees it resolve under ordinary `pump()` calls, however many or however
+long — the isolate's message port is not something the test binding wakes on
+by itself. `tester.runAsync` is the documented way out, but the tap that
+starts the work and the wait for it to finish have to sit inside *one*
+`runAsync` call; splitting them across two does not carry the port across.
+Confirmed on a minimal probe. Not yet made to work for the note editor's own
+save-and-open flow at its full depth (the add-menu dialog, the editor,
+`BookOpener`'s sync and conflict checks, then the reader it pushes), which is
+why that path has no automated test and the library's filter-reset-on-save
+behaviour is checked by reading the code rather than by a test exercising it
+end to end.
