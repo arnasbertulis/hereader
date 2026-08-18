@@ -452,7 +452,8 @@ void main() {
       expect(
         s.index,
         3,
-        reason: 'the reader chose this word; a resume must not move them off it',
+        reason:
+            'the reader chose this word; a resume must not move them off it',
       );
 
       s.dispose();

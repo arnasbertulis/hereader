@@ -160,9 +160,7 @@ void main() {
       await disposeTree(tester);
     });
 
-    testWidgets('the centre still starts and stops the stream', (
-      tester,
-    ) async {
+    testWidgets('the centre still starts and stops the stream', (tester) async {
       await tester.pumpWidget(reader());
       await tester.pumpAndSettle();
 

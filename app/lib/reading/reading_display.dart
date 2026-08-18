@@ -108,9 +108,7 @@ class ReadingDisplayController extends ChangeNotifier {
   /// Reads the stored values. Called from `_start()` before `runApp`,
   /// alongside `AppearanceController.restore`.
   Future<void> restore() async {
-    final scope = await repository.preference(
-      ReadingDisplayKeys.timeLeftScope,
-    );
+    final scope = await repository.preference(ReadingDisplayKeys.timeLeftScope);
     final step = await repository.preference(ReadingDisplayKeys.stepWords);
 
     _timeLeftScope = decodeTimeLeftScope(scope);

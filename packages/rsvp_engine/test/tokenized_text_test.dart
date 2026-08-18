@@ -334,9 +334,7 @@ void main() {
     });
 
     test('a sentence end inside a block is found', () {
-      final text = _text(const [
-        (id: 'a', text: 'One two. Three four five.'),
-      ]);
+      final text = _text(const [(id: 'a', text: 'One two. Three four five.')]);
 
       expect(text.nextSentenceStart(0), 2);
     });
@@ -407,9 +405,7 @@ void main() {
     test('a blank line inside one block ends a paragraph', () {
       // The other source of a paragraph boundary, for a caller handing this
       // type prose that never went through a normalizer.
-      final text = _text(const [
-        (id: 'a', text: 'One two\n\nThree four'),
-      ]);
+      final text = _text(const [(id: 'a', text: 'One two\n\nThree four')]);
 
       expect(text.tokens[1].pauseAfter, PauseAfter.paragraph);
       expect(text.nextParagraphStart(0), 2);

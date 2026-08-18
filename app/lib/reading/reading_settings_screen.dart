@@ -56,9 +56,7 @@ class ReadingSettingsScreen extends StatelessWidget {
             const Divider(),
             const _SectionHeader('Time left counts'),
             Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.lg,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: SegmentedButton<TimeLeftScope>(
                 segments: const [
                   ButtonSegment(

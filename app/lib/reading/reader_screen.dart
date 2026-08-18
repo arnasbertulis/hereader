@@ -309,9 +309,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
   ///
   /// Through `stopAt` like the edge zones, so all four navigation controls
   /// leave the reader stopped on a word they chose and resume from it.
-  VoidCallback? _jumpTo(int? target) => target == null
-      ? null
-      : () => _whenReading(() => _session.stopAt(target));
+  VoidCallback? _jumpTo(int? target) =>
+      target == null ? null : () => _whenReading(() => _session.stopAt(target));
 
   @override
   void dispose() {
@@ -584,8 +583,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   /// The edges, which name a number the reader chose in Settings and cannot
   /// see from here.
-  String get _backLabel =>
-      'Back $_stepWords word${_stepWords == 1 ? '' : 's'}';
+  String get _backLabel => 'Back $_stepWords word${_stepWords == 1 ? '' : 's'}';
 
   String get _forwardLabel =>
       'Forward $_stepWords word${_stepWords == 1 ? '' : 's'}';
@@ -750,10 +748,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   ),
                   if (state == PlaybackState.finished)
                     Center(
-                      child: Text(
-                        'End of book',
-                        style: TextStyle(color: ink),
-                      ),
+                      child: Text('End of book', style: TextStyle(color: ink)),
                     ),
                   if (showControls && _chapters.isNotEmpty)
                     Positioned(
