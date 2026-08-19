@@ -293,4 +293,73 @@ class TokenizedText {
 
     return blockEnd < tokens.length ? blockEnd : null;
   }
+
+  /// First token of the sentence containing [tokenIndex].
+  ///
+  /// Scans backward for the nearest earlier token whose [PauseAfter] is
+  /// [PauseAfter.sentence] or [PauseAfter.paragraph] and returns the token
+  /// after it, or `0` when none is found. Matches both values for the same
+  /// masking reason [nextSentenceStart] documents: a `.` before a blank line
+  /// reports `paragraph`, and the sentence end underneath it would otherwise
+  /// be invisible to this scan too.
+  int _sentenceStartAt(int tokenIndex) {
+    for (var i = tokenIndex - 1; i >= 0; i--) {
+      final pause = tokens[i].pauseAfter;
+      if (pause == PauseAfter.sentence || pause == PauseAfter.paragraph) {
+        return i + 1;
+      }
+    }
+    return 0;
+  }
+
+  /// First token of the paragraph containing [tokenIndex]: the later of the
+  /// containing block's start and the nearest earlier in-block
+  /// [PauseAfter.paragraph], mirroring [nextParagraphStart]'s two sources.
+  int _paragraphStartAt(int tokenIndex) {
+    final block = blockIndexOf(tokenIndex);
+    final blockStart = _blockStarts[block];
+
+    for (var i = tokenIndex - 1; i >= blockStart; i--) {
+      if (tokens[i].pauseAfter == PauseAfter.paragraph) return i + 1;
+    }
+    return blockStart;
+  }
+
+  /// First token of the sentence before the one containing [tokenIndex].
+  ///
+  /// Restarts the current sentence rather than always leaving it: if
+  /// [tokenIndex] is not already on its sentence's first token, this returns
+  /// that first token. Only when [tokenIndex] is already there does it move
+  /// to the sentence before. A reader who overshot wants to try the sentence
+  /// again before jumping past it — the same "previous track" rule a media
+  /// player applies to skip-back.
+  ///
+  /// Null at the very start of the text, so the control disables rather than
+  /// moving nowhere, matching [nextSentenceStart]'s contract. A negative
+  /// index is read as the start, like [nextSentenceStart].
+  int? previousSentenceStart(int tokenIndex) {
+    if (tokens.isEmpty) return null;
+
+    final at = tokenIndex < 0 ? 0 : tokenIndex;
+    final start = _sentenceStartAt(at);
+    if (start < at) return start;
+    return start == 0 ? null : _sentenceStartAt(start - 1);
+  }
+
+  /// First token of the paragraph before the one containing [tokenIndex].
+  ///
+  /// Same restart rule as [previousSentenceStart]: the current paragraph's
+  /// first token if [tokenIndex] is not already there, otherwise the
+  /// paragraph before.
+  ///
+  /// Null at the very start of the text, or when [tokenIndex] is out of
+  /// range — strict rather than clamping, matching [nextParagraphStart]'s
+  /// contract.
+  int? previousParagraphStart(int tokenIndex) {
+    if (tokenIndex < 0 || tokenIndex >= tokens.length) return null;
+
+    final start = _paragraphStartAt(tokenIndex);
+    if (start < tokenIndex) return start;
+    return start == 0 ? null : _paragraphStartAt(start - 1);
+  }
 }

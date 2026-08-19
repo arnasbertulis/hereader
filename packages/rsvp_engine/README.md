@@ -172,18 +172,28 @@ not, so holding a back button does not compound one on top of the other.
 
 `stopAt(index)` is the move a reader made deliberately: it stops where it lands
 and suppresses exactly one resume rewind, because someone who has just stepped
-onto a word does not want to be moved off it when they start again. Any
-`pause()` clears the suppression. `awaitingAdvance` is the one state it does
-not turn into a pause, for the reason above.
+onto a word does not want to be moved off it when they start again. A `pause()`
+that actually runs its body — because the session was `playing` or
+`awaitingAdvance` when it was called — clears the suppression; `pause()` is a
+no-op on an already-`paused` session, so a `stopAt` the reader has not resumed
+from yet survives being called again. `awaitingAdvance` is the one state
+`stopAt` does not turn into a pause, for the reason above.
 
-`TokenizedText` answers where the next sentence and the next paragraph start,
-since those are questions about the text rather than about the clock, and only
-it knows where the blocks are. A sentence end is a token whose `pauseAfter` is
-`sentence` *or* `paragraph` — the tokenizer takes the longer of the punctuation
-pause and the whitespace pause, so a full stop followed by a blank line reports
-only the paragraph and the sentence underneath it would otherwise be stepped
-over. A paragraph ends at the nearer of the next block and the next in-block
-`PauseAfter.paragraph`, which covers both normalized blocks and raw prose.
+`TokenizedText` answers where the next sentence and paragraph start, and now
+the previous ones too — four methods, one shape. A sentence end is a token
+whose `pauseAfter` is `sentence` *or* `paragraph` — the tokenizer takes the
+longer of the punctuation pause and the whitespace pause, so a full stop
+followed by a blank line reports only the paragraph and the sentence
+underneath it would otherwise be stepped over. A paragraph ends at the nearer
+of the next block and the next in-block `PauseAfter.paragraph`, which covers
+both normalized blocks and raw prose.
+
+`previousSentenceStart` and `previousParagraphStart` restart the unit a reader
+is in rather than always leaving it: mid-unit returns that unit's own first
+token, and only a second call — already on a unit's first token — reaches the
+one before. The same "previous track" rule a media player applies to skip-back,
+and the reason a low-vision reader gets it: re-reading the sentence just missed
+is the more common need than skipping past it. See ADR 0021.
 
 Timing chains `Timer` directly rather than driving from a `Ticker`, so
 `fake_async` can step a whole paragraph in microseconds. The side effect is

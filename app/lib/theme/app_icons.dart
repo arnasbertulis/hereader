@@ -111,6 +111,13 @@ abstract final class AppIcons {
   static const skipSentence = IconData(0xe5a6, fontFamily: _light);
   static const skipParagraph = IconData(0xe6a6, fontFamily: _light);
 
+  /// Back to the start of the sentence, or the paragraph, the reader is in —
+  /// or the one before it, once already there. The mirror pair of
+  /// [skipSentence] and [skipParagraph]: Phosphor's `skip-back` and `rewind`,
+  /// matching `skip-forward` and `fast-forward`. See ADR 0021.
+  static const backSentence = IconData(0xe5a4, fontFamily: _light);
+  static const backParagraph = IconData(0xe6a8, fontFamily: _light);
+
   // -- profile editing -------------------------------------------------
   static const forkProfile = IconData(0xe1ca, fontFamily: _light);
   static const contrastPasses = IconData(0xe184, fontFamily: _light);
