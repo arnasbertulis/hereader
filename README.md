@@ -75,10 +75,9 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 - [x] Test suite across all of the above, including a real Project Gutenberg book as a golden fixture, effective words per minute over real prose, virtual-clock playback timing, sync ordering and divergence against a real Postgres, and the sync client against a fake service
 - [x] CI running analyzer and tests on every push, across every package, the app, and the service, with the pure packages also run through `dart2js` in a browser and the web build compiled on every change
 - [x] Deployed: containerised service and web build behind Caddy on a Hetzner VPS, automatic HTTPS via an sslip.io hostname, with reading positions and profiles both verified syncing between Windows and web against the live service
+- [x] CD pipeline: a `v*` tag builds the service and the web bundle into container images, pushes them to GHCR and has the server pull them, over a key that can run nothing but the deploy script. The release running is recorded on the server by commit sha, so rolling back does not need the pipeline. Recorded in [`docs/adr/0023-continuous-deployment.md`](docs/adr/0023-continuous-deployment.md)
 
 **Not started**
-
-- [ ] CD pipeline — deploys are currently a manual `git pull` and rebuild on the server
 - [ ] Running the app's own suite in a real browser. The pure packages run under `dart2js` in CI and the web build is compiled on every change, but the app's tests reach `dart:ffi` through drift and cannot execute on that target. See [`docs/adr/0009-web-platform-coverage.md`](docs/adr/0009-web-platform-coverage.md)
 
 ---
@@ -163,6 +162,9 @@ Every substantial decision has an ADR carrying the alternatives that were reject
 | [0018](docs/adr/0018-chapter-hint-on-a-tile.md) | The chapter on a tile is a device-local hint written with the position |
 | [0019](docs/adr/0019-icons-are-two-vendored-phosphor-weights.md) | Icons are two vendored Phosphor weights, named by role in one file |
 | [0020](docs/adr/0020-reader-driven-navigation.md) | Tap zones step by a device-local amount and stop where the reader chose |
+| [0021](docs/adr/0021-back-a-sentence-back-a-paragraph.md) | Back a sentence and back a paragraph are their own jumps, not a reversed step |
+| [0022](docs/adr/0022-chapter-jumps-also-suppress-the-resume-rewind.md) | A chapter or front-matter jump suppresses the resume rewind |
+| [0023](docs/adr/0023-continuous-deployment.md) | CI builds the images, a version tag deploys them, and the server only pulls |
 
 ---
 
@@ -204,8 +206,14 @@ between devices.
 ```bash
 cd server
 cp .env.example .env   # then edit JWT_SECRET and DATABASE_PASSWORD
-docker compose up --build -d
+docker compose up --build -d db app
 ```
+
+The stack has a third service, `caddy`, which is named here rather than
+brought up: it runs the image CI builds from the compiled web bundle, and
+its certificate comes from an sslip.io hostname that resolves to the
+server's IP, so a local one fails its ACME challenge. See
+[ADR 0006](docs/adr/0006-deployment-infrastructure.md).
 
 Flyway applies the schema on first start. `GET /api/health` reports whether
 the service can reach its database, not merely whether the process is alive.
@@ -273,11 +281,16 @@ elsewhere at build time:
 flutter run --dart-define=HEREADER_API=https://api.example.com/api
 ```
 
-The live deployment is built the same way:
+The live deployment is built the same way, by CI rather than by hand:
 
 ```bash
 flutter build web --dart-define=HEREADER_API=https://204-168-240-12.sslip.io/api
 ```
+
+That exact command is in both `.github/workflows/ci-flutter.yml`, where it
+is the compile-time check ADR 0009 asks for, and
+`.github/workflows/cd.yml`, where its output is copied into a Caddy image
+and deployed.
 
 Serving the web build over plain `http://` on a local network will fail to
 start: the browser database drift uses needs a secure context. Use `https://`,
@@ -326,7 +339,8 @@ start: the browser database drift uses needs a secure context. Use `https://`,
 - Flutter web renders text to canvas rather than DOM, so screen reader support on the web target is weaker than a conventional website even where the semantics are correct. There is also no keystore there, so tokens fall back to local storage.
 - The web page paints its loading background from the browser's own light or dark preference rather than from the theme the reader chose in the app. That choice lives in the browser's database, behind the engine the page is still loading, so a reader who set Light on a dark-preference device sees a dark background for the moment before the first frame.
 - The deployed server has no automated backups. Postgres holds reading positions and preferences, not book files, so the practical cost of loss is low — recoverable by re-registering test devices rather than an irreplaceable loss.
-- Deploys are manual: SSH in, `git pull`, `docker compose up --build -d`. No CD pipeline yet.
+- Deploys run from a `v*` tag rather than from a merge, so landing a change on `main` does not ship it. That is deliberate — see [ADR 0023](docs/adr/0023-continuous-deployment.md) — but it does mean the deployed site can sit behind `main`, and nothing reports the gap.
+- The deploy pipeline has a health check and no automatic rollback. A release that fails it stays up and fails the workflow; putting the previous one back is a line edited in `server/.env` and a `docker compose up -d` over SSH.
 - A position for a book not yet imported on a device is held locally rather than lost. It stays held forever if the reader never imports that book on that device; harmless, since each held position is a locator and two integers, and sign-out clears them.
 - The supporting research is small-sample and predates modern displays. Rubin and Turano tested 23 people in 1994; Arditi tested 15 in 1999. These are the best available comparisons, not large trials.
 - No study cited here measures reading comprehension. Every figure is a reading rate.
@@ -347,7 +361,7 @@ start: the browser database drift uses needs a secure context. Use `https://`,
 5. Google sign-in as an additional identity source
 6. PDF support, which needs column detection, header and footer stripping, and reading-order reconstruction
 7. Continuous scrolling presentation, as a separate renderer rather than a toggle. Smooth scroll needs constant velocity, so honouring a per-token duration would make text surge and stall mid-sentence. Whether per-token pacing collapses into a single velocity, or that mode drops pacing entirely, is unresolved.
-8. CD pipeline, so a merge to `main` deploys automatically instead of requiring a manual SSH session
+8. Automated Postgres backups, the remaining gap in the deployment
 
 ---
 

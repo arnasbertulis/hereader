@@ -15,7 +15,14 @@ services:
       timeout: 5s
       retries: 5
 
+  # `image` and `build` together: the deployed stack pulls the tag CI pushed,
+  # while `docker compose build` on a developer's machine still produces a
+  # local image under the same name. HEREADER_TAG is written into .env by
+  # server/deploy.sh, so a manual `docker compose up -d` on the server later
+  # brings up the release that is already running rather than whatever
+  # :latest has become since.
   app:
+    image: ghcr.io/arnasbertulis/hereader-server:${HEREADER_TAG:-local}
     build: .
     container_name: hereader-server
     restart: unless-stopped
@@ -30,8 +37,14 @@ services:
       DATABASE_PASSWORD: ${DATABASE_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
 
+  # Caddy plus the compiled web bundle, built by CI from app/web.Dockerfile.
+  # It has no `build` stanza because building it needs a `flutter build web`
+  # to have run first, and because ADR 0006 already establishes that this
+  # layer cannot be exercised locally at all: the sslip.io hostname resolves
+  # to the server's IP, so a local Caddy fails its ACME challenge. Local
+  # work runs `docker compose up db app` and talks to the service directly.
   caddy:
-    image: caddy:2
+    image: ghcr.io/arnasbertulis/hereader-web:${HEREADER_TAG:-local}
     container_name: hereader-caddy
     restart: unless-stopped
     depends_on:
@@ -41,7 +54,6 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./web-dist:/srv/web:ro
       - caddy-data:/data
       - caddy-config:/config
 
