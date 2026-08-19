@@ -240,8 +240,19 @@ Three things the runs found rather than confirmed:
   onto Node 24 by the runner with a warning on every run. Not a failure and
   not addressed here; it will become one when the forcing stops.
 
-**Still unverified.** The rollback path — editing `HEREADER_TAG` in the
-server's `.env` and running `docker compose up -d` — has never been
-exercised, which is unfortunate for a path whose whole value is being
-available on a bad day. So is a deploy against a cold database, per the
-health budget above, and a cold-cache image build.
+**The rollback was exercised deliberately, with nothing wrong.**
+`HEREADER_TAG` in the server's `.env` set back to the previous release,
+`docker compose up -d`, `/api/health` answering ok, then forward to the
+current one and up again. Both directions worked and the site stayed
+reachable throughout.
+
+Running it while the system is healthy was the point. A rollback is the one
+path here whose entire value is being available on a bad day, and a bad day
+is the worst time to discover that the tag has to be the full forty
+characters — a short sha names an image that does not exist, and compose
+fails on the pull rather than on anything that explains itself.
+
+**Still unverified.** A deploy against a cold database, per the health
+budget above, and a cold-cache image build. Both are properties of a first
+start rather than of a release, and neither can be staged without either
+faking it or taking the service down.
