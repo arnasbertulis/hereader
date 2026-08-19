@@ -259,7 +259,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
           u.state == PlaybackState.paused || u.state == PlaybackState.finished;
 
       // On the transition rather than on every update, so the second emit
-      // seekToIndex produces does not queue a second write.
+      // a chapter jump's `stopAt` produces does not queue a second write.
       //
       // Forced on finished regardless of whether the index moved. A text of
       // one token starts and finishes at the same index, so the ordinary
@@ -495,13 +495,15 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   /// Jumps to a chapter and leaves the session paused there.
   ///
-  /// [PlaybackSession.seekToIndex] pauses unless already playing, and it is
-  /// always paused here because opening the panel paused it. Landing mid
-  /// flight at 250 wpm in a place the reader has not seen would mean the
-  /// first words of the chapter go past before they have looked up.
+  /// `stopAt` rather than `seekToIndex`: opening the panel already paused the
+  /// session, and landing through `seekToIndex` left the next `play` free to
+  /// apply `rewindWords` on the way out, putting the reader back in the
+  /// chapter they just left. `stopAt` suppresses that one resume rewind, the
+  /// same guarantee every other jump on this screen already carries. See
+  /// ADR 0022.
   void _goToChapter(Chapter chapter) {
     _scaffoldKey.currentState?.closeDrawer();
-    _session.seekToIndex(chapter.tokenIndex);
+    _session.stopAt(chapter.tokenIndex);
   }
 
   /// Takes the reader to the very start of the file, front matter included.
@@ -510,7 +512,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
   /// does not know where the text begins, so guessing how far back to go
   /// would compound the first guess with a second. The start of the file is
   /// the one position that is certainly right.
-  void _goToFrontMatter() => _session.seekToIndex(0);
+  ///
+  /// `stopAt`, not `seekToIndex`, for the same resume-rewind reason as
+  /// `_goToChapter`.
+  void _goToFrontMatter() => _session.stopAt(0);
 
   /// Escape and the system back gesture close the panel before they close
   /// the book.

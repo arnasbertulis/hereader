@@ -268,12 +268,14 @@ answers a different question — how far a *resume* re-enters the sentence after
 a pause — and stays with the profile because it belongs to a reading style
 rather than to an input.
 
-Every reader-driven move goes through `PlaybackSession.stopAt`, which stops
-where it lands and suppresses exactly one resume rewind. Without that, a step
-forward followed by pressing play would leave the reader behind where they
-started, since the resume out of `paused` applies `rewindWords` on the way.
-Chapter jumps still use `seekToIndex` and still have that fault; it is recorded
-in [ADR 0020](../docs/adr/0020-reader-driven-navigation.md).
+Every reader-driven move — the tap zones, the four jump buttons, a chapter
+choice, and the offer back into front matter — goes through
+`PlaybackSession.stopAt`, which stops where it lands and suppresses exactly
+one resume rewind. Without that, a step forward followed by pressing play
+would leave the reader behind where they started, since the resume out of
+`paused` applies `rewindWords` on the way. See
+[ADR 0020](../docs/adr/0020-reader-driven-navigation.md) and
+[ADR 0022](../docs/adr/0022-chapter-jumps-also-suppress-the-resume-rewind.md).
 
 The controls sit in three rows below the progress bar. A nav row of four
 jumps — back a paragraph, back a sentence, forward a sentence, forward a

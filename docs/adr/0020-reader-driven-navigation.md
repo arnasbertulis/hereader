@@ -14,6 +14,11 @@ jumps above a row of close, play and profile. Everything else here —
 the three tap zones, `stopAt`, `ui.step_words`, and the jump semantics in
 section 4 — stands unchanged.
 
+**The Consequences entry recording chapter navigation's resume-rewind fault as
+open is closed by
+[ADR 0022](0022-chapter-jumps-also-suppress-the-resume-rewind.md)**, which
+moves `_goToChapter` and `_goToFrontMatter` onto `stopAt`.
+
 ## Context
 
 ADR 0015 removed the rewind button from the reading surface and moved rewind
