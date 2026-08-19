@@ -228,11 +228,23 @@ health check survives compose's own substitution as a single `$`.
 
 `bash -n server/backup/backup.sh` parses.
 
-**Nothing has run yet.** Docker was not available on the machine this was
-written on, and the service does not exist on the server until a deploy
-carries it. The first deploy after this merges is what produces a startup
-dump, and the restore check below is what turns that file into a backup.
-Both runs are to be recorded here rather than assumed:
+**The service has run on the server and a dump has been restored.** The
+deploy that carried it wrote a startup dump at 20:08:09 UTC, the health
+check reported `healthy` on the first inspection rather than after a day
+of waiting — which is what the startup dump is for — and an on-demand run
+answered `backup: wrote /backups/hereader-20260819T201210Z.dump (20K)`.
+
+Restoring the newest dump into `hereader_restore_check` produced the same
+three counts as the live database: 1 user, 39 sync events, 4 rows of
+entity state. The scratch database was dropped afterwards and nothing
+live was touched at any point.
+
+That is the claim about the rows that `pg_restore --list` deliberately
+does not make. What it still does not cover is a restore onto a different
+cluster: this one loaded into the same Postgres, as the same superuser,
+with the role the dump refers to already present. A dump restored onto a
+fresh machine needs that role created first, which is the sort of thing
+found at the worst possible moment.
 
 Every command below reads the user name from the container's own
 environment, so no credential is typed on the server's command line.
@@ -265,3 +277,22 @@ docker exec hereader-db sh -c 'dropdb -U "$POSTGRES_USER" hereader_restore_check
 The scratch database is the point of the exercise. Restoring over
 `hereader` would prove the same thing and would be the first time anyone
 had tried it, on live data, which is the wrong order.
+
+A dump of that database is 17KB, and 20KB with a second reading session in
+it. Fourteen of them is a quarter of a megabyte, so the retention window
+is bounded by nothing on a 40GB disk and was chosen for how far back it is
+useful to go rather than for what fits.
+
+**The deploy that carried this recreated the `db` container**, as adding a
+mount to a service does, and the health check answered on its third
+attempt — the same three attempts every deploy so far has taken. So a
+Postgres restart with its data directory already populated costs nothing
+measurable against the 150-second budget. It is still not the cold start
+ADR 0023 lists as unverified: Flyway found its migrations applied and had
+nothing to do.
+
+**Still unverified.** The nightly path itself. Everything above ran at
+startup or on demand, and the 03:00 UTC loop has not yet come round once —
+the first morning it does is what proves the schedule rather than the
+script. The health check is what would report its absence, and it now has
+a dump recent enough to be reporting `healthy` for the right reason.

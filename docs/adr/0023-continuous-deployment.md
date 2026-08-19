@@ -236,9 +236,13 @@ Three things the runs found rather than confirmed:
 - **A host key copied out of a search tool's output is not the key.**
   `Select-String` prefixes its matches with a path and a line number, and
   the value has to be byte-exact. It is now taken from the file directly.
-- **The `docker/*` actions run on a deprecated Node 20 runtime**, forced
-  onto Node 24 by the runner with a warning on every run. Not a failure and
-  not addressed here; it will become one when the forcing stops.
+- **The `docker/*` actions ran on a deprecated Node 20 runtime**, forced
+  onto Node 24 by the runner with a warning on every run. Not a failure,
+  but one with a date on it. `setup-buildx` v4, `login` v4 and
+  `build-push` v7 are each the release that switches the runtime, and
+  every input in use here survived those majors; the run after the bump
+  carried no annotations at all. Nothing could verify it beforehand,
+  because a pull request does not trigger this workflow.
 
 **The rollback was exercised deliberately, with nothing wrong.**
 `HEREADER_TAG` in the server's `.env` set back to the previous release,
