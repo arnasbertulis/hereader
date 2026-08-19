@@ -194,6 +194,109 @@ void main() {
 
       expect(find.byTooltip('Chapters'), findsNothing);
     });
+
+    testWidgets(
+      'resuming after a chapter jump does not rewind by rewindWords',
+      (tester) async {
+        // `_goToChapter` used to reach its target through `seekToIndex`,
+        // which carries none of `stopAt`'s resume-rewind suppression: the
+        // next play would step back and land in the chapter just left.
+        final text = _text();
+
+        await tester.pumpWidget(
+          reader(
+            LibraryBook(
+              id: 'b',
+              title: 'A Book',
+              text: text,
+              chapters: [
+                Chapter(
+                  title: 'Chapter Two',
+                  depth: 0,
+                  tokenIndex: text.startOfBlock('two')!,
+                ),
+              ],
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byTooltip('Chapters'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Chapter Two'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Delta'), findsOneWidget);
+
+        await tester.tap(find.byKey(readerPlayButtonKey));
+        await tester.pump();
+
+        expect(find.text('Delta'), findsOneWidget);
+      },
+    );
+  });
+
+  group('the front matter offer', () {
+    late AppDatabase database;
+    late LibraryRepository repository;
+
+    setUp(() {
+      database = AppDatabase(NativeDatabase.memory());
+      repository = LibraryRepository(database);
+    });
+    tearDown(() => database.close());
+
+    Widget reader(LibraryBook book) => MaterialApp(
+      home: ReaderScreen(
+        book: book,
+        repository: repository,
+        issueStamp: _stamp,
+        onSave: (_) async {},
+      ),
+    );
+
+    testWidgets(
+      'accepting it under elicited pacing keeps advancing rather than pausing',
+      (tester) async {
+        // `_goToFrontMatter` used to reach index 0 through `seekToIndex`,
+        // which forces the session to `paused` whenever it was not already
+        // `playing` — collapsing `awaitingAdvance`, elicited pacing's
+        // active-reading state, into a stop the reader never asked for. The
+        // rewind-on-resume symptom `_goToChapter`'s test catches does not
+        // show here: it clamps to nothing at index 0.
+        await repository.setActiveProfile(
+          Presets.centralFieldLoss.id,
+          hlc: await _stamp(),
+        );
+
+        final text = _text();
+
+        await tester.pumpWidget(
+          reader(
+            LibraryBook(
+              id: 'b',
+              title: 'A Book',
+              text: text,
+              contentStartIndex: text.startOfBlock('one')!,
+              contentStartReason: ContentStartReason.boilerplateHeuristic,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(readerPlayButtonKey));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Alpha'), findsOneWidget);
+        expect(find.byTooltip('Stop advancing'), findsOneWidget);
+
+        await tester.tap(find.text('Start at the beginning'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Licence'), findsOneWidget);
+        expect(find.byTooltip('Stop advancing'), findsOneWidget);
+      },
+    );
   });
 
   /// The walk the panel's highlight and the saved hint both go through.
