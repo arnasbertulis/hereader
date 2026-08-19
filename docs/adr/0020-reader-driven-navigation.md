@@ -6,6 +6,14 @@ Date: 2026-08-18
 
 Accepted. Completes the tap zones ADR 0015 deferred.
 
+**Section 5's row order and the "two rows of controls" rejection in
+Alternatives are superseded by
+[ADR 0021](0021-back-a-sentence-back-a-paragraph.md)**, which adds a backward
+sentence and paragraph jump and moves to a three-row layout: a nav row of four
+jumps above a row of close, play and profile. Everything else here —
+the three tap zones, `stopAt`, `ui.step_words`, and the jump semantics in
+section 4 — stands unchanged.
+
 ## Context
 
 ADR 0015 removed the rewind button from the reading surface and moved rewind

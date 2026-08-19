@@ -42,9 +42,11 @@ const Key readerTapBackKey = Key('reader-tap-back');
 const Key readerTapCentreKey = Key('reader-tap-centre');
 const Key readerTapForwardKey = Key('reader-tap-forward');
 
-/// The two forward jumps in the control row.
+/// The four sentence and paragraph jumps in the nav row. See ADR 0021.
 const Key readerSentenceButtonKey = Key('reader-sentence-button');
 const Key readerParagraphButtonKey = Key('reader-paragraph-button');
+const Key readerBackSentenceButtonKey = Key('reader-back-sentence-button');
+const Key readerBackParagraphButtonKey = Key('reader-back-paragraph-button');
 
 /// Where the reader stopped.
 ///
@@ -367,9 +369,21 @@ class _ReaderScreenState extends State<ReaderScreen> {
   int? get _nextParagraph =>
       widget.book.text.nextParagraphStart(_session.index);
 
+  /// The previous sentence and paragraph, or null where there is none.
+  ///
+  /// Each restarts the unit the reader is in rather than always leaving it:
+  /// mid-sentence lands on that sentence's own first word, and only a second
+  /// press — already on a sentence's first word — reaches the one before.
+  /// See ADR 0021.
+  int? get _previousSentence =>
+      widget.book.text.previousSentenceStart(_session.index);
+
+  int? get _previousParagraph =>
+      widget.book.text.previousParagraphStart(_session.index);
+
   /// A callback that lands on [target], or null when there is no target.
   ///
-  /// Through `stopAt` like the edge zones, so all four navigation controls
+  /// Through `stopAt` like the edge zones, so all six navigation controls
   /// leave the reader stopped on a word they chose and resume from it.
   VoidCallback? _jumpTo(int? target) =>
       target == null ? null : () => _whenReading(() => _session.stopAt(target));
@@ -803,6 +817,18 @@ class _ReaderScreenState extends State<ReaderScreen> {
               _whenReading(_stepForward),
           const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
               _whenReading(_stepBack),
+          // The four sentence and paragraph jumps, modifier-keyed so the
+          // bare arrows keep stepping by `_stepWords`. Through `_jumpTo`
+          // like the buttons, so a key at the end of the book is a no-op
+          // rather than something a disabled button would not do.
+          const SingleActivator(LogicalKeyboardKey.arrowRight, control: true):
+              () => _jumpTo(_nextSentence)?.call(),
+          const SingleActivator(LogicalKeyboardKey.arrowLeft, control: true):
+              () => _jumpTo(_previousSentence)?.call(),
+          const SingleActivator(LogicalKeyboardKey.arrowRight, shift: true):
+              () => _jumpTo(_nextParagraph)?.call(),
+          const SingleActivator(LogicalKeyboardKey.arrowLeft, shift: true):
+              () => _jumpTo(_previousParagraph)?.call(),
           const SingleActivator(LogicalKeyboardKey.keyC): _openChapters,
           const SingleActivator(LogicalKeyboardKey.escape): _closeOrDismiss,
         },
@@ -980,6 +1006,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
                             // inert at the end of the book.
                             onSentence: _jumpTo(_nextSentence),
                             onParagraph: _jumpTo(_nextParagraph),
+                            onBackSentence: _jumpTo(_previousSentence),
+                            onBackParagraph: _jumpTo(_previousParagraph),
                           ),
                         ],
                       ),
@@ -1203,19 +1231,15 @@ const double _secondaryIconSize = 28;
 /// cannot be pressed anywhere else in the app.
 Color _dimmed(Color ink) => ink.withValues(alpha: 0.38);
 
-/// Exit, profile, play, and the two forward jumps, over a progress bar.
+/// Progress, a row of four sentence and paragraph jumps, then exit, play and
+/// profile.
 ///
-/// **Order.** Both jumps move forward, so both sit to the right of play,
-/// where forward reads as forward. Putting the shorter one on play's left to
-/// keep exit and profile on the outside would have made it look like a step
-/// back — which is the one thing in this row that is not a glyph at all, and
-/// is the left tap zone instead. Exit and profile group on the left as leave
-/// and configure. Play stays the middle of five equal-width secondaries, so
-/// `spaceEvenly` still centres it exactly.
-///
-/// Rewind is still not a button here. ADR 0015 took it off the surface ahead
-/// of the tap zones, and ADR 0020 built them; adding a glyph for the one
-/// action that now has a zone of its own would give it two homes.
+/// **Order.** Outward from play in the nav row: back-paragraph, back-sentence,
+/// forward-sentence, forward-paragraph. Distance from the centre matches
+/// distance travelled, and the two directions mirror each other. See ADR
+/// 0021, which moved play into its own row beneath the jumps — un-rejecting
+/// ADR 0020's "two rows" alternative now that the row holds four jumps
+/// instead of two.
 ///
 /// Takes the resolved presentation rather than a colour. The row needs three
 /// colours that all derive from the background, and passing one in while
@@ -1238,6 +1262,10 @@ class _Controls extends StatelessWidget {
   final VoidCallback? onSentence;
   final VoidCallback? onParagraph;
 
+  /// Null at the very start of the book, for the same reason. See ADR 0021.
+  final VoidCallback? onBackSentence;
+  final VoidCallback? onBackParagraph;
+
   const _Controls({
     required this.state,
     required this.progress,
@@ -1247,6 +1275,8 @@ class _Controls extends StatelessWidget {
     required this.onProfile,
     required this.onSentence,
     required this.onParagraph,
+    required this.onBackSentence,
+    required this.onBackParagraph,
   });
 
   @override
@@ -1301,31 +1331,8 @@ class _Controls extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 IconButton(
-                  onPressed: onClose,
-                  iconSize: _secondaryIconSize,
-                  color: ink,
-                  icon: const Icon(AppIcons.closeBook),
-                  tooltip: 'Back to library',
-                ),
-                IconButton(
-                  key: readerProfileButtonKey,
-                  onPressed: onProfile,
-                  iconSize: _secondaryIconSize,
-                  color: ink,
-                  icon: const Icon(AppIcons.readingProfile),
-                  tooltip: 'Reading profile',
-                ),
-                IconButton(
-                  key: readerPlayButtonKey,
-                  onPressed: onToggle,
-                  iconSize: _primaryIconSize,
-                  color: ink,
-                  icon: Icon(stopping ? AppIcons.pause : AppIcons.play),
-                  tooltip: toggleLabel,
-                ),
-                IconButton(
-                  key: readerSentenceButtonKey,
-                  onPressed: onSentence,
+                  key: readerBackParagraphButtonKey,
+                  onPressed: onBackParagraph,
                   iconSize: _secondaryIconSize,
                   color: ink,
                   // `color` is the enabled colour only, and this row sets it
@@ -1335,6 +1342,24 @@ class _Controls extends StatelessWidget {
                   // the theme has never seen. The same ink, dimmed: nothing
                   // else on this screen could carry "unavailable", and ADR
                   // 0015's one ink is not broken by an opacity.
+                  disabledColor: _dimmed(ink),
+                  icon: const Icon(AppIcons.backParagraph),
+                  tooltip: 'Back a paragraph',
+                ),
+                IconButton(
+                  key: readerBackSentenceButtonKey,
+                  onPressed: onBackSentence,
+                  iconSize: _secondaryIconSize,
+                  color: ink,
+                  disabledColor: _dimmed(ink),
+                  icon: const Icon(AppIcons.backSentence),
+                  tooltip: 'Back a sentence',
+                ),
+                IconButton(
+                  key: readerSentenceButtonKey,
+                  onPressed: onSentence,
+                  iconSize: _secondaryIconSize,
+                  color: ink,
                   disabledColor: _dimmed(ink),
                   icon: const Icon(AppIcons.skipSentence),
                   tooltip: 'Forward a sentence',
@@ -1347,6 +1372,35 @@ class _Controls extends StatelessWidget {
                   disabledColor: _dimmed(ink),
                   icon: const Icon(AppIcons.skipParagraph),
                   tooltip: 'Forward a paragraph',
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                IconButton(
+                  onPressed: onClose,
+                  iconSize: _secondaryIconSize,
+                  color: ink,
+                  icon: const Icon(AppIcons.closeBook),
+                  tooltip: 'Back to library',
+                ),
+                IconButton(
+                  key: readerPlayButtonKey,
+                  onPressed: onToggle,
+                  iconSize: _primaryIconSize,
+                  color: ink,
+                  icon: Icon(stopping ? AppIcons.pause : AppIcons.play),
+                  tooltip: toggleLabel,
+                ),
+                IconButton(
+                  key: readerProfileButtonKey,
+                  onPressed: onProfile,
+                  iconSize: _secondaryIconSize,
+                  color: ink,
+                  icon: const Icon(AppIcons.readingProfile),
+                  tooltip: 'Reading profile',
                 ),
               ],
             ),

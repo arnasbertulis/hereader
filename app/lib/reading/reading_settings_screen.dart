@@ -192,6 +192,10 @@ const _shortcuts = [
   _Shortcut('Start or pause', 'Space'),
   _Shortcut('Back a step', 'Left'),
   _Shortcut('Forward a step', 'Right'),
+  _Shortcut('Back a sentence', 'Ctrl+Left'),
+  _Shortcut('Forward a sentence', 'Ctrl+Right'),
+  _Shortcut('Back a paragraph', 'Shift+Left'),
+  _Shortcut('Forward a paragraph', 'Shift+Right'),
   _Shortcut('Chapters', 'C'),
   _Shortcut('Close the book', 'Escape'),
 ];

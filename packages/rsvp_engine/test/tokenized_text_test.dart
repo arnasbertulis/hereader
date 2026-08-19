@@ -433,4 +433,111 @@ void main() {
       expect(_text(const []).nextParagraphStart(0), isNull);
     });
   });
+
+  group('previousSentenceStart', () {
+    test('mid-sentence restarts the sentence it is in', () {
+      // Token 1 is "two", mid-sentence in block a. The sentence starts at 0.
+      expect(_text().previousSentenceStart(1), 0);
+    });
+
+    test('already on a sentence start moves to the one before', () {
+      // Token 3 is "Four", the first word of the second sentence. Already
+      // there, so this moves to the first sentence's start.
+      expect(_text().previousSentenceStart(3), 0);
+    });
+
+    test('the sentence-final word restarts its own sentence', () {
+      // Token 4 is "five.", the last word of the second sentence but not its
+      // first, so this still restarts it rather than skipping past it.
+      expect(_text().previousSentenceStart(4), 3);
+    });
+
+    test('a second restart moves past the first sentence entirely', () {
+      // Token 5 is "Six", the first word of the third sentence. Already
+      // there, so this moves to the second sentence's start.
+      expect(_text().previousSentenceStart(5), 3);
+    });
+
+    test('the first sentence has no sentence before it', () {
+      expect(_text().previousSentenceStart(0), isNull);
+    });
+
+    test('a negative index is read as the start', () {
+      expect(_text().previousSentenceStart(-5), isNull);
+    });
+
+    test('an empty text has no previous sentence', () {
+      expect(_text(const []).previousSentenceStart(0), isNull);
+    });
+
+    test('a full stop masked by a blank line still restarts correctly', () {
+      // Same fixture as the masking test above: token 1's pauseAfter is
+      // `paragraph`, not `sentence`, because of the blank line that follows
+      // it. The backward scan has to match both values too, or restarting
+      // from token 2 would walk straight past this boundary.
+      final text = _text(const [
+        (id: 'a', text: 'One two.\n\nThree four. Five six.'),
+      ]);
+
+      expect(text.tokens[1].pauseAfter, PauseAfter.paragraph);
+      // Mid the second sentence ("four.") restarts it, landing on 2.
+      expect(text.previousSentenceStart(3), 2);
+      // Already on its start moves past it, landing on the first sentence.
+      expect(text.previousSentenceStart(2), 0);
+    });
+
+    test('a block-final full stop is a plain sentence boundary', () {
+      final text = _text(const [
+        (id: 'a', text: 'One two.'),
+        (id: 'b', text: 'Three four.'),
+      ]);
+
+      expect(text.tokens[1].pauseAfter, PauseAfter.sentence);
+      expect(text.previousSentenceStart(2), 0);
+    });
+  });
+
+  group('previousParagraphStart', () {
+    test('mid-paragraph restarts the paragraph it is in', () {
+      // Token 2 is "three.", mid-block a. The paragraph starts at 0.
+      expect(_text().previousParagraphStart(2), 0);
+    });
+
+    test('already on a block start moves to the block before', () {
+      expect(_text().previousParagraphStart(3), 0);
+      expect(_text().previousParagraphStart(5), 3);
+    });
+
+    test('the first paragraph has no paragraph before it', () {
+      expect(_text().previousParagraphStart(0), isNull);
+    });
+
+    test('a blank line inside one block restarts to it', () {
+      final text = _text(const [(id: 'a', text: 'One two\n\nThree four')]);
+
+      expect(text.tokens[1].pauseAfter, PauseAfter.paragraph);
+      // Mid the second in-block paragraph restarts it, landing on 2.
+      expect(text.previousParagraphStart(3), 2);
+      // Already on its start moves past it, landing at the block start.
+      expect(text.previousParagraphStart(2), 0);
+    });
+
+    test('the nearer of the two boundaries wins backward too', () {
+      final text = _text(const [
+        (id: 'a', text: 'One two\n\nThree four'),
+        (id: 'b', text: 'Five six'),
+      ]);
+
+      // The block boundary is at 4 and the blank line is at 2, so moving
+      // back from block b's start lands on the blank line, not on 0.
+      expect(text.previousParagraphStart(4), 2);
+      expect(text.previousParagraphStart(2), 0);
+    });
+
+    test('an out of range index has no answer', () {
+      expect(_text().previousParagraphStart(-1), isNull);
+      expect(_text().previousParagraphStart(9), isNull);
+      expect(_text(const []).previousParagraphStart(0), isNull);
+    });
+  });
 }

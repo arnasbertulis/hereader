@@ -275,12 +275,18 @@ started, since the resume out of `paused` applies `rewindWords` on the way.
 Chapter jumps still use `seekToIndex` and still have that fault; it is recorded
 in [ADR 0020](../docs/adr/0020-reader-driven-navigation.md).
 
-The control row is close, profile, play, forward a sentence, forward a
-paragraph. Both jumps are to the right of play because both move forward, and
-both disable at the end of the book rather than offering a jump that goes
-nowhere. There is still no rewind button: back is the left zone. See
-[ADR 0015](../docs/adr/0015-reader-chrome-is-monochrome-over-the-profile.md)
-and [ADR 0020](../docs/adr/0020-reader-driven-navigation.md).
+The controls sit in three rows below the progress bar. A nav row of four
+jumps — back a paragraph, back a sentence, forward a sentence, forward a
+paragraph — sits above a row of close, play and profile. Each jump disables at
+the end it cannot reach rather than offering one that goes nowhere. Back a
+sentence and back a paragraph restart the unit the reader is in the first time
+they are pressed, and only reach the one before it once already on that unit's
+first word — the "previous track" rule a media player applies to skip-back,
+picked because re-reading a missed sentence is the more common need. `Ctrl` and
+`Shift` with the arrow keys reach the same four jumps from a keyboard. See
+[ADR 0015](../docs/adr/0015-reader-chrome-is-monochrome-over-the-profile.md),
+[ADR 0020](../docs/adr/0020-reader-driven-navigation.md) and
+[ADR 0021](../docs/adr/0021-back-a-sentence-back-a-paragraph.md).
 
 ## Notes
 

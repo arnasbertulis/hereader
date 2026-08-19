@@ -175,4 +175,53 @@ void main() {
       await disposeTree(tester);
     });
   });
+
+  // ADR 0021. `IconButton` carries its tooltip in the semantics node's
+  // `tooltip` property, not `label` — unlike the hand-built `_TapZone`
+  // semantics above, which set `label` directly. This pins the four new
+  // buttons' tooltips alongside the two ADR 0020 already ships.
+  group('the sentence and paragraph jumps', () {
+    testWidgets('each carries its own tooltip', (tester) async {
+      final handle = tester.ensureSemantics();
+
+      // Mid-book, so all four jumps are enabled: a disabled `IconButton`
+      // drops its tooltip from the semantics tree along with `onPressed`.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReaderScreen(
+            book: LibraryBook(
+              id: 'b',
+              title: 'A Book',
+              text: text,
+              position: text.locatorAt(4),
+            ),
+            repository: LibraryRepository(database),
+            issueStamp: _stamp,
+            onSave: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getSemantics(find.byKey(readerBackParagraphButtonKey)).tooltip,
+        'Back a paragraph',
+      );
+      expect(
+        tester.getSemantics(find.byKey(readerBackSentenceButtonKey)).tooltip,
+        'Back a sentence',
+      );
+      expect(
+        tester.getSemantics(find.byKey(readerSentenceButtonKey)).tooltip,
+        'Forward a sentence',
+      );
+      expect(
+        tester.getSemantics(find.byKey(readerParagraphButtonKey)).tooltip,
+        'Forward a paragraph',
+      );
+
+      handle.dispose();
+      await disposeTree(tester);
+    });
+  });
 }
