@@ -196,16 +196,52 @@ mount remains.
 
 `bash -n server/deploy.sh` parses.
 
-The two workflow files were **not** machine-linted. `actionlint` needs Go or
-a running Docker daemon and neither was available in the session that wrote
-them, so their correctness rests on GitHub accepting them on the first run.
+The two workflow files were not machine-linted before their first run.
+`actionlint` needs Go or a running Docker daemon and neither was available
+in the session that wrote them. GitHub accepted both as written.
 
-**Not yet verified, and this is the part that matters:** no deploy has run
-through this pipeline. The server-side half — the forced command in
-`authorized_keys`, the checkout, the `.env` rewrite, `docker compose pull`
-against GHCR, and the health poll — has not executed against the real VPS
-at the time of writing, because doing so requires the secrets to be set and
-the first `v*` tag to be pushed. The reasoning above is argued from how
-these tools behave, not from a run that happened. This section is to be
-rewritten with the result of the first tagged deploy, including whether the
-health poll's 150 seconds is enough for a cold Flyway start.
+**Both triggers have now run end to end against the real VPS.** A
+`workflow_dispatch` run on `main` at `f1b3c7f`, and a `v0.1.0` tag at
+`281f608` — the second confirming the `push: tags: ['v*']` trigger, which
+is the path the design actually rests on. Each ran both image jobs, the
+forced command over SSH, the checkout, the `.env` rewrite, `docker compose
+pull` against GHCR and the health poll. `GET /api/health` answered
+`{"status":"ok"}` and the web root returned 200 afterwards.
+
+Timings from the tagged run, which are the useful ones rather than the
+impressive ones: `server-image` 26s, `web-image` 79s, `deploy` 24s. The
+server image build was a warm GHA cache hit and says nothing about a cold
+one; the point it does make is that the Maven build is no longer on the
+CX22's clock at all.
+
+**The health poll finished on its third attempt, about 12 seconds into a
+150-second budget.** So the question this section was left open to answer —
+whether 150 seconds covers a cold Flyway start — is still unanswered, and
+now harder to answer accidentally: both runs found Postgres already up with
+its migrations applied, because only the `app` and `caddy` containers were
+replaced. The budget has never been near its limit and the first deploy
+that brings up a fresh database is the one that will test it.
+
+Three things the runs found rather than confirmed:
+
+- **The first attempt failed on `REMOTE HOST IDENTIFICATION HAS CHANGED`**,
+  which is indistinguishable from a man-in-the-middle at a glance. The cause
+  was a mangled `DEPLOY_HOST_KEY`, and establishing that meant fetching the
+  server's key from two independent sources and comparing fingerprints by
+  hand, because ssh names the key the server sent and never the one it was
+  compared against. The step now prints the pinned fingerprint, which is
+  public by construction and makes the two cases one glance apart. A pinned
+  host key is still the right call over a deploy-time `ssh-keyscan`; what
+  was wrong was pinning it without any way to see what had been pinned.
+- **A host key copied out of a search tool's output is not the key.**
+  `Select-String` prefixes its matches with a path and a line number, and
+  the value has to be byte-exact. It is now taken from the file directly.
+- **The `docker/*` actions run on a deprecated Node 20 runtime**, forced
+  onto Node 24 by the runner with a warning on every run. Not a failure and
+  not addressed here; it will become one when the forcing stops.
+
+**Still unverified.** The rollback path — editing `HEREADER_TAG` in the
+server's `.env` and running `docker compose up -d` — has never been
+exercised, which is unfortunate for a path whose whole value is being
+available on a bad day. So is a deploy against a cold database, per the
+health budget above, and a cold-cache image build.
