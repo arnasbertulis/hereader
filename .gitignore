@@ -15,8 +15,8 @@ doc/api/
 .env*
 !**/.env.example
 
-# ignore claude
-.claude/*
+# Local agent/editor configuration, at the repo root and in every package
+**/.claude/
 
 # Avoid committing generated Javascript files:
 *.dart.js
