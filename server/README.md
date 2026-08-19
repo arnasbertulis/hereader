@@ -56,7 +56,8 @@ cp .env.example .env   # then edit JWT_SECRET and DATABASE_PASSWORD
 docker compose up --build -d db app
 ```
 
-Compose defines three services: Postgres, this service, and Caddy. Only Caddy
+Compose defines four services: Postgres, this service, Caddy, and the backup
+job described below. Only Caddy
 publishes ports to the world; the service binds to `127.0.0.1:8080` and the
 database publishes nothing at all, which is why a development container must
 not reuse the name `hereader-db` — it would be replaced by one nothing on the
@@ -70,6 +71,62 @@ nothing to serve and would fail its ACME challenge anyway. `app`'s image tag
 comes from `HEREADER_TAG` in `.env`, defaulting to `local`, which is what
 `--build` produces here and what `server/deploy.sh` overwrites with a commit
 sha on the server. See [ADR 0023](../docs/adr/0023-continuous-deployment.md).
+
+`db-backup` is named out of it too, for a duller reason: it works locally and
+writes dumps of a development database that nobody wants.
+
+## Backups
+
+The `db-backup` service runs `backup/backup.sh` once when it starts and then
+every night at 03:00 UTC, writing a `pg_dump` archive into the `db-backups`
+volume and keeping fourteen days of them. It is the same `postgres:17` image
+as the database, so `pg_dump` never drifts out of step with the server it is
+dumping. See [ADR 0024](../docs/adr/0024-database-backups.md) for why this is
+a compose service rather than a cron entry, and for what it deliberately does
+not cover.
+
+Each run writes to a `.partial` name, checks the archive is readable with
+`pg_restore --list`, renames it into place, and only then deletes anything
+older than the retention window. The service reports unhealthy if no dump is
+newer than 25 hours, because a backup job that silently stopped looks exactly
+like one that is working.
+
+```bash
+docker exec hereader-db-backup ls -lt /backups     # what is there
+docker exec hereader-db-backup /opt/backup/backup.sh   # take one now
+docker inspect --format '{{.State.Health.Status}}' hereader-db-backup
+```
+
+The volume is also mounted read-only into `db`, so restoring does not begin
+with copying a file between containers. Checking a dump without touching
+anything live:
+
+```bash
+docker exec hereader-db sh -c 'createdb -U "$POSTGRES_USER" hereader_restore_check'
+docker exec hereader-db sh -c 'pg_restore -U "$POSTGRES_USER" \
+  -d hereader_restore_check "$(ls -t /backups/hereader-*.dump | head -1)"'
+docker exec hereader-db sh -c 'psql -U "$POSTGRES_USER" -d hereader_restore_check \
+  -c "select count(*) from users"'
+docker exec hereader-db sh -c 'dropdb -U "$POSTGRES_USER" hereader_restore_check'
+```
+
+Restoring for real is the same `pg_restore` against `hereader`, with the
+service stopped so nothing writes underneath it. The dump carries
+`flyway_schema_history`, so the service starts against it without re-running
+migrations.
+
+```bash
+docker compose stop app
+docker exec hereader-db sh -c 'dropdb -U "$POSTGRES_USER" hereader'
+docker exec hereader-db sh -c 'createdb -U "$POSTGRES_USER" hereader'
+docker exec hereader-db sh -c 'pg_restore -U "$POSTGRES_USER" \
+  -d hereader "$(ls -t /backups/hereader-*.dump | head -1)"'
+docker compose start app
+```
+
+The `dropdb` in that sequence discards the current database. There is no
+undo, and the dump being restored is the only copy of what replaces it —
+which is the reason the check above exists as a separate, harmless procedure.
 
 ## Configuration
 
@@ -88,6 +145,11 @@ signing secret, which has none.
 
 `.env` holds the secret and the database password on a developer's machine and
 on the server, populated separately in each place and never committed.
+
+The backup job reads none of these. Its connection comes from the standard
+`PG*` variables that `compose.yaml` sets for it, and its one setting,
+`BACKUP_KEEP_DAYS`, is written there rather than in `.env` because it is a
+property of the deployment and not a secret.
 
 ## Endpoints
 
@@ -266,8 +328,9 @@ CI runs the same suite against a Postgres service container.
 ## Not built yet
 
 Compaction of the event log. Bookmarks, which have a conflict rule defined but
-no endpoint using it. Automated backups — Postgres here holds positions and
-preferences rather than book files, so the practical cost of loss is low, but
-it is a gap rather than a decision, and the only part of the deployment still
-missing now that releases go out through
-[ADR 0023](../docs/adr/0023-continuous-deployment.md)'s pipeline.
+no endpoint using it.
+
+An off-site copy of the nightly dumps. Every backup is currently on the same
+disk as the database it came from, which answers a bad migration and a wrong
+`DROP` and does not answer losing the machine. Deferred with its reasons in
+[ADR 0024](../docs/adr/0024-database-backups.md) rather than left unsaid.

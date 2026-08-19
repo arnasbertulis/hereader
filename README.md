@@ -76,6 +76,7 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 - [x] CI running analyzer and tests on every push, across every package, the app, and the service, with the pure packages also run through `dart2js` in a browser and the web build compiled on every change
 - [x] Deployed: containerised service and web build behind Caddy on a Hetzner VPS, automatic HTTPS via an sslip.io hostname, with reading positions and profiles both verified syncing between Windows and web against the live service
 - [x] CD pipeline: a `v*` tag builds the service and the web bundle into container images, pushes them to GHCR and has the server pull them, over a key that can run nothing but the deploy script. The release running is recorded on the server by commit sha, so rolling back does not need the pipeline. Recorded in [`docs/adr/0023-continuous-deployment.md`](docs/adr/0023-continuous-deployment.md)
+- [x] Nightly database backups from a service in the same compose file, checked for readability before they are published and pruned only after a new one lands. A dump older than 25 hours makes the container report unhealthy, because a backup that quietly stopped looks exactly like one that is working. Recorded in [`docs/adr/0024-database-backups.md`](docs/adr/0024-database-backups.md)
 
 **Not started**
 - [ ] Running the app's own suite in a real browser. The pure packages run under `dart2js` in CI and the web build is compiled on every change, but the app's tests reach `dart:ffi` through drift and cannot execute on that target. See [`docs/adr/0009-web-platform-coverage.md`](docs/adr/0009-web-platform-coverage.md)
@@ -165,6 +166,7 @@ Every substantial decision has an ADR carrying the alternatives that were reject
 | [0021](docs/adr/0021-back-a-sentence-back-a-paragraph.md) | Back a sentence and back a paragraph are their own jumps, not a reversed step |
 | [0022](docs/adr/0022-chapter-jumps-also-suppress-the-resume-rewind.md) | A chapter or front-matter jump suppresses the resume rewind |
 | [0023](docs/adr/0023-continuous-deployment.md) | CI builds the images, a version tag deploys them, and the server only pulls |
+| [0024](docs/adr/0024-database-backups.md) | Backups are a nightly `pg_dump` from a compose service, kept on the same machine |
 
 ---
 
@@ -338,7 +340,7 @@ start: the browser database drift uses needs a secure context. Use `https://`,
 - iOS is untested. The codebase targets it, but building and signing requires macOS hardware.
 - Flutter web renders text to canvas rather than DOM, so screen reader support on the web target is weaker than a conventional website even where the semantics are correct. There is also no keystore there, so tokens fall back to local storage.
 - The web page paints its loading background from the browser's own light or dark preference rather than from the theme the reader chose in the app. That choice lives in the browser's database, behind the engine the page is still loading, so a reader who set Light on a dark-preference device sees a dark background for the moment before the first frame.
-- The deployed server has no automated backups. Postgres holds reading positions and preferences, not book files, so the practical cost of loss is low — recoverable by re-registering test devices rather than an irreplaceable loss.
+- The deployed database is backed up nightly, and every copy is on the same machine as the database. That covers a bad migration, a wrong `DROP` and a deleted data volume; it does not cover losing the server, or a `docker compose down -v`, which takes the dumps with it. An off-box copy is deferred rather than overlooked — it needs a second credential on the server and a destination that costs money, against data whose loss means re-registering test devices. See [ADR 0024](docs/adr/0024-database-backups.md).
 - Deploys run from a `v*` tag rather than from a merge, so landing a change on `main` does not ship it. That is deliberate — see [ADR 0023](docs/adr/0023-continuous-deployment.md) — but it does mean the deployed site can sit behind `main`, and nothing reports the gap.
 - The deploy pipeline has a health check and no automatic rollback. A release that fails it stays up and fails the workflow; putting the previous one back is a line edited in `server/.env` and a `docker compose up -d` over SSH.
 - A position for a book not yet imported on a device is held locally rather than lost. It stays held forever if the reader never imports that book on that device; harmless, since each held position is a locator and two integers, and sign-out clears them.
@@ -361,7 +363,7 @@ start: the browser database drift uses needs a secure context. Use `https://`,
 5. Google sign-in as an additional identity source
 6. PDF support, which needs column detection, header and footer stripping, and reading-order reconstruction
 7. Continuous scrolling presentation, as a separate renderer rather than a toggle. Smooth scroll needs constant velocity, so honouring a per-token duration would make text surge and stall mid-sentence. Whether per-token pacing collapses into a single velocity, or that mode drops pacing entirely, is unresolved.
-8. Automated Postgres backups, the remaining gap in the deployment
+8. An off-site copy of the nightly database dumps, which is what [ADR 0024](docs/adr/0024-database-backups.md) leaves open
 
 ---
 
