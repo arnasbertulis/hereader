@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
-import '../theme/app_icons.dart';
 import 'profile_edit_screen.dart';
-import 'profile_presentation.dart';
+import 'profile_row.dart';
 
 /// Reading profiles: which one is in use, and editing the reader's own.
 ///
@@ -72,6 +71,12 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     final copy = source.fork(id: ReadingProfile.newId());
     await widget.repository.saveProfile(copy, hlc: await widget.issueStamp());
     if (!mounted) return;
+
+    // A copy is a profile the reader just asked to make and is about to
+    // customise, so it is what they read with next rather than whatever was
+    // active before the copy existed.
+    await _select(copy);
+    if (!mounted) return;
     await _edit(copy);
   }
 
@@ -88,10 +93,10 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
 
     if (!mounted) return;
 
-    // The editor forked a preset. A reader who customised the profile they
-    // were reading with means to read with the result, so the selection
-    // follows rather than staying on the untouched preset.
-    if (result != null && result.id != profile.id && _activeId == profile.id) {
+    // The editor forked a preset. Same rule as _duplicate above: a profile
+    // just created by editing is the one to read with, regardless of what
+    // was active when the fork happened.
+    if (result != null && result.id != profile.id) {
       await _select(result);
       return;
     }
@@ -160,7 +165,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                   ),
                 ),
               for (final profile in mine)
-                _ProfileRow(
+                ProfileRow(
                   profile: profile,
                   selected: profile.id == _activeId,
                   onSelect: () => _select(profile),
@@ -178,7 +183,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                 ),
               ),
               for (final profile in presets)
-                _ProfileRow(
+                ProfileRow(
                   profile: profile,
                   selected: profile.id == _activeId,
                   onSelect: () => _select(profile),
@@ -211,55 +216,4 @@ class _SectionHeader extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
     child: Text(title, style: Theme.of(context).textTheme.titleSmall),
   );
-}
-
-class _ProfileRow extends StatelessWidget {
-  final ReadingProfile profile;
-  final bool selected;
-  final VoidCallback onSelect;
-  final VoidCallback onEdit;
-  final VoidCallback onDuplicate;
-  final VoidCallback? onDelete;
-
-  const _ProfileRow({
-    required this.profile,
-    required this.selected,
-    required this.onSelect,
-    required this.onEdit,
-    required this.onDuplicate,
-    this.onDelete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      selected: selected,
-      leading: Icon(
-        selected ? AppIcons.chosen : AppIcons.notChosen,
-      ),
-      title: Text(profile.name),
-      subtitle: Text(describeProfile(profile)),
-      onTap: onSelect,
-      trailing: PopupMenuButton<String>(
-        // Named rather than an icon row: a reader who needs 48pt type is not
-        // well served by three small targets crammed into a list row.
-        tooltip: 'Options for ${profile.name}',
-        onSelected: (value) => switch (value) {
-          'edit' => onEdit(),
-          'duplicate' => onDuplicate(),
-          'delete' => onDelete?.call(),
-          _ => null,
-        },
-        itemBuilder: (context) => [
-          PopupMenuItem(
-            value: 'edit',
-            child: Text(profile.isBuiltIn ? 'View settings' : 'Edit'),
-          ),
-          const PopupMenuItem(value: 'duplicate', child: Text('Make a copy')),
-          if (onDelete != null)
-            const PopupMenuItem(value: 'delete', child: Text('Delete')),
-        ],
-      ),
-    );
-  }
 }

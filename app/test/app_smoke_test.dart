@@ -377,6 +377,11 @@ void main() {
     // editing one produces a copy.
     expect(mine.single.id, isNot(startsWith('builtin.')));
 
+    // A copy is what the reader asked to make and is about to customise, so
+    // it becomes the active profile as soon as it exists rather than only
+    // when the source happened to be active already.
+    expect((await harness.repository.activeProfile()).id, mine.single.id);
+
     await _disposeTree(tester);
   });
 
