@@ -89,7 +89,6 @@ abstract final class AppIcons {
   static const resume = IconData(0xe3d2, fontFamily: _light);
   static const openMenu = IconData(0xe136, fontFamily: _light);
   static const flipSortDirection = IconData(0xe098, fontFamily: _light);
-  static const tileMenu = IconData(0xe208, fontFamily: _light);
 
   // -- the reader ------------------------------------------------------
   static const play = IconData(0xe3d0, fontFamily: _light);
@@ -132,6 +131,10 @@ abstract final class AppIcons {
 
   /// Confirming a colour swatch, drawn over the colour itself.
   static const confirm = IconData(0xe182, fontFamily: _light);
+
+  /// The overflow menu on a row — a book tile, a profile row — for actions
+  /// that are not the row's own tap.
+  static const tileMenu = IconData(0xe208, fontFamily: _light);
 
   // -- what the reading settings page states ---------------------------
   static const placeIsSaved = IconData(0xe0ea, fontFamily: _light);

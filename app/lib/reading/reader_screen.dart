@@ -9,7 +9,10 @@ import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
 import 'library_book.dart';
+import 'profile_edit_screen.dart';
 import 'profile_presentation.dart';
+import 'profile_row.dart';
+import 'profiles_screen.dart';
 import 'reading_display.dart';
 import 'rsvp_view.dart';
 
@@ -22,6 +25,11 @@ import 'rsvp_view.dart';
 /// asserts the first alone, as `homeContinueTileKey` and `appNavBarKey`
 /// already do for Home and the shell.
 const Key readerPlayButtonKey = Key('reader-play-button');
+
+/// Opens the reader's profile sheet — switching, editing, and the route to
+/// the full profiles screen. Keyed for the same reason as
+/// [readerPlayButtonKey].
+const Key readerProfileButtonKey = Key('reader-profile-button');
 
 /// The three regions the reading surface is divided into.
 ///
@@ -73,6 +81,42 @@ class ReadingResult {
     this.chapterTitle,
     this.chapterEndIndex,
   });
+}
+
+/// What tapping a row or an overflow item in the reader's profile sheet
+/// means.
+///
+/// The sheet used to pop a bare [ReadingProfile] meaning "select this one".
+/// It now offers edit, copy, delete and a route to the full profiles screen
+/// too, and a bottom sheet is the wrong place to run a confirm dialog or push
+/// a route — so it only reports intent, and [_ReaderScreenState._pickProfile]
+/// acts on it after the sheet has closed.
+sealed class _ProfileIntent {
+  const _ProfileIntent();
+}
+
+class _SelectProfile extends _ProfileIntent {
+  final ReadingProfile profile;
+  const _SelectProfile(this.profile);
+}
+
+class _EditProfile extends _ProfileIntent {
+  final ReadingProfile profile;
+  const _EditProfile(this.profile);
+}
+
+class _CopyProfile extends _ProfileIntent {
+  final ReadingProfile profile;
+  const _CopyProfile(this.profile);
+}
+
+class _DeleteProfile extends _ProfileIntent {
+  final ReadingProfile profile;
+  const _DeleteProfile(this.profile);
+}
+
+class _ManageProfiles extends _ProfileIntent {
+  const _ManageProfiles();
 }
 
 /// Full-screen reading surface for a book.
@@ -273,6 +317,24 @@ class _ReaderScreenState extends State<ReaderScreen> {
     });
   }
 
+  /// Re-reads the active profile and adopts it unconditionally.
+  ///
+  /// [_restoreProfile] short-circuits when the id has not changed, which is
+  /// right for the one read at open and wrong here: the editor, reached from
+  /// the profile sheet, can save changes to the profile already in use, and
+  /// the id then never moves even though the config underneath it did. Every
+  /// route the sheet pushes calls this on return so the surface reflects
+  /// whatever it comes back to, edited or not.
+  Future<void> _adoptActiveProfile() async {
+    final profile = await widget.repository.activeProfile();
+    if (!mounted) return;
+
+    setState(() {
+      _profile = profile;
+      _session.profile = profile;
+    });
+  }
+
   Future<void> _restoreStep() async {
     final stored = await widget.repository.preference(
       ReadingDisplayKeys.stepWords,
@@ -453,12 +515,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
     unawaited(_close());
   }
 
-  /// Switches profile mid-book.
+  /// Switches profile mid-book, and now reaches everything else a reading
+  /// profile can need without leaving the book: editing, copying, deleting,
+  /// and the full profiles screen behind a "Reading profiles" row.
   ///
   /// Lists what is actually on this device rather than the built-in presets
   /// alone, so a profile made in settings or synced from another device can
-  /// be chosen here. Making and editing profiles lives in settings; this is
-  /// only a switcher.
+  /// be chosen here.
   Future<void> _pickProfile() async {
     _session.pause();
 
@@ -488,7 +551,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     // `readerChromeTheme` stays the one place these are decided.
     final sheet = chrome.bottomSheetTheme;
 
-    final chosen = await showModalBottomSheet<ReadingProfile>(
+    final intent = await showModalBottomSheet<_ProfileIntent>(
       context: context,
       backgroundColor: sheet.backgroundColor,
       elevation: sheet.elevation,
@@ -516,12 +579,28 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 shrinkWrap: true,
                 children: [
                   for (final profile in profiles)
-                    ListTile(
-                      title: Text(profile.name),
-                      subtitle: Text(describeProfile(profile)),
+                    ProfileRow(
+                      profile: profile,
                       selected: profile.id == _profile.id,
-                      onTap: () => Navigator.of(context).pop(profile),
+                      onSelect: () =>
+                          Navigator.of(context).pop(_SelectProfile(profile)),
+                      onEdit: () =>
+                          Navigator.of(context).pop(_EditProfile(profile)),
+                      onDuplicate: () =>
+                          Navigator.of(context).pop(_CopyProfile(profile)),
+                      onDelete: profile.isBuiltIn
+                          ? null
+                          : () => Navigator.of(
+                              context,
+                            ).pop(_DeleteProfile(profile)),
                     ),
+                  const Divider(height: 1),
+                  ListTile(
+                    leading: const Icon(AppIcons.sectionProfiles),
+                    title: const Text('Reading profiles'),
+                    onTap: () =>
+                        Navigator.of(context).pop(const _ManageProfiles()),
+                  ),
                 ],
               );
             },
@@ -530,20 +609,113 @@ class _ReaderScreenState extends State<ReaderScreen> {
       ),
     );
 
-    if (chosen == null || !mounted) return;
+    if (!mounted || intent == null) return;
 
-    setState(() {
-      _profile = chosen;
-      _session.profile = chosen;
-    });
+    switch (intent) {
+      case _SelectProfile(:final profile):
+        setState(() {
+          _profile = profile;
+          _session.profile = profile;
+        });
+        // Remembered on this device only. Which profile is in use is not
+        // synced: a phone read outdoors and a desktop in a dim room can want
+        // different ones, and a shared pointer would have each undo the
+        // other.
+        await widget.repository.setActiveProfile(
+          profile.id,
+          hlc: await widget.issueStamp(),
+        );
 
-    // Remembered on this device only. Which profile is in use is not synced:
-    // a phone read outdoors and a desktop in a dim room can want different
-    // ones, and a shared pointer would have each undo the other.
-    await widget.repository.setActiveProfile(
-      chosen.id,
-      hlc: await widget.issueStamp(),
-    );
+      case _EditProfile(:final profile):
+        final result = await Navigator.of(context).push<ReadingProfile>(
+          MaterialPageRoute(
+            builder: (_) => ProfileEditScreen(
+              profile: profile,
+              repository: widget.repository,
+              issueStamp: widget.issueStamp,
+            ),
+          ),
+        );
+        if (!mounted) return;
+        if (result != null && result.id != profile.id) {
+          // The editor forked a preset. Same rule as ProfilesScreen: what
+          // was just created is what the reader continues with.
+          await widget.repository.setActiveProfile(
+            result.id,
+            hlc: await widget.issueStamp(),
+          );
+        }
+        await _adoptActiveProfile();
+
+      case _CopyProfile(:final profile):
+        final copy = profile.fork(id: ReadingProfile.newId());
+        await widget.repository.saveProfile(
+          copy,
+          hlc: await widget.issueStamp(),
+        );
+        if (!mounted) return;
+        // A copy is selected as soon as it exists, same rule as
+        // ProfilesScreen._duplicate — the reader asked to make it and is
+        // about to customise it.
+        await widget.repository.setActiveProfile(
+          copy.id,
+          hlc: await widget.issueStamp(),
+        );
+        if (!mounted) return;
+        await Navigator.of(context).push<ReadingProfile>(
+          MaterialPageRoute(
+            builder: (_) => ProfileEditScreen(
+              profile: copy,
+              repository: widget.repository,
+              issueStamp: widget.issueStamp,
+            ),
+          ),
+        );
+        if (!mounted) return;
+        await _adoptActiveProfile();
+
+      case _DeleteProfile(:final profile):
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text('Delete ${profile.name}?'),
+            content: const Text(
+              'This removes it from every device signed in to your account. '
+              'Presets are not affected.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Keep'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Delete'),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true || !mounted) return;
+        await widget.repository.deleteProfile(
+          profile.id,
+          hlc: await widget.issueStamp(),
+        );
+        // Deleting the active profile clears the pointer in the repository,
+        // so this reads back as Standard rather than as a dangling id.
+        await _adoptActiveProfile();
+
+      case _ManageProfiles():
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (_) => ProfilesScreen(
+              repository: widget.repository,
+              issueStamp: widget.issueStamp,
+            ),
+          ),
+        );
+        if (!mounted) return;
+        await _adoptActiveProfile();
+    }
   }
 
   /// Stops, records the place, and leaves.
@@ -1136,6 +1308,7 @@ class _Controls extends StatelessWidget {
                   tooltip: 'Back to library',
                 ),
                 IconButton(
+                  key: readerProfileButtonKey,
                   onPressed: onProfile,
                   iconSize: _secondaryIconSize,
                   color: ink,
