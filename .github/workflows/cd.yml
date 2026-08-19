@@ -109,22 +109,33 @@ jobs:
     environment: production
 
     steps:
-      - uses: webfactory/ssh-agent@v0.9.1
-        with:
-          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
-
-      # A pinned host key rather than ssh-keyscan at deploy time, which would
-      # accept whatever answered and record it as trusted.
-      - name: Pin the host key
+      # Written by hand rather than through an ssh-agent action. This is the
+      # one step of the pipeline holding a credential that reaches the
+      # server, and four lines of shell are a smaller thing to trust than a
+      # third-party action on that step.
+      #
+      # The host key is pinned from a secret, not read with ssh-keyscan at
+      # deploy time — a keyscan trusts whatever answers, which is no check
+      # at all on the connection it is meant to be checking.
+      - name: Prepare the SSH client
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_HOST_KEY }}
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.DEPLOY_HOST_KEY }}" >> ~/.ssh/known_hosts
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_HOST_KEY" > ~/.ssh/known_hosts
 
       # The key is restricted to server/deploy.sh by a forced command in
       # authorized_keys, so this whole string arrives there as
       # SSH_ORIGINAL_COMMAND and is pattern-checked before it reaches git.
       - name: Deploy
-        run: ssh "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" "${{ github.sha }}"
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes "$DEPLOY_USER@$DEPLOY_HOST" "${{ github.sha }}"
 
       # /health reports whether the service can reach Postgres rather than
       # whether the process is up, so this fails on a bad migration as well
