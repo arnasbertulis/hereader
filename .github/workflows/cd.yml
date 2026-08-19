@@ -128,6 +128,18 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           printf '%s\n' "$DEPLOY_HOST_KEY" > ~/.ssh/known_hosts
 
+          # A host key is public by construction, so printing its fingerprint
+          # leaks nothing and turns the one failure this step can produce into
+          # a readable one. ssh's answer to a mismatch is REMOTE HOST
+          # IDENTIFICATION HAS CHANGED, which names the fingerprint the server
+          # sent and not the one it was compared against, so without this the
+          # log shows a break-in warning and no way to tell a mangled secret
+          # from a real one. It also fails the step outright on a secret that
+          # is not a parseable host key at all, rather than letting that
+          # surface later as the same alarming message.
+          echo "Pinned host key:"
+          ssh-keygen -lf ~/.ssh/known_hosts
+
       # The key is restricted to server/deploy.sh by a forced command in
       # authorized_keys, so this whole string arrives there as
       # SSH_ORIGINAL_COMMAND and is pattern-checked before it reaches git.
