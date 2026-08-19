@@ -129,6 +129,13 @@ single-developer project at this stage; worth automating if deploys
 become frequent enough for the manual step to be the bottleneck rather
 than a rare, deliberate action.
 
+*Superseded by [ADR 0023](0023-continuous-deployment.md).* Deploys now run
+from a `v*` tag, with the images built in CI and pulled by the server,
+which no longer compiles anything. The paragraph above is left as written
+because 0023's reasoning is a response to it — including its framing of a
+deploy as a deliberate act, which 0023 kept and used to choose a tag
+trigger over a merge trigger.
+
 The `sslip.io` hostname is tied to this server's specific IP. Moving to a
 new server, or Hetzner ever changing the assigned address, means the
 public URL changes too. A real domain, if one is bought later, removes

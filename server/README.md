@@ -8,7 +8,10 @@ See [ADR 0004](../docs/adr/0004-store-book-files.md).
 
 Deployed on a single Hetzner VPS via Docker Compose, behind Caddy, which also
 serves the compiled Flutter web build from the same hostname. See
-[ADR 0006](../docs/adr/0006-deployment-infrastructure.md).
+[ADR 0006](../docs/adr/0006-deployment-infrastructure.md). Releases go out
+from a `v*` tag: CI builds this service and the web bundle into container
+images and the server pulls them, per
+[ADR 0023](../docs/adr/0023-continuous-deployment.md).
 
 ## Running it
 
@@ -50,14 +53,23 @@ mappings below are written without it; the URL a client calls carries it.
 
 ```bash
 cp .env.example .env   # then edit JWT_SECRET and DATABASE_PASSWORD
-docker compose up --build -d
+docker compose up --build -d db app
 ```
 
-Compose brings up three containers: Postgres, this service, and Caddy. Only
-Caddy publishes ports to the world; the service binds to `127.0.0.1:8080` and
-the database publishes nothing at all, which is why a development container
-must not reuse the name `hereader-db` — it would be replaced by one nothing on
-the host machine can reach.
+Compose defines three services: Postgres, this service, and Caddy. Only Caddy
+publishes ports to the world; the service binds to `127.0.0.1:8080` and the
+database publishes nothing at all, which is why a development container must
+not reuse the name `hereader-db` — it would be replaced by one nothing on the
+host machine can reach.
+
+Caddy is named out of the command above rather than brought up. It runs
+`ghcr.io/arnasbertulis/hereader-web`, an image CI builds by copying the
+compiled Flutter bundle into `caddy:2`, and its certificate is issued against
+an sslip.io hostname that resolves to the server's IP — so a local one has
+nothing to serve and would fail its ACME challenge anyway. `app`'s image tag
+comes from `HEREADER_TAG` in `.env`, defaulting to `local`, which is what
+`--build` produces here and what `server/deploy.sh` overwrites with a commit
+sha on the server. See [ADR 0023](../docs/adr/0023-continuous-deployment.md).
 
 ## Configuration
 
@@ -256,5 +268,6 @@ CI runs the same suite against a Postgres service container.
 Compaction of the event log. Bookmarks, which have a conflict rule defined but
 no endpoint using it. Automated backups — Postgres here holds positions and
 preferences rather than book files, so the practical cost of loss is low, but
-it is a gap rather than a decision. A CD pipeline — deploys are currently a
-manual SSH session; see [ADR 0006](../docs/adr/0006-deployment-infrastructure.md).
+it is a gap rather than a decision, and the only part of the deployment still
+missing now that releases go out through
+[ADR 0023](../docs/adr/0023-continuous-deployment.md)'s pipeline.

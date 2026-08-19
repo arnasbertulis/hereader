@@ -1,0 +1,155 @@
+name: deploy
+
+# Deploys are tagged, not triggered by a merge. The three CI workflows are
+# separate files and cannot gate each other, so a push-to-main trigger would
+# race them; a tag is applied to a commit whose checks have already gone
+# green under the branch ruleset. It also gives every release a name that is
+# not a sha, which is what a rollback needs to be able to say.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+# One deploy at a time, and never cancelled part-way: the second half of this
+# is `docker compose up -d` on a live server.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+env:
+  # The deployed hostname is the server's IP with its dots swapped for
+  # hyphens (ADR 0006). Moving the server changes this string here and in
+  # ci-flutter.yml, and nothing in the app's own source.
+  HEREADER_API: https://204-168-240-12.sslip.io/api
+  SERVER_IMAGE: ghcr.io/${{ github.repository_owner }}/hereader-server
+  WEB_IMAGE: ghcr.io/${{ github.repository_owner }}/hereader-web
+
+jobs:
+  server-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Building here rather than on the VPS. The CX22 has 2 vCPU and 4GB of
+      # RAM shared with a running JVM and Postgres, and `docker compose up
+      # --build` ran a full Maven build against exactly that.
+      - uses: docker/build-push-action@v6
+        with:
+          context: server
+          push: true
+          tags: |
+            ${{ env.SERVER_IMAGE }}:${{ github.sha }}
+            ${{ env.SERVER_IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  web-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+        working-directory: app
+
+      # Without the define, HEREADER_API falls back to localhost:8080 and the
+      # bundle builds, deploys and serves perfectly while every sync request
+      # from it goes to the reader's own machine.
+      - name: Build web
+        run: flutter build web --dart-define=HEREADER_API=$HEREADER_API
+        working-directory: app
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: app/build/web
+          file: app/web.Dockerfile
+          push: true
+          tags: |
+            ${{ env.WEB_IMAGE }}:${{ github.sha }}
+            ${{ env.WEB_IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+  deploy:
+    needs: [server-image, web-image]
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      # Written by hand rather than through an ssh-agent action. This is the
+      # one step of the pipeline holding a credential that reaches the
+      # server, and four lines of shell are a smaller thing to trust than a
+      # third-party action on that step.
+      #
+      # The host key is pinned from a secret, not read with ssh-keyscan at
+      # deploy time — a keyscan trusts whatever answers, which is no check
+      # at all on the connection it is meant to be checking.
+      - name: Prepare the SSH client
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_HOST_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_HOST_KEY" > ~/.ssh/known_hosts
+
+      # The key is restricted to server/deploy.sh by a forced command in
+      # authorized_keys, so this whole string arrives there as
+      # SSH_ORIGINAL_COMMAND and is pattern-checked before it reaches git.
+      - name: Deploy
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes "$DEPLOY_USER@$DEPLOY_HOST" "${{ github.sha }}"
+
+      # /health reports whether the service can reach Postgres rather than
+      # whether the process is up, so this fails on a bad migration as well
+      # as on a container that never started. Compose returns as soon as the
+      # containers are created, which is before Flyway has finished.
+      - name: Wait for the service to answer
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error "$HEREADER_API/health"; then
+              echo
+              echo "healthy after ${attempt} attempt(s)"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "no healthy response in 150s" >&2
+          exit 1

@@ -40,7 +40,9 @@ jobs:
       # it against the exact artifact that gets served in production: the
       # 64-bit block-id hash failed here, not in a test, because web
       # compilers reject integer literals they cannot represent exactly.
-      # Deploys are a manual scp of this folder, so a build that only ever
-      # ran on a developer's machine was the last check before production.
+      #
+      # The define matches cd.yml's, so this builds what a deploy builds
+      # rather than a localhost variant of it. Without it the check would
+      # pass on a bundle nobody ever ships.
       - name: Build web
-        run: flutter build web
+        run: flutter build web --dart-define=HEREADER_API=https://204-168-240-12.sslip.io/api
