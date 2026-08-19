@@ -9,11 +9,67 @@ services:
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
     volumes:
       - db-data:/var/lib/postgresql/data
+      # Read-only, so that a restore is `docker exec hereader-db pg_restore`
+      # against a path this container can already see. Without it the dumps
+      # would have to be copied out of one container and into another on the
+      # day they are needed, which is the day to be doing the least.
+      - db-backups:/backups:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER}"]
       interval: 5s
       timeout: 5s
       retries: 5
+
+  # Nightly pg_dump into a volume on this machine (ADR 0024). It is the same
+  # postgres:17 image as the database, so pg_dump matches the server it is
+  # dumping without a second thing to keep in step.
+  #
+  # The schedule is here rather than in backup.sh because a mounted file is
+  # resolved once, when the container starts: a deploy that rewrites the
+  # script does not restart this container, so the running loop would keep
+  # executing the old text. Invoking the script fresh each night means only
+  # this loop — four lines that do not change — is ever stale, while the
+  # body of a backup is whatever the last deploy put on disk. Changing the
+  # loop itself changes compose.yaml, which does force a recreate.
+  #
+  # `$$` escapes compose's own variable substitution; the shell sees `$`.
+  db-backup:
+    image: postgres:17
+    container_name: hereader-db-backup
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGDATABASE: hereader
+      PGUSER: ${DATABASE_USER}
+      PGPASSWORD: ${DATABASE_PASSWORD}
+      BACKUP_KEEP_DAYS: 14
+    volumes:
+      - ./backup:/opt/backup:ro
+      - db-backups:/backups
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        /opt/backup/backup.sh
+        while true; do
+          sleep $$(( $$(date -u -d 'tomorrow 03:00' +%s) - $$(date -u +%s) ))
+          /opt/backup/backup.sh
+        done
+    # A backup that stopped happening looks exactly like one that is working,
+    # which is the usual way this fails. Anything newer than 25 hours means
+    # last night ran; nothing newer means it did not, and `docker ps` says
+    # unhealthy. The first dump is taken at startup so this is answerable
+    # immediately rather than a day from now.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - test -n "$$(find /backups -maxdepth 1 -name 'hereader-*.dump' -mmin -1500 -print -quit)"
+      interval: 15m
+      timeout: 10s
+      retries: 2
+      start_period: 2m
 
   # `image` and `build` together: the deployed stack pulls the tag CI pushed,
   # while `docker compose build` on a developer's machine still produces a
@@ -59,5 +115,6 @@ services:
 
 volumes:
   db-data:
+  db-backups:
   caddy-data:
   caddy-config:
