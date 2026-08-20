@@ -100,11 +100,26 @@ only, which is why `chunkSize` sits in the profile rather than in the engine.
 Continuous smooth scrolling cannot reuse this engine. A ticker needs constant
 velocity; honouring a per-token duration would make the text visibly surge and
 stall mid-sentence. Continuous scroll therefore requires either its own pacing
-path or a flattening of per-token timing into a single velocity, and it stays
-on the roadmap as a separate mode rather than a toggle on this one. Fine & Peli
-(1995, *JOSA A*) compared scrolled text against RSVP in visually impaired
-readers and belongs in the evidence file before that work starts — verify the
-PMID first.
+path or a flattening of per-token timing into a single velocity.
+
+**Resolved by [ADR 0025](0025-continuous-scroll.md).** The second option was
+taken: continuous scroll flattens per-token timing into a single velocity,
+`(baseWpm / 60) × meanAdvance`, and there is no second pacing path.
+`PacingDecision` and `PacingModel` are untouched, and section 3's separation
+of pacing from presentation stands — `PacingModel` still knows nothing about
+what a surface draws.
+
+What did move is where the boundary sits. **`PlaybackSession` now branches on
+`PresentationConfig.mode` before consulting the model**, at the top of
+`_scheduleCurrent`, so under continuous scroll `_model.decide` is never
+called: `Hold.pauseAfter` is not honoured as time and `AwaitAdvance` is
+unreachable rather than handled. That is a narrowing of section 3's boundary
+and it belongs stated here rather than left as a comment. The session, not
+the model, is what knows about presentation.
+
+Fine & Peli (1995) and Akthar et al. (2021) are in
+`docs/research/rsvp-evidence.md`, sections 2 and 6, with their PMIDs verified
+against the journal record.
 
 `referenceLetterCount` is honest only on average. A book whose mean word length
 differs sharply from 5 will still read faster or slower than the configured

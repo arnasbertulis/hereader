@@ -280,18 +280,34 @@ class TokenizedText {
   int? nextParagraphStart(int tokenIndex) {
     if (tokenIndex < 0 || tokenIndex >= tokens.length) return null;
 
+    // Bounded in practice by the containing block, so this scans one
+    // paragraph rather than the book: the block's last token always answers
+    // [isParagraphEndAt] when nothing inside it did.
+    for (var i = tokenIndex; i < tokens.length - 1; i++) {
+      if (isParagraphEndAt(i)) return i + 1;
+    }
+    return null;
+  }
+
+  /// Whether a paragraph boundary falls immediately after [tokenIndex].
+  ///
+  /// The two sources [nextParagraphStart] documents, asked about one token
+  /// instead of scanned for. False for the last token in the text, which ends
+  /// a paragraph but starts nothing, and false for an index out of range.
+  ///
+  /// Extracted so that a caller drawing a paragraph boundary and a caller
+  /// jumping to one cannot disagree about where it is. Continuous scroll adds
+  /// width after a paragraph, and re-deriving the test there would be two
+  /// functions computing one fact.
+  bool isParagraphEndAt(int tokenIndex) {
+    if (tokenIndex < 0 || tokenIndex >= tokens.length - 1) return false;
+    if (tokens[tokenIndex].pauseAfter == PauseAfter.paragraph) return true;
+
     final block = blockIndexOf(tokenIndex);
     final blockEnd = block + 1 < _blockStarts.length
         ? _blockStarts[block + 1]
         : tokens.length;
-
-    // Bounded by the block, so this scans one paragraph rather than the book
-    // when the block boundary is the answer.
-    for (var i = tokenIndex; i < blockEnd - 1; i++) {
-      if (tokens[i].pauseAfter == PauseAfter.paragraph) return i + 1;
-    }
-
-    return blockEnd < tokens.length ? blockEnd : null;
+    return tokenIndex == blockEnd - 1;
   }
 
   /// First token of the sentence containing [tokenIndex].

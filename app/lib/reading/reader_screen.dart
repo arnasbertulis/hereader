@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
@@ -9,12 +10,14 @@ import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
 import 'library_book.dart';
+import 'mode_fork.dart';
 import 'profile_edit_screen.dart';
 import 'profile_presentation.dart';
 import 'profile_row.dart';
 import 'profiles_screen.dart';
 import 'reading_display.dart';
-import 'rsvp_view.dart';
+import 'reading_surface.dart';
+import 'scroll_clock.dart';
 
 /// Identifies the play and pause button on the reading surface.
 ///
@@ -41,6 +44,16 @@ const Key readerProfileButtonKey = Key('reader-profile-button');
 const Key readerTapBackKey = Key('reader-tap-back');
 const Key readerTapCentreKey = Key('reader-tap-centre');
 const Key readerTapForwardKey = Key('reader-tap-forward');
+
+/// The single region continuous scroll replaces the three zones with.
+///
+/// One surface rather than three, because the zones are a fixed-anchor
+/// arrangement: under scroll the reader drags to where they want to be and a
+/// tap anywhere starts or stops. See ADR 0025.
+const Key readerScrollSurfaceKey = Key('reader-scroll-surface');
+
+/// The presentation mode switch in the reader's profile sheet.
+const Key readerScrollModeKey = Key('reader-scroll-mode');
 
 /// The four sentence and paragraph jumps in the nav row. See ADR 0021.
 const Key readerSentenceButtonKey = Key('reader-sentence-button');
@@ -121,6 +134,17 @@ class _ManageProfiles extends _ProfileIntent {
   const _ManageProfiles();
 }
 
+/// Switch the *active* profile's presentation mode, from the reader.
+///
+/// The mode is the one reading setting a reader plausibly wants to change
+/// with a book open — a chapter of dense prose reads differently one word at
+/// a time than sliding — and reaching it otherwise means the editor, two
+/// screens away. See ADR 0025.
+class _SetMode extends _ProfileIntent {
+  final PresentationMode mode;
+  const _SetMode(this.mode);
+}
+
 /// Full-screen reading surface for a book.
 ///
 /// Decides when a position is worth writing and hands it to [onSave]. How it
@@ -155,8 +179,20 @@ class ReaderScreen extends StatefulWidget {
   State<ReaderScreen> createState() => _ReaderScreenState();
 }
 
-class _ReaderScreenState extends State<ReaderScreen> {
+class _ReaderScreenState extends State<ReaderScreen>
+    with SingleTickerProviderStateMixin {
   late final PlaybackSession _session;
+
+  /// Time and geometry for continuous scroll. Built whatever the mode is,
+  /// because the mode can change mid-book from the profile sheet, and inert
+  /// until a scrolling profile arrives.
+  late final ScrollClock _clock;
+
+  /// Whether the surface was playing when the finger landed.
+  ///
+  /// The pointer-down pauses before the tap is arbitrated, so by the time
+  /// `onTap` fires the answer is already gone. See [_grabSurface].
+  bool _wasPlayingAtDown = false;
   StreamSubscription<PlaybackUpdate>? _sub;
 
   /// The frame the reading surface is drawing.
@@ -228,6 +264,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
       startIndex: widget.book.resumeIndex,
     );
 
+    _clock = ScrollClock(
+      session: _session,
+      vsync: this,
+      tokens: widget.book.text.tokens,
+      isParagraphEnd: widget.book.text.isParagraphEndAt,
+      chapterStarts: {for (final c in _chapters) c.tokenIndex},
+    );
+
     // Seeded rather than waited for. The stream carries changes, and a
     // session nobody has touched has not changed, so a book opened at a
     // stored position drew an empty surface until the reader pressed
@@ -254,6 +298,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
       // Unconditional. This is what the reading surface draws from, and it
       // is the only thing that changes while a stream of words is playing.
       _current.value = u;
+
+      // Idempotent and cheap. Starts and stops the ticker with the state,
+      // and moves the measured window when the anchor nears its edge —
+      // neither of which goes through `setState`, so the early return below
+      // still holds while scrolling.
+      _clock.sync();
 
       final stopped =
           u.state == PlaybackState.paused || u.state == PlaybackState.finished;
@@ -309,6 +359,30 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _restoreStep();
   }
 
+  /// The profile's presentation with its polarity decided.
+  ///
+  /// One expression, read by `build` and by the scroll clock. Two of these
+  /// could disagree about the polarity, and the marquee would then be
+  /// measured in one ink and painted in another.
+  ResolvedPresentation get _presentation =>
+      resolvePresentation(_profile.presentation, Theme.of(context).brightness);
+
+  /// Hands the clock the presentation it measures under.
+  ///
+  /// Never from `build`: this can replace the measured window, and marking a
+  /// painter dirty from inside a build is not something to reason about once
+  /// a frame.
+  void _syncClock() {
+    if (!mounted) return;
+    _clock.applyPresentation(_presentation);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncClock();
+  }
+
   Future<void> _restoreProfile() async {
     final profile = await widget.repository.activeProfile();
     if (!mounted || profile.id == _profile.id) return;
@@ -317,6 +391,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       _profile = profile;
       _session.profile = profile;
     });
+    _syncClock();
   }
 
   /// Re-reads the active profile and adopts it unconditionally.
@@ -335,6 +410,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       _profile = profile;
       _session.profile = profile;
     });
+    _syncClock();
   }
 
   Future<void> _restoreStep() async {
@@ -393,6 +469,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _saveTimer?.cancel();
     _lifecycle?.dispose();
     _sub?.cancel();
+    _clock.dispose();
     _session.dispose();
     _current.dispose();
     super.dispose();
@@ -473,6 +550,72 @@ class _ReaderScreenState extends State<ReaderScreen> {
     } else {
       _toggle();
     }
+  }
+
+  /// The finger has landed on a scrolling surface.
+  ///
+  /// Pauses immediately, from a raw `Listener` rather than `onTapDown`:
+  /// `BaseTapGestureRecognizer` defers that callback until it wins the arena,
+  /// the pointer lifts, or `kPressTimeout` — 100 ms, which at 250 wpm is
+  /// most of a word of text still sliding past after the reader has touched
+  /// the screen to stop it. A `Listener` never joins the arena, so it takes
+  /// nothing from the detector beneath it.
+  ///
+  /// Records what it interrupted, because `onTap` fires afterwards and by
+  /// then the state it needs to branch on has already been changed here.
+  void _grabSurface() {
+    if (_drawerOpen) return;
+
+    _wasPlayingAtDown = _session.state == PlaybackState.playing;
+    _session.pause();
+  }
+
+  /// The finger has lifted off a drag, or the pointer was cancelled.
+  ///
+  /// `stopHere` rather than `stopAt`: the reader let go at a particular place
+  /// in a particular word, and `stopAt` would zero the sub-token offset and
+  /// snap the text by up to a word at the moment of release. It also arms the
+  /// one-shot rewind suppression, so pressing play does not undo the scrub —
+  /// ADR 0022's guarantee, reached from a drag instead of a jump.
+  void _releaseSurface() {
+    if (_drawerOpen) return;
+    _session.stopHere();
+  }
+
+  /// A tap that turned out not to be a drag.
+  ///
+  /// The pointer-down has already paused, so a tap on moving text has done
+  /// its job by arriving. Only a tap that landed on stopped text starts it.
+  void _scrollTap() {
+    if (_drawerOpen || _wasPlayingAtDown) return;
+    _session.play();
+  }
+
+  void _scrubSurface(double dx) {
+    if (_drawerOpen) return;
+    _session.scrubBy(dx);
+  }
+
+  /// A wheel or a trackpad.
+  ///
+  /// In scope rather than a nice-to-have: a [PointerSignalEvent] is not
+  /// routed through the gesture arena, so no recognizer ever sees a wheel and
+  /// scrolling would have been undraggable on two of the three platforms this
+  /// ships to.
+  void _onSurfaceSignal(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+    if (_drawerOpen || !_session.scrolling) return;
+
+    _session.pause();
+    _session.scrubBy(event.scrollDelta.dy);
+    _session.stopHere();
+  }
+
+  /// The token [index] would land on, for a screen reader's step actions.
+  String _wordAt(int index) {
+    final tokens = widget.book.text.tokens;
+    if (tokens.isEmpty) return '';
+    return tokens[index.clamp(0, tokens.length - 1)].text;
   }
 
   /// Runs [action] only while the reading surface has the reader's attention.
@@ -614,6 +757,29 @@ class _ReaderScreenState extends State<ReaderScreen> {
                             ).pop(_DeleteProfile(profile)),
                     ),
                   const Divider(height: 1),
+                  // Below the list rather than above it. The sheet is
+                  // primarily the profile picker, and a tile at the top
+                  // pushed the last profile out of a shrink-wrapped sheet's
+                  // viewport — `reader_profile_menu_test.dart` counts them.
+                  SwitchListTile(
+                    key: readerScrollModeKey,
+                    secondary: const Icon(AppIcons.sectionReading),
+                    title: const Text('Sliding text'),
+                    subtitle: const Text(
+                      'One line moves past a fixed mark, instead of one word '
+                      'at a time. Drag to move through the book.',
+                    ),
+                    value:
+                        _profile.presentation.mode ==
+                        PresentationMode.continuousScroll,
+                    onChanged: (on) => Navigator.of(context).pop(
+                      _SetMode(
+                        on
+                            ? PresentationMode.continuousScroll
+                            : PresentationMode.fixedSingle,
+                      ),
+                    ),
+                  ),
                   ListTile(
                     leading: const Icon(AppIcons.sectionProfiles),
                     title: const Text('Reading profiles'),
@@ -723,6 +889,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
         // so this reads back as Standard rather than as a dangling id.
         await _adoptActiveProfile();
 
+      case _SetMode(:final mode):
+        await _setMode(mode);
+
       case _ManageProfiles():
         await Navigator.of(context).push<void>(
           MaterialPageRoute(
@@ -736,6 +905,98 @@ class _ReaderScreenState extends State<ReaderScreen> {
         await _adoptActiveProfile();
     }
   }
+
+  /// Puts the active profile into [mode], forking or unforking as needed.
+  ///
+  /// A switch the reader can flip has to be a switch: flipping it back must
+  /// land them where they started. A preset cannot be saved, so turning
+  /// sliding on forks it — the rule this repo already has for "the reader
+  /// changed a preset", and what the editor and `ProfilesScreen` both do.
+  /// Turning it off again has to undo that, or the reader is left reading one
+  /// word at a time under a profile named "(sliding)", which is what they
+  /// reported.
+  ///
+  /// Named after the change rather than "(copy)". `_CopyProfile` produces a
+  /// duplicate and is correctly named as one; a reader who flipped one switch
+  /// did not ask for a copy of anything. See ADR 0025.
+  Future<void> _setMode(PresentationMode mode) async {
+    final origin = presetBehind(_profile);
+
+    // Off, on a fork that has not been made the reader's own: go back to the
+    // preset it came from. The fork is removed only where nothing would be
+    // lost with it — a fork carrying caret settings the reader chose is kept
+    // and simply left unselected, because those settings are the reason to
+    // come back to it.
+    if (mode != PresentationMode.continuousScroll && origin != null) {
+      await widget.repository.setActiveProfile(
+        origin.preset.id,
+        hlc: await widget.issueStamp(),
+      );
+      if (!mounted) return;
+
+      if (!origin.caretOnly) {
+        await widget.repository.deleteProfile(
+          _profile.id,
+          hlc: await widget.issueStamp(),
+        );
+        if (!mounted) return;
+      }
+      await _adoptActiveProfile();
+      return;
+    }
+
+    // On, from a preset: reuse the fork this reader already has for it rather
+    // than leaving a second one behind every time the switch goes round.
+    if (mode == PresentationMode.continuousScroll && _profile.isBuiltIn) {
+      final existing = slidingForkOf(
+        _profile,
+        await widget.repository.allProfiles(),
+      );
+      if (!mounted) return;
+
+      if (existing != null) {
+        await widget.repository.setActiveProfile(
+          existing.id,
+          hlc: await widget.issueStamp(),
+        );
+        if (!mounted) return;
+        await _adoptActiveProfile();
+        return;
+      }
+    }
+
+    final changed = _profile.copyWith(
+      presentation: _profile.presentation.copyWith(mode: mode),
+    );
+    final saved = _profile.isBuiltIn
+        ? changed.fork(
+            id: ReadingProfile.newId(),
+            name: '${_profile.name} ${_modeSuffix(mode)}',
+          )
+        : changed;
+
+    await widget.repository.saveProfile(saved, hlc: await widget.issueStamp());
+    if (!mounted) return;
+
+    if (saved.id != _profile.id) {
+      await widget.repository.setActiveProfile(
+        saved.id,
+        hlc: await widget.issueStamp(),
+      );
+      if (!mounted) return;
+    }
+    await _adoptActiveProfile();
+  }
+
+  static String _modeSuffix(PresentationMode mode) => switch (mode) {
+    PresentationMode.continuousScroll => '(sliding)',
+    // Neither of these forks in practice — a preset only leaves
+    // `fixedSingle` by way of the switch, and comes back by way of the
+    // branch above. Named rather than defaulted so a fourth mode is a
+    // compile error here.
+    PresentationMode.fixedSingle ||
+    PresentationMode.shiftingWindow => '(one word)',
+  };
 
   /// Stops, records the place, and leaves.
   ///
@@ -779,10 +1040,98 @@ class _ReaderScreenState extends State<ReaderScreen> {
   String get _forwardLabel =>
       'Forward $_stepWords word${_stepWords == 1 ? '' : 's'}';
 
+  /// The whole reading surface as one control, for continuous scroll.
+  ///
+  /// The three tap zones do not exist in this mode. They are a fixed-anchor
+  /// arrangement — a reader who can drag to any word does not need an edge
+  /// that steps by a configured number of them — so they are absent rather
+  /// than present and inert, which is the choice ADR 0020 already made about
+  /// controls that do nothing.
+  ///
+  /// One semantics node, not three. A screen-reader user finding three
+  /// buttons where a sighted user finds one surface would be reading a
+  /// different app. `onIncrease` and `onDecrease` carry the stepping the edge
+  /// zones used to: `SemanticsAction.increase` is the idiom for a control
+  /// moving along a continuum, which this surface literally is, and TalkBack
+  /// and NVDA offer it as a swipe on the focused node. Deleting the edges
+  /// with no replacement would regress the exact axis ADR 0020 was written to
+  /// fix.
+  ///
+  /// No `liveRegion`. ADR 0020 declined one at four words a second; sixty
+  /// frames a second is not the case that changes the answer.
+  Widget _scrollRegion(PlaybackState state) {
+    // Hoisted out of the builder below so its elements are reused. Only the
+    // Semantics wrapper is rebuilt when the stream emits.
+    final surface = Listener(
+      onPointerDown: (_) => _grabSurface(),
+      onPointerCancel: (_) => _releaseSurface(),
+      onPointerSignal: _onSurfaceSignal,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        // The role and the label are on the Semantics above.
+        excludeFromSemantics: true,
+        // Tap and horizontal drag share one arena, so past `kTouchSlop` the
+        // drag accepts and on an early lift the tap wins. That is the rule
+        // this surface wants, and it is stock Flutter — no custom
+        // recognizer. `onHorizontalDrag*` rather than `onPan*` because a pan
+        // recognizer would claim the vertical axis this surface does not use.
+        onTap: _scrollTap,
+        // The content follows the finger: dragging right moves the reader
+        // backward. Pinned by a test rather than left to whoever next reads
+        // this minus sign.
+        onHorizontalDragUpdate: (d) => _scrubSurface(-d.delta.dx),
+        // `details.primaryVelocity` is deliberately ignored. No fling: the
+        // reader stops where they let go, and momentum would carry them past
+        // the word they were aiming at.
+        onHorizontalDragEnd: (_) => _releaseSurface(),
+        child: const SizedBox.expand(),
+      ),
+    );
+
+    return ValueListenableBuilder<PlaybackUpdate?>(
+      valueListenable: _current,
+      builder: (_, update, _) {
+        // The same rule the centre zone follows, literally: the word is
+        // offered only while the stream is stopped. Two labels for one
+        // control is how they come apart.
+        final word = state == PlaybackState.playing
+            ? ''
+            : (update?.token?.text ?? '');
+
+        return Semantics(
+          key: readerScrollSurfaceKey,
+          button: true,
+          label: _surfaceLabel,
+          value: word,
+          // Both or neither: `SemanticsNode` asserts that a node offering
+          // `increase` has a value exactly when it has an increased value.
+          // Blank while playing is the right half of that anyway — a node
+          // announcing no word should not announce the word a step away
+          // either. The actions stay live throughout.
+          increasedValue: word.isEmpty
+              ? ''
+              : _wordAt(_session.index + _stepWords),
+          decreasedValue: word.isEmpty
+              ? ''
+              : _wordAt(_session.index - _stepWords),
+          onTap: _onSurfaceTap,
+          onIncrease: () => _whenReading(_stepForward),
+          onDecrease: () => _whenReading(_stepBack),
+          child: surface,
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = _session.state;
     final showControls = state != PlaybackState.playing;
+
+    // Off the session rather than off the resolved presentation, so one
+    // object answers "is this a marquee" for the gesture, the clock and the
+    // surface alike.
+    final scrolling = _session.scrolling;
 
     // The reader's accent and contrast choices, taken from the app theme
     // above this route. `buildScheme` folds both into every role and cannot
@@ -795,10 +1144,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     // keeps it; a profile that leaves it open takes the brightness the app
     // is already in, which is read here rather than from the `Theme` this
     // method installs a few lines down. See ADR 0016.
-    final presentation = resolvePresentation(
-      _profile.presentation,
-      Theme.of(context).brightness,
-    );
+    final presentation = _presentation;
 
     final ink = colorOf(readerInkArgbFor(presentation));
 
@@ -826,14 +1172,26 @@ class _ReaderScreenState extends State<ReaderScreen> {
           // bare arrows keep stepping by `_stepWords`. Through `_jumpTo`
           // like the buttons, so a key at the end of the book is a no-op
           // rather than something a disabled button would not do.
-          const SingleActivator(LogicalKeyboardKey.arrowRight, control: true):
-              () => _jumpTo(_nextSentence)?.call(),
-          const SingleActivator(LogicalKeyboardKey.arrowLeft, control: true):
-              () => _jumpTo(_previousSentence)?.call(),
-          const SingleActivator(LogicalKeyboardKey.arrowRight, shift: true):
-              () => _jumpTo(_nextParagraph)?.call(),
-          const SingleActivator(LogicalKeyboardKey.arrowLeft, shift: true):
-              () => _jumpTo(_previousParagraph)?.call(),
+          const SingleActivator(
+            LogicalKeyboardKey.arrowRight,
+            control: true,
+          ): () =>
+              _jumpTo(_nextSentence)?.call(),
+          const SingleActivator(
+            LogicalKeyboardKey.arrowLeft,
+            control: true,
+          ): () =>
+              _jumpTo(_previousSentence)?.call(),
+          const SingleActivator(
+            LogicalKeyboardKey.arrowRight,
+            shift: true,
+          ): () =>
+              _jumpTo(_nextParagraph)?.call(),
+          const SingleActivator(
+            LogicalKeyboardKey.arrowLeft,
+            shift: true,
+          ): () =>
+              _jumpTo(_previousParagraph)?.call(),
           const SingleActivator(LogicalKeyboardKey.keyC): _openChapters,
           const SingleActivator(LogicalKeyboardKey.escape): _closeOrDismiss,
         },
@@ -868,27 +1226,31 @@ class _ReaderScreenState extends State<ReaderScreen> {
               body: Stack(
                 children: [
                   Positioned.fill(
-                    // One of the two subtrees that rebuild per word, the
-                    // other being the centre zone's semantics below. Both
-                    // are leaves; nothing in this Stack that lays anything
-                    // out is rebuilt while playing.
-                    child: ValueListenableBuilder<PlaybackUpdate?>(
-                      valueListenable: _current,
-                      // Paint only. The roles and the labels are on the
-                      // zones above, which are what a reader actually
-                      // presses; a word announced as its own node beside
-                      // three buttons would make the surface four things.
-                      builder: (_, update, _) => ExcludeSemantics(
-                        child: RsvpView(
-                          update: update,
-                          presentation: presentation,
-                        ),
+                    // Paint only. The roles and the labels are on the
+                    // regions above, which are what a reader actually
+                    // presses; a word announced as its own node beside three
+                    // buttons would make the surface four things.
+                    //
+                    // Which surface a profile draws is decided in one place,
+                    // and the settings preview calls the same one. See
+                    // [ReadingSurface] for why a `switch (mode)` here as well
+                    // would reopen the hole that had the contrast readout
+                    // measuring a pair the app never painted.
+                    child: ExcludeSemantics(
+                      child: ReadingSurface(
+                        updates: _current,
+                        presentation: presentation,
+                        layout: _clock.layout,
                       ),
                     ),
                   ),
 
-                  // Three regions rather than one. The edges step and stop;
-                  // the centre keeps play, pause and the elicited advance.
+                  // Three regions rather than one, at a fixed anchor. The
+                  // edges step and stop; the centre keeps play, pause and
+                  // the elicited advance. Continuous scroll replaces all
+                  // three with one draggable surface — see [_scrollRegion],
+                  // and ADR 0025 for why the zones are a fixed-anchor
+                  // arrangement rather than a reader-facing concept.
                   //
                   // Flex 1/2/1 rather than arithmetic over a measured width:
                   // it puts the 25/50/25 split in the layout, which is also
@@ -902,52 +1264,54 @@ class _ReaderScreenState extends State<ReaderScreen> {
                   // keep their own taps. The detector this replaced wrapped
                   // all of them.
                   Positioned.fill(
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _TapZone(
-                            key: readerTapBackKey,
-                            label: _backLabel,
-                            onTap: () => _whenReading(_stepBack),
+                    child: scrolling
+                        ? _scrollRegion(state)
+                        : Row(
+                            children: [
+                              Expanded(
+                                child: _TapZone(
+                                  key: readerTapBackKey,
+                                  label: _backLabel,
+                                  onTap: () => _whenReading(_stepBack),
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                // The word is announced by the control that stops
+                                // on it, so this one node follows the stream while
+                                // the two edges do not. The `Row` and its
+                                // `Expanded`s are built once either way.
+                                child: ValueListenableBuilder<PlaybackUpdate?>(
+                                  valueListenable: _current,
+                                  builder: (_, update, _) => _TapZone(
+                                    key: readerTapCentreKey,
+                                    label: _surfaceLabel,
+                                    // Offered only while the stream is stopped. A
+                                    // reader using RSVP is reading with their
+                                    // eyes, and speech four times a second would
+                                    // fight that rather than serve it — anyone who
+                                    // needs speech instead of sight is better
+                                    // served by the whole book read aloud than by
+                                    // one word at a time. Paused, stepped or
+                                    // rewound, the word on screen is one fact
+                                    // worth having on focus, and each of those is
+                                    // something the reader just did.
+                                    value: state == PlaybackState.playing
+                                        ? ''
+                                        : (update?.token?.text ?? ''),
+                                    onTap: _onSurfaceTap,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: _TapZone(
+                                  key: readerTapForwardKey,
+                                  label: _forwardLabel,
+                                  onTap: () => _whenReading(_stepForward),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                        Expanded(
-                          flex: 2,
-                          // The word is announced by the control that stops
-                          // on it, so this one node follows the stream while
-                          // the two edges do not. The `Row` and its
-                          // `Expanded`s are built once either way.
-                          child: ValueListenableBuilder<PlaybackUpdate?>(
-                            valueListenable: _current,
-                            builder: (_, update, _) => _TapZone(
-                              key: readerTapCentreKey,
-                              label: _surfaceLabel,
-                              // Offered only while the stream is stopped. A
-                              // reader using RSVP is reading with their
-                              // eyes, and speech four times a second would
-                              // fight that rather than serve it — anyone who
-                              // needs speech instead of sight is better
-                              // served by the whole book read aloud than by
-                              // one word at a time. Paused, stepped or
-                              // rewound, the word on screen is one fact
-                              // worth having on focus, and each of those is
-                              // something the reader just did.
-                              value: state == PlaybackState.playing
-                                  ? ''
-                                  : (update?.token?.text ?? ''),
-                              onTap: _onSurfaceTap,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: _TapZone(
-                            key: readerTapForwardKey,
-                            label: _forwardLabel,
-                            onTap: () => _whenReading(_stepForward),
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
                   if (state == PlaybackState.finished)
                     Center(

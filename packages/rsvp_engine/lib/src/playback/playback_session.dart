@@ -4,6 +4,7 @@ import '../pacing/pacing_decision.dart';
 import '../pacing/pacing_model.dart';
 import '../profile/profile.dart';
 import '../token.dart';
+import 'token_run.dart';
 
 enum PlaybackState {
   idle,
@@ -33,11 +34,22 @@ class PlaybackUpdate {
   /// True during the pause that follows punctuation.
   final bool inGap;
 
+  /// How far past the left edge of token [index] the anchor sits, in logical
+  /// pixels, under [PresentationMode.continuousScroll]. Always 0 otherwise.
+  ///
+  /// The renderer draws token [index] with its left edge at
+  /// `anchor - tokenOffset`, which is what makes "the token crossing the
+  /// anchor" *be* [index] by construction. Anything that hit-tests a laid-out
+  /// box against the anchor to answer that question instead is a second
+  /// notion of the current token, and they will disagree.
+  final double tokenOffset;
+
   const PlaybackUpdate({
     required this.state,
     required this.index,
     required this.token,
     this.inGap = false,
+    this.tokenOffset = 0,
   });
 }
 
@@ -59,6 +71,16 @@ class PlaybackSession {
   PlaybackState _state = PlaybackState.idle;
   bool _inGap = false;
   Timer? _timer;
+
+  /// Logical pixels into token [_index]'s own advance. Scroll mode only, and
+  /// never persisted: the locator format is token-granular (ADR 0002), so a
+  /// saved position resumes at the token's leading edge rather than partway
+  /// through it. At most one word, and cheaper than a schema, a wire and a
+  /// server change to buy back.
+  double _offset = 0;
+
+  /// Screen geometry, supplied by the renderer. See [run].
+  TokenRun _run = TokenRun.empty;
 
   /// Set by [stopAt] and spent by the next [play]. See [stopAt] for why.
   bool _resumeHere = false;
@@ -90,6 +112,42 @@ class PlaybackSession {
 
   ReadingProfile get profile => _profile;
 
+  /// Whether this session is under continuous scroll.
+  ///
+  /// Derived from the profile rather than fixed at construction, so
+  /// [profile]`=` switches presentation mid-read with nothing else to keep in
+  /// step. One owner of the question.
+  bool get scrolling =>
+      _profile.presentation.mode == PresentationMode.continuousScroll;
+
+  /// Logical pixels into the current token. See [PlaybackUpdate.tokenOffset].
+  double get tokenOffset => _offset;
+
+  /// Pixels per second the text moves at under continuous scroll.
+  ///
+  /// `baseWpm` is the only source; there is no separate scroll speed field
+  /// and nothing new on the wire. Note that seconds per token is
+  /// `meanAdvance / velocity` = `60 / baseWpm`, so the mean width divides out
+  /// of any time estimate and `remainingReadingTime` still answers it.
+  double get scrollVelocity =>
+      (_profile.pacing.baseWpm / 60) * _run.meanAdvance;
+
+  /// Screen geometry for the tokens around the anchor.
+  ///
+  /// Setting it rescales [_offset] so the anchor holds the same fraction of
+  /// the same word. Without that, dragging the type-size slider would walk
+  /// the text sideways under the marker on every frame of the drag. Done here
+  /// rather than in the renderer because the session owns the offset, so the
+  /// session owns what happens to it when the geometry underneath changes.
+  TokenRun get run => _run;
+
+  set run(TokenRun next) {
+    final was = _run.advanceAt(_index);
+    final fraction = was > 0 ? _offset / was : 0.0;
+    _run = next;
+    _offset = fraction * next.advanceAt(_index);
+  }
+
   /// The frame a renderer should be showing right now.
   ///
   /// [updates] carries changes, and a session that has not been touched has
@@ -109,13 +167,19 @@ class PlaybackSession {
     index: _index,
     token: _inGap ? null : currentToken,
     inGap: _inGap,
+    tokenOffset: _offset,
   );
 
   /// Swap the profile mid-session. Takes effect from the next token, or
   /// immediately if the session is not currently timing one.
   set profile(ReadingProfile next) {
+    final wasScrolling = scrolling;
     _profile = next;
     _model = PacingModel.of(next.pacing.kind);
+
+    // Leaving scroll mode: the fixed anchor has no sub-token position, and a
+    // stale one would offset the first laid-out token if scroll came back.
+    if (wasScrolling && !scrolling) _offset = 0;
 
     if (_state == PlaybackState.playing ||
         _state == PlaybackState.awaitingAdvance) {
@@ -132,6 +196,7 @@ class PlaybackSession {
 
     if (_state == PlaybackState.paused && !_resumeHere) {
       _index = (_index - _profile.rewindWords).clamp(0, tokens.length - 1);
+      _offset = 0;
     }
 
     // Spent whether or not it applied, so it describes the last thing the
@@ -150,6 +215,10 @@ class PlaybackSession {
     _timer?.cancel();
     _timer = null;
     _inGap = false;
+
+    // [_offset] is deliberately kept. Under continuous scroll the reader's
+    // finger landing pauses first and drags second, so zeroing it here would
+    // snap the text back by up to a word before the drag had begun.
 
     // A pause is not a place the reader picked, so it re-arms the rewind even
     // if a [stopAt] put them here first. Otherwise stepping once and then
@@ -174,6 +243,7 @@ class PlaybackSession {
     }
 
     _index++;
+    _offset = 0;
 
     if (_state == PlaybackState.paused) {
       _emit();
@@ -192,6 +262,7 @@ class PlaybackSession {
 
     final wasFinished = _state == PlaybackState.finished;
     _index = (_index - count).clamp(0, tokens.length - 1);
+    _offset = 0;
 
     if (wasFinished || _state == PlaybackState.paused) {
       if (wasFinished) _setState(PlaybackState.paused);
@@ -207,6 +278,7 @@ class PlaybackSession {
     _timer?.cancel();
     _inGap = false;
     _index = target.clamp(0, tokens.length - 1);
+    _offset = 0;
 
     if (_state == PlaybackState.playing) {
       _scheduleCurrent();
@@ -236,6 +308,7 @@ class PlaybackSession {
     _timer?.cancel();
     _inGap = false;
     _index = target.clamp(0, tokens.length - 1);
+    _offset = 0;
     _resumeHere = true;
 
     if (_state == PlaybackState.awaitingAdvance) {
@@ -244,6 +317,77 @@ class PlaybackSession {
     }
 
     _setState(PlaybackState.paused);
+  }
+
+  /// Stop exactly where the anchor already is, as a place the reader chose.
+  ///
+  /// [stopAt] without the move: same one-shot rewind suppression, same
+  /// treatment of [PlaybackState.awaitingAdvance], but the index and the
+  /// sub-token offset are left alone.
+  ///
+  /// This is what a finger lifting off a scrub calls. Routing that through
+  /// [stopAt] instead would zero the offset and snap the text by up to a
+  /// word at the moment of release — the same insult in a different unit as
+  /// a rewind undoing a step the reader just made.
+  void stopHere() {
+    if (tokens.isEmpty) return;
+
+    _timer?.cancel();
+    _inGap = false;
+    _resumeHere = true;
+
+    if (_state == PlaybackState.awaitingAdvance) {
+      _scheduleCurrent();
+      return;
+    }
+
+    _setState(PlaybackState.paused);
+  }
+
+  /// Advance the scroll by one frame's worth of motion.
+  ///
+  /// A no-op unless [scrolling] and actually playing, so a stray tick from a
+  /// ticker that has not stopped yet cannot move a paused session.
+  ///
+  /// The renderer supplies the *time*; this stays the only owner of the
+  /// position. See ADR 0025 for why the timer chain does not drive this: it
+  /// is scheduled from the previous timer firing rather than against an
+  /// absolute clock, and a marquee that is not frame-accurate judders.
+  void tick(Duration elapsed) {
+    if (!scrolling || _state != PlaybackState.playing) return;
+    if (tokens.isEmpty || elapsed <= Duration.zero) return;
+
+    final seconds = elapsed.inMicroseconds / Duration.microsecondsPerSecond;
+    if (_walk(scrollVelocity * seconds)) {
+      _finish();
+    } else {
+      _emit();
+    }
+  }
+
+  /// Move the anchor [dx] logical pixels through the text, either sign.
+  ///
+  /// Positive is forward, so a finger moving left drags the text left and the
+  /// reader forward. Does not touch [_state] and does not arm the rewind
+  /// suppression: a drag is many of these and the *release* is the moment the
+  /// reader chose, so [stopHere] carries that.
+  ///
+  /// Shares [_walk] with [tick] on purpose. Two walks over the same geometry
+  /// is how a drag and a playback come to disagree about where a token ends.
+  void scrubBy(double dx) {
+    if (!scrolling || tokens.isEmpty) return;
+
+    _timer?.cancel();
+    _inGap = false;
+
+    final hitEnd = _walk(dx);
+    if (_state == PlaybackState.finished && !hitEnd) {
+      // Scrubbing back off the end is a way out of a terminal state that
+      // does not go through seekToIndex, so say so rather than emitting a
+      // finished update carrying a token.
+      _state = PlaybackState.paused;
+    }
+    _emit();
   }
 
   /// Resume from a stored locator. Lands on the token containing [offset], or
@@ -273,7 +417,55 @@ class PlaybackSession {
 
   // ---------------------------------------------------------------------
 
+  /// Move `(_index, _offset)` by [dx] pixels. Returns true if it ran off the
+  /// end of the text.
+  ///
+  /// Repeated subtraction rather than a division: nothing here is
+  /// integer-width sensitive, and keeping integer truncation out of the
+  /// arithmetic entirely is cheaper than reasoning about whether it is
+  /// (ADR 0009). [TokenRun.advanceAt] never returns zero, so neither loop can
+  /// spin.
+  bool _walk(double dx) {
+    _offset += dx;
+
+    var advance = _run.advanceAt(_index);
+    while (_offset >= advance) {
+      if (_index >= tokens.length - 1) {
+        _offset = 0;
+        return true;
+      }
+      _offset -= advance;
+      _index++;
+      advance = _run.advanceAt(_index);
+    }
+
+    while (_offset < 0) {
+      if (_index == 0) {
+        _offset = 0;
+        break;
+      }
+      _index--;
+      _offset += _run.advanceAt(_index);
+    }
+
+    return false;
+  }
+
   void _scheduleCurrent() {
+    // Continuous scroll carries its own clock, so the timer chain must never
+    // arm. Gated in the callee rather than at the six methods that call it,
+    // because six call sites is six chances to miss one; here every caller is
+    // correct by construction and `_timer?.cancel()` is harmlessly a no-op
+    // throughout.
+    //
+    // [_model] is therefore never consulted under scroll, which is the whole
+    // of "scroll outranks elicited pacing": `AwaitAdvance` is unreachable
+    // rather than handled. There is no branch for it, deliberately.
+    if (scrolling) {
+      _setState(PlaybackState.playing);
+      return;
+    }
+
     final decision = _model.decide(tokens[_index], _profile.pacing);
 
     switch (decision) {
@@ -308,6 +500,7 @@ class PlaybackSession {
     _timer?.cancel();
     _timer = null;
     _inGap = false;
+    _offset = 0;
     _setState(PlaybackState.finished);
   }
 
@@ -326,6 +519,7 @@ class PlaybackSession {
             ? null
             : tokens[_index],
         inGap: _inGap,
+        tokenOffset: _offset,
       ),
     );
   }

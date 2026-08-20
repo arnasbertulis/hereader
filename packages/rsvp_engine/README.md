@@ -195,6 +195,11 @@ one before. The same "previous track" rule a media player applies to skip-back,
 and the reason a low-vision reader gets it: re-reading the sentence just missed
 is the more common need than skipping past it. See ADR 0021.
 
+`stopHere()` is `stopAt` without the move: the same one-shot suppression, the
+index and the sub-token offset left where they are. A finger lifting off a
+scroll drag calls it, because `stopAt` would zero the offset and snap the text
+by up to a word at the moment of release.
+
 Timing chains `Timer` directly rather than driving from a `Ticker`, so
 `fake_async` can step a whole paragraph in microseconds. The side effect is
 that word onset does not quantise to frame delivery, which matters on the web,
@@ -202,6 +207,31 @@ where the browser decides how many frames a page gets. The cost is that each
 timer is scheduled when the previous one fires rather than against an absolute
 schedule, so lateness compounds across a book — probably under a percent, and
 unmeasurable under a virtual clock that fires every timer exactly on time.
+
+### Continuous scroll
+
+Under `PresentationMode.continuousScroll` the timer chain is off and the caller
+supplies the time instead, one frame at a time, through `tick(Duration)`. The
+session stays the only owner of the position: it keeps the token index and adds
+a `double` sub-token offset in logical pixels, and `scrubBy(double)` walks the
+same code a tick does, so dragging and playing cannot disagree about where a
+token ends.
+
+The gate sits at the top of `_scheduleCurrent`, which six methods call, rather
+than at the six call sites. `PacingModel` is therefore never consulted in this
+mode: `Hold.pauseAfter` is not honoured as time and `AwaitAdvance` is
+unreachable, so an elicited profile simply scrolls. There is no branch for
+that, deliberately.
+
+This package measures nothing and imports no Flutter, so it is handed its
+geometry as a `TokenRun` — per-token advances in pixels, plus a mean for
+anything outside the measured window. Velocity is
+`(baseWpm / 60) × meanAdvance`, so seconds per token is `60 / baseWpm` and the
+mean width divides out of any time estimate. Setting `run` rescales the offset
+so the anchor holds the same fraction of the same word when the type size
+changes.
+
+See ADR 0025, and ADR 0003's Consequences, which predicted this.
 
 ## Locators
 
@@ -306,5 +336,4 @@ presets, `PlaybackSession`, `TokenizedText` and `Locator`, `HybridLogicalClock`,
 the contrast maths, and the remaining-time estimate.
 
 Not yet built: chunk sizes above one token, which need pacing to decide over a
-group rather than a single token, and presentation modes beyond a fixed
-anchor.
+group rather than a single token, and `PresentationMode.shiftingWindow`.

@@ -4,6 +4,7 @@ export 'src/pacing/pacing_decision.dart';
 export 'src/pacing/pacing_model.dart';
 export 'src/pacing/reading_time.dart';
 export 'src/playback/playback_session.dart';
+export 'src/playback/token_run.dart';
 export 'src/profile/presets.dart';
 export 'src/profile/profile.dart';
 export 'src/sync/hlc.dart';

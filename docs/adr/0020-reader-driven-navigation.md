@@ -19,6 +19,14 @@ open is closed by
 [ADR 0022](0022-chapter-jumps-also-suppress-the-resume-rewind.md)**, which
 moves `_goToChapter` and `_goToFrontMatter` onto `stopAt`.
 
+**The three tap zones are superseded in part by
+[ADR 0025](0025-continuous-scroll.md)**, which makes them a fixed-anchor
+arrangement rather than a property of the reading surface: under continuous
+scroll the reader drags to any word directly, so the zones are not built and
+the surface is one node with `onTap`, `onIncrease` and `onDecrease`. Section
+4's jump semantics, `stopAt` and `ui.step_words` all stand unchanged and are
+what the sliding surface's step actions and its four jump buttons still use.
+
 ## Context
 
 ADR 0015 removed the rewind button from the reading surface and moved rewind

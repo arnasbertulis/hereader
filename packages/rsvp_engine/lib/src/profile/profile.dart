@@ -6,7 +6,9 @@ import '../pacing/pacing_config.dart';
 /// How tokens are laid out on screen.
 ///
 /// Orthogonal to [PacingModelKind]: pacing decides *when* to advance,
-/// presentation decides *what is visible*. Only [fixedSingle] is implemented.
+/// presentation decides *what is visible* — with one documented exception,
+/// [continuousScroll], which supplies its own advance. [shiftingWindow] is
+/// not implemented.
 enum PresentationMode {
   /// One token at a time, held at a fixed anchor point.
   fixedSingle,
@@ -15,8 +17,24 @@ enum PresentationMode {
   /// Not implemented.
   shiftingWindow,
 
-  /// Text drifting at constant velocity. Incompatible with per-token
-  /// pacing; see ADR 0003. Not implemented.
+  /// A single unbroken line of text drifting right to left at constant
+  /// velocity, past a marked, fixed eye point.
+  ///
+  /// Incompatible with per-token pacing, and resolves it by outranking it:
+  /// `PlaybackSession` branches on this before consulting its [PacingModel],
+  /// so `Hold.pauseAfter` is not honoured as time and `AwaitAdvance` is
+  /// unreachable. Speed comes from [PacingConfig.baseWpm] alone. See
+  /// ADR 0025, and ADR 0003's Consequences, which predicted this.
+  ///
+  /// Offered because the evidence declines to rank the two formats for this
+  /// project's target reader — Fine & Peli (1995) found the visually impaired
+  /// reading 13% slower from RSVP than from a scroll display, and Akthar et
+  /// al. (2021) found scrolling ahead of RSVP on comprehension in central
+  /// vision loss. No preset selects it; see `docs/research/rsvp-evidence.md`.
+  ///
+  /// [PresentationConfig.orpHighlight] and [PresentationConfig.transitionMs]
+  /// have no effect here. Their stored values are kept, not cleared, so
+  /// switching back restores them.
   continuousScroll,
 }
 
@@ -26,6 +44,39 @@ enum PresentationMode {
 /// preference carries null in [PresentationConfig.polarity] rather than a
 /// third value here; see that field for why.
 enum Polarity { darkOnLight, lightOnDark }
+
+/// Where the eye-point caret sits relative to the line of text, under
+/// [PresentationMode.continuousScroll].
+///
+/// Never on the text. A marker drawn through the words obscures the one word
+/// the reader is trying to read, which is the opposite of what an eye point
+/// is for.
+enum CaretPlacement {
+  /// One caret above the line, pointing down at it.
+  above,
+
+  /// One caret below the line, pointing up at it.
+  below,
+
+  /// One of each. Most findable, and the default.
+  both,
+}
+
+/// How the eye-point caret is drawn.
+///
+/// All three point *at* the line, so a caret above the text is the mirror of
+/// the same caret below it rather than a different shape.
+enum CaretStyle {
+  /// A solid triangle.
+  filled,
+
+  /// The same triangle, stroked rather than filled. Quieter against a busy
+  /// or heavily tinted surface.
+  outline,
+
+  /// Two strokes meeting at the tip — a chevron, with no base.
+  chevron,
+}
 
 /// Everything about how text is drawn. No timing.
 class PresentationConfig {
@@ -78,6 +129,35 @@ class PresentationConfig {
   /// Crossfade between tokens. 0 is an instant swap.
   final int transitionMs;
 
+  /// Where the eye-point caret sits. Scroll mode only.
+  final CaretPlacement caretPlacement;
+
+  /// How the eye-point caret is drawn. Scroll mode only.
+  final CaretStyle caretStyle;
+
+  /// Blank between the line of text and the caret's tip, in em of
+  /// [fontSizePt]. Scroll mode only.
+  ///
+  /// A setting rather than a constant because how far a marker has to sit
+  /// from the words to stop competing with them depends on the reader's
+  /// field loss, not on the type size — the same argument [anchorX] already
+  /// makes for putting the eye point off centre.
+  final double caretGapEm;
+
+  /// Stroke width of an outlined or chevron caret, in em of [fontSizePt].
+  /// Scroll mode only.
+  ///
+  /// Inert for [CaretStyle.filled], which has no stroke. The editor hides
+  /// the control there rather than showing one that does nothing.
+  final double caretThicknessEm;
+
+  /// Multiplier on the caret's drawn width and depth. Scroll mode only.
+  ///
+  /// Separate from [caretThicknessEm] because they answer different
+  /// questions — how big the marker is, and how heavy its line is — and one
+  /// number driving both would be two meanings for one setting.
+  final double caretScale;
+
   const PresentationConfig({
     this.mode = PresentationMode.fixedSingle,
     this.anchorX = 0.5,
@@ -90,6 +170,11 @@ class PresentationConfig {
     this.tintArgb,
     this.orpHighlight = false,
     this.transitionMs = 0,
+    this.caretPlacement = CaretPlacement.both,
+    this.caretStyle = CaretStyle.filled,
+    this.caretGapEm = 0.15,
+    this.caretThicknessEm = 0.09,
+    this.caretScale = 1,
   }) : assert(anchorX >= 0 && anchorX <= 1),
        assert(anchorY >= 0 && anchorY <= 1),
        assert(fontSizePt > 0),
@@ -97,7 +182,25 @@ class PresentationConfig {
          chunkSize == 1,
          'chunkSize > 1 needs group-aware pacing, which is not built',
        ),
-       assert(transitionMs >= 0);
+       assert(transitionMs >= 0),
+       assert(caretGapEm >= 0 && caretGapEm <= 1),
+       assert(
+         caretThicknessEm >= minCaretThicknessEm &&
+             caretThicknessEm <= maxCaretThicknessEm,
+       ),
+       assert(caretScale >= minCaretScale && caretScale <= maxCaretScale);
+
+  /// Bounds on the two caret sizes, named once.
+  ///
+  /// The editor's sliders, the asserts above and the wire clamping in
+  /// [PresentationConfig.fromJson] are three places that must agree about
+  /// what a usable caret is; written out three times they would eventually
+  /// not. A thickness of zero draws nothing and a caret larger than a line
+  /// of text stops being a marker.
+  static const double minCaretThicknessEm = 0.02;
+  static const double maxCaretThicknessEm = 0.3;
+  static const double minCaretScale = 0.5;
+  static const double maxCaretScale = 2.5;
 
   /// Every field except the two nullable ones.
   ///
@@ -115,6 +218,11 @@ class PresentationConfig {
     int? chunkSize,
     bool? orpHighlight,
     int? transitionMs,
+    CaretPlacement? caretPlacement,
+    CaretStyle? caretStyle,
+    double? caretGapEm,
+    double? caretThicknessEm,
+    double? caretScale,
   }) => PresentationConfig(
     mode: mode ?? this.mode,
     anchorX: anchorX ?? this.anchorX,
@@ -127,6 +235,11 @@ class PresentationConfig {
     tintArgb: tintArgb,
     orpHighlight: orpHighlight ?? this.orpHighlight,
     transitionMs: transitionMs ?? this.transitionMs,
+    caretPlacement: caretPlacement ?? this.caretPlacement,
+    caretStyle: caretStyle ?? this.caretStyle,
+    caretGapEm: caretGapEm ?? this.caretGapEm,
+    caretThicknessEm: caretThicknessEm ?? this.caretThicknessEm,
+    caretScale: caretScale ?? this.caretScale,
   );
 
   /// Sets [polarity], null included.
@@ -142,6 +255,11 @@ class PresentationConfig {
     tintArgb: tintArgb,
     orpHighlight: orpHighlight,
     transitionMs: transitionMs,
+    caretPlacement: caretPlacement,
+    caretStyle: caretStyle,
+    caretGapEm: caretGapEm,
+    caretThicknessEm: caretThicknessEm,
+    caretScale: caretScale,
   );
 
   /// Sets [tintArgb], null included.
@@ -157,6 +275,11 @@ class PresentationConfig {
     tintArgb: tintArgb,
     orpHighlight: orpHighlight,
     transitionMs: transitionMs,
+    caretPlacement: caretPlacement,
+    caretStyle: caretStyle,
+    caretGapEm: caretGapEm,
+    caretThicknessEm: caretThicknessEm,
+    caretScale: caretScale,
   );
 
   /// This config with [fallback] standing in for an unset [polarity].
@@ -191,6 +314,11 @@ class PresentationConfig {
     if (tintArgb != null) 'tintArgb': tintArgb,
     'orpHighlight': orpHighlight,
     'transitionMs': transitionMs,
+    'caretPlacement': caretPlacement.name,
+    'caretStyle': caretStyle.name,
+    'caretGapEm': caretGapEm,
+    'caretThicknessEm': caretThicknessEm,
+    'caretScale': caretScale,
   };
 
   /// Reads presentation settings written by any build of this package.
@@ -233,6 +361,34 @@ class PresentationConfig {
         json['transitionMs'],
         fallback.transitionMs,
         min: 0,
+      ),
+      caretPlacement: enumByName(
+        CaretPlacement.values,
+        json['caretPlacement'],
+        fallback.caretPlacement,
+      ),
+      caretStyle: enumByName(
+        CaretStyle.values,
+        json['caretStyle'],
+        fallback.caretStyle,
+      ),
+      caretGapEm: coerceDouble(
+        json['caretGapEm'],
+        fallback.caretGapEm,
+        min: 0,
+        max: 1,
+      ),
+      caretThicknessEm: coerceDouble(
+        json['caretThicknessEm'],
+        fallback.caretThicknessEm,
+        min: minCaretThicknessEm,
+        max: maxCaretThicknessEm,
+      ),
+      caretScale: coerceDouble(
+        json['caretScale'],
+        fallback.caretScale,
+        min: minCaretScale,
+        max: maxCaretScale,
       ),
     );
   }

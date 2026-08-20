@@ -186,4 +186,114 @@ void main() {
       expect(Presets.standard.pacing.kind, PacingModelKind.constant);
     });
   });
+
+  group('the scroll caret', () {
+    test('defaults to one above and one below, solid, clear of the line', () {
+      const config = PresentationConfig();
+
+      expect(config.caretPlacement, CaretPlacement.both);
+      expect(config.caretStyle, CaretStyle.filled);
+      expect(config.caretGapEm, greaterThan(0));
+      expect(config.caretScale, 1);
+      expect(config.caretThicknessEm, greaterThan(0));
+    });
+
+    test('round-trips through JSON', () {
+      const config = PresentationConfig(
+        mode: PresentationMode.continuousScroll,
+        caretPlacement: CaretPlacement.above,
+        caretStyle: CaretStyle.chevron,
+        caretGapEm: 0.6,
+        caretThicknessEm: 0.2,
+        caretScale: 1.8,
+      );
+
+      final back = PresentationConfig.fromJson(config.toJson());
+
+      expect(back.caretPlacement, CaretPlacement.above);
+      expect(back.caretStyle, CaretStyle.chevron);
+      expect(back.caretGapEm, 0.6);
+      expect(back.caretThicknessEm, 0.2);
+      expect(back.caretScale, 1.8);
+    });
+
+    test('copyWith carries them across', () {
+      const config = PresentationConfig(
+        caretPlacement: CaretPlacement.below,
+        caretStyle: CaretStyle.outline,
+        caretGapEm: 0.4,
+        caretThicknessEm: 0.25,
+        caretScale: 0.75,
+      );
+
+      final same = config.copyWith(fontSizePt: 60);
+
+      expect(same.caretPlacement, CaretPlacement.below);
+      expect(same.caretStyle, CaretStyle.outline);
+      expect(same.caretGapEm, 0.4);
+      expect(same.caretThicknessEm, 0.25);
+      expect(same.caretScale, 0.75);
+
+      // And the tint setter, which rebuilds the whole object by hand.
+      final tinted = config.withTint(0xFF102030);
+      expect(tinted.caretStyle, CaretStyle.outline);
+      expect(tinted.caretGapEm, 0.4);
+      expect(tinted.caretThicknessEm, 0.25);
+      expect(tinted.caretScale, 0.75);
+    });
+
+    test('the wire clamps rather than throwing', () {
+      // A later build could send a gap this one does not offer, or a name it
+      // does not know. Neither may lose the rest of the profile; see the
+      // json_coerce note in the package README.
+      final wide = PresentationConfig.fromJson({'caretGapEm': 9.0});
+      expect(wide.caretGapEm, 1);
+
+      final negative = PresentationConfig.fromJson({'caretGapEm': -3.0});
+      expect(negative.caretGapEm, 0);
+
+      final unknown = PresentationConfig.fromJson({
+        'caretPlacement': 'sideways',
+        'caretStyle': 'sparkle',
+      });
+      expect(unknown.caretPlacement, CaretPlacement.both);
+      expect(unknown.caretStyle, CaretStyle.filled);
+
+      // A thickness of zero draws nothing and a caret larger than a line of
+      // text stops marking a place in it, so both move to the nearest bound
+      // the editor itself offers.
+      final heavy = PresentationConfig.fromJson({'caretThicknessEm': 4.0});
+      expect(heavy.caretThicknessEm, PresentationConfig.maxCaretThicknessEm);
+
+      final invisible = PresentationConfig.fromJson({'caretThicknessEm': 0.0});
+      expect(
+        invisible.caretThicknessEm,
+        PresentationConfig.minCaretThicknessEm,
+      );
+
+      final huge = PresentationConfig.fromJson({'caretScale': 40.0});
+      expect(huge.caretScale, PresentationConfig.maxCaretScale);
+
+      final tiny = PresentationConfig.fromJson({'caretScale': -1.0});
+      expect(tiny.caretScale, PresentationConfig.minCaretScale);
+    });
+
+    test('a profile written before these fields reads the defaults', () {
+      const old = PresentationConfig();
+      final json = old.toJson()
+        ..remove('caretPlacement')
+        ..remove('caretStyle')
+        ..remove('caretGapEm')
+        ..remove('caretThicknessEm')
+        ..remove('caretScale');
+
+      final back = PresentationConfig.fromJson(json);
+
+      expect(back.caretPlacement, old.caretPlacement);
+      expect(back.caretStyle, old.caretStyle);
+      expect(back.caretGapEm, old.caretGapEm);
+      expect(back.caretThicknessEm, old.caretThicknessEm);
+      expect(back.caretScale, old.caretScale);
+    });
+  });
 }

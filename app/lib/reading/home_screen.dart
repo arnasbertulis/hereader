@@ -18,6 +18,7 @@ import 'book_progress.dart';
 import 'library_book.dart';
 import 'note_editor_screen.dart';
 import 'paste_reader_screen.dart';
+import 'profile_presentation.dart';
 import 'reading_display.dart';
 
 /// How many books the recent row shows, beyond the one in the continue card.
@@ -120,7 +121,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _opener = BookOpener(repository: widget.repository, sync: widget.sync);
 
     _profile = _repo.watchActiveProfile().listen((profile) {
-      if (mounted) setState(() => _pacing = profile.pacing);
+      if (mounted) setState(() => _pacing = estimationPacing(profile));
     });
 
     widget.display.addListener(_onDisplayChanged);

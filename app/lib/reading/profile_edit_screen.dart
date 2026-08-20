@@ -6,7 +6,8 @@ import 'package:rsvp_engine/rsvp_engine.dart';
 import '../data/library_repository.dart';
 import '../theme/app_icons.dart';
 import 'profile_presentation.dart';
-import 'rsvp_view.dart';
+import 'reading_surface.dart';
+import 'scroll_clock.dart';
 import 'setting_slider.dart';
 
 /// Identifies the switch that puts a profile back to following the app theme.
@@ -130,6 +131,16 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     final pacing = _draft.pacing;
     final presentation = _draft.presentation;
 
+    final scrolling = presentation.mode == PresentationMode.continuousScroll;
+
+    // Read here rather than inside the warning, so the function stays pure
+    // and testable without a widget tree — the shape `fadeWarning` already
+    // has.
+    final reduceMotion = reduceMotionWarning(
+      _draft,
+      disabled: MediaQuery.maybeDisableAnimationsOf(context) ?? false,
+    );
+
     // Resolved once and passed down, so the preview and the contrast readout
     // under it report the pair the reader is looking at. The polarity control
     // below reads `presentation` rather than this, because a control shows
@@ -143,7 +154,12 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     // rate and pause controls have nothing to act on. Disabled rather than
     // hidden: a control that vanishes leaves the reader guessing what
     // changed, while a greyed one shows why it does not apply.
-    final timed = pacing.kind != PacingModelKind.elicited;
+    //
+    // Sliding text outranks the pacing model — the marquee never waits for a
+    // press — so under it the speed is live whatever kind the profile
+    // carries. Without this an elicited profile switched to sliding greyed
+    // out the one control that actually sets its velocity.
+    final timed = scrolling || pacing.kind != PacingModelKind.elicited;
 
     return PopScope(
       canPop: false,
@@ -173,37 +189,48 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
             // -- pacing ------------------------------------------------
             const _SectionHeader('How the text advances'),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: SegmentedButton<PacingModelKind>(
-                segments: const [
-                  ButtonSegment(
-                    value: PacingModelKind.constant,
-                    label: Text('Steady'),
-                  ),
-                  ButtonSegment(
-                    value: PacingModelKind.lengthScaled,
-                    label: Text('By length'),
-                  ),
-                  ButtonSegment(
-                    value: PacingModelKind.elicited,
-                    label: Text('Manual'),
-                  ),
-                ],
-                selected: {pacing.kind},
-                onSelectionChanged: _editable
-                    ? (selected) =>
-                          _updatePacing((p) => p.copyWith(kind: selected.first))
-                    : null,
+
+            // The whole pacing model is inert under sliding text: velocity
+            // comes from the reading speed alone, and `PlaybackSession`
+            // branches on the presentation mode before it ever consults a
+            // `PacingModel`, so the kind, the length scaling and the three
+            // pauses have nothing to act on. Hidden rather than greyed,
+            // like the fade and fixation controls below — there are six of
+            // them, and six greyed controls is a section that looks broken.
+            if (!scrolling) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: SegmentedButton<PacingModelKind>(
+                  segments: const [
+                    ButtonSegment(
+                      value: PacingModelKind.constant,
+                      label: Text('Steady'),
+                    ),
+                    ButtonSegment(
+                      value: PacingModelKind.lengthScaled,
+                      label: Text('By length'),
+                    ),
+                    ButtonSegment(
+                      value: PacingModelKind.elicited,
+                      label: Text('Manual'),
+                    ),
+                  ],
+                  selected: {pacing.kind},
+                  onSelectionChanged: _editable
+                      ? (selected) => _updatePacing(
+                          (p) => p.copyWith(kind: selected.first),
+                        )
+                      : null,
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: Text(
-                describePacingKind(pacing.kind),
-                style: Theme.of(context).textTheme.bodySmall,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Text(
+                  describePacingKind(pacing.kind),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ),
-            ),
+            ],
 
             SettingSlider(
               label: 'Reading speed',
@@ -216,68 +243,73 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               onChanged: (v) => _updatePacing((p) => p.copyWith(baseWpm: v)),
             ),
 
-            SettingSlider(
-              label: 'Length scaling',
-              value: pacing.lengthScaleStrength,
-              valueLabel: pacing.lengthScaleStrength == 0
-                  ? 'off'
-                  : '${(pacing.lengthScaleStrength * 100).round()}%',
-              min: 0,
-              max: 1,
-              divisions: 20,
-              // At zero this model behaves exactly like the steady one, which
-              // is why it is a slider rather than a second mode.
-              enabled: _editable && pacing.kind == PacingModelKind.lengthScaled,
-              help:
-                  'How much a long word is held beyond a short one. At zero '
-                  'this reads the same as Steady.',
-              onChanged: (v) =>
-                  _updatePacing((p) => p.copyWith(lengthScaleStrength: v)),
-            ),
-
-            SettingSlider(
-              label: 'Pause at commas',
-              value: pacing.clausePause.inMilliseconds.toDouble(),
-              valueLabel: '${pacing.clausePause.inMilliseconds} ms',
-              min: 0,
-              max: 800,
-              divisions: 40,
-              enabled: _editable && timed,
-              onChanged: (v) => _updatePacing(
-                (p) =>
-                    p.copyWith(clausePause: Duration(milliseconds: v.round())),
+            if (!scrolling)
+              SettingSlider(
+                label: 'Length scaling',
+                value: pacing.lengthScaleStrength,
+                valueLabel: pacing.lengthScaleStrength == 0
+                    ? 'off'
+                    : '${(pacing.lengthScaleStrength * 100).round()}%',
+                min: 0,
+                max: 1,
+                divisions: 20,
+                // At zero this model behaves exactly like the steady one, which
+                // is why it is a slider rather than a second mode.
+                enabled:
+                    _editable && pacing.kind == PacingModelKind.lengthScaled,
+                help:
+                    'How much a long word is held beyond a short one. At zero '
+                    'this reads the same as Steady.',
+                onChanged: (v) =>
+                    _updatePacing((p) => p.copyWith(lengthScaleStrength: v)),
               ),
-            ),
 
-            SettingSlider(
-              label: 'Pause at sentences',
-              value: pacing.sentencePause.inMilliseconds.toDouble(),
-              valueLabel: '${pacing.sentencePause.inMilliseconds} ms',
-              min: 0,
-              max: 1500,
-              divisions: 30,
-              enabled: _editable && timed,
-              onChanged: (v) => _updatePacing(
-                (p) => p.copyWith(
-                  sentencePause: Duration(milliseconds: v.round()),
+            if (!scrolling) ...[
+              SettingSlider(
+                label: 'Pause at commas',
+                value: pacing.clausePause.inMilliseconds.toDouble(),
+                valueLabel: '${pacing.clausePause.inMilliseconds} ms',
+                min: 0,
+                max: 800,
+                divisions: 40,
+                enabled: _editable && timed,
+                onChanged: (v) => _updatePacing(
+                  (p) => p.copyWith(
+                    clausePause: Duration(milliseconds: v.round()),
+                  ),
                 ),
               ),
-            ),
 
-            SettingSlider(
-              label: 'Pause at paragraphs',
-              value: pacing.paragraphPause.inMilliseconds.toDouble(),
-              valueLabel: '${pacing.paragraphPause.inMilliseconds} ms',
-              min: 0,
-              max: 2000,
-              divisions: 40,
-              enabled: _editable && timed,
-              onChanged: (v) => _updatePacing(
-                (p) => p.copyWith(
-                  paragraphPause: Duration(milliseconds: v.round()),
+              SettingSlider(
+                label: 'Pause at sentences',
+                value: pacing.sentencePause.inMilliseconds.toDouble(),
+                valueLabel: '${pacing.sentencePause.inMilliseconds} ms',
+                min: 0,
+                max: 1500,
+                divisions: 30,
+                enabled: _editable && timed,
+                onChanged: (v) => _updatePacing(
+                  (p) => p.copyWith(
+                    sentencePause: Duration(milliseconds: v.round()),
+                  ),
                 ),
               ),
-            ),
+
+              SettingSlider(
+                label: 'Pause at paragraphs',
+                value: pacing.paragraphPause.inMilliseconds.toDouble(),
+                valueLabel: '${pacing.paragraphPause.inMilliseconds} ms',
+                min: 0,
+                max: 2000,
+                divisions: 40,
+                enabled: _editable && timed,
+                onChanged: (v) => _updatePacing(
+                  (p) => p.copyWith(
+                    paragraphPause: Duration(milliseconds: v.round()),
+                  ),
+                ),
+              ),
+            ],
 
             SettingSlider(
               label: 'Rewind on resume',
@@ -299,6 +331,48 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
             // -- text --------------------------------------------------
             const _SectionHeader('Text'),
+
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              // Typed rather than a bare `SegmentedButton`, so a finder
+              // looking for the polarity control cannot match this one.
+              // `reading_surface_test.dart` finds `SegmentedButton<Polarity>`
+              // by type.
+              child: SegmentedButton<PresentationMode>(
+                segments: const [
+                  ButtonSegment(
+                    value: PresentationMode.fixedSingle,
+                    label: Text('One word'),
+                  ),
+                  // Two options. `shiftingWindow` is not built, and a control
+                  // offering something that does nothing is worse than one
+                  // that does not offer it — ADR 0020's argument, applied to
+                  // a setting rather than a button.
+                  ButtonSegment(
+                    value: PresentationMode.continuousScroll,
+                    label: Text('Sliding'),
+                  ),
+                ],
+                selected: {presentation.mode},
+                onSelectionChanged: _editable
+                    ? (selected) => _updatePresentation(
+                        (p) => p.copyWith(mode: selected.first),
+                      )
+                    : null,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Text(
+                describePresentationMode(presentation.mode),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            if (reduceMotion != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: SettingWarning(reduceMotion),
+              ),
 
             SettingSlider(
               label: 'Type size',
@@ -357,34 +431,160 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                   _updatePresentation((p) => p.copyWith(anchorY: v)),
             ),
 
-            SettingSlider(
-              label: 'Fade between words',
-              value: presentation.transitionMs.toDouble(),
-              valueLabel: presentation.transitionMs == 0
-                  ? 'instant'
-                  : '${presentation.transitionMs} ms',
-              min: 0,
-              max: 300,
-              divisions: 30,
-              enabled: _editable,
-              onChanged: (v) => _updatePresentation(
-                (p) => p.copyWith(transitionMs: v.round()),
+            // The eye point, and only under sliding text: the fixed anchor
+            // holds one word in place and needs nothing pointing at it.
+            if (scrolling) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Text(
+                  'Where to look',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
               ),
-              warning: fadeWarning(_draft),
-            ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: SegmentedButton<CaretPlacement>(
+                  segments: const [
+                    ButtonSegment(
+                      value: CaretPlacement.above,
+                      label: Text('Above'),
+                    ),
+                    ButtonSegment(
+                      value: CaretPlacement.below,
+                      label: Text('Below'),
+                    ),
+                    ButtonSegment(
+                      value: CaretPlacement.both,
+                      label: Text('Both'),
+                    ),
+                  ],
+                  selected: {presentation.caretPlacement},
+                  onSelectionChanged: _editable
+                      ? (selected) => _updatePresentation(
+                          (p) => p.copyWith(caretPlacement: selected.first),
+                        )
+                      : null,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: SegmentedButton<CaretStyle>(
+                  segments: const [
+                    ButtonSegment(
+                      value: CaretStyle.filled,
+                      label: Text('Solid'),
+                    ),
+                    ButtonSegment(
+                      value: CaretStyle.outline,
+                      label: Text('Outline'),
+                    ),
+                    ButtonSegment(
+                      value: CaretStyle.chevron,
+                      label: Text('Chevron'),
+                    ),
+                  ],
+                  selected: {presentation.caretStyle},
+                  onSelectionChanged: _editable
+                      ? (selected) => _updatePresentation(
+                          (p) => p.copyWith(caretStyle: selected.first),
+                        )
+                      : null,
+                ),
+              ),
+              SettingSlider(
+                label: 'Caret distance',
+                value: presentation.caretGapEm,
+                valueLabel: presentation.caretGapEm == 0
+                    ? 'touching'
+                    : '${(presentation.caretGapEm * 100).round()}%',
+                min: 0,
+                max: 1,
+                divisions: 20,
+                enabled: _editable,
+                help:
+                    'How far the marker sits from the line, as a share of '
+                    'the type size. Further out is easier to see past a '
+                    'blind spot; closer in is easier to keep in one look.',
+                onChanged: (v) =>
+                    _updatePresentation((p) => p.copyWith(caretGapEm: v)),
+              ),
+              SettingSlider(
+                label: 'Caret size',
+                value: presentation.caretScale,
+                valueLabel: '${(presentation.caretScale * 100).round()}%',
+                min: PresentationConfig.minCaretScale,
+                max: PresentationConfig.maxCaretScale,
+                divisions: 20,
+                enabled: _editable,
+                help:
+                    'How large the marker is drawn, as a share of its '
+                    'ordinary size. It scales with the type size either way, '
+                    'so this is how big it is beside the words rather than '
+                    'how big it is on screen.',
+                onChanged: (v) =>
+                    _updatePresentation((p) => p.copyWith(caretScale: v)),
+              ),
+              // A solid wedge has no stroke to set, so the control is hidden
+              // rather than shown doing nothing — the same rule the pacing
+              // controls follow above. The stored value is left alone, so
+              // choosing an outline again restores it.
+              if (presentation.caretStyle != CaretStyle.filled)
+                SettingSlider(
+                  label: 'Caret thickness',
+                  value: presentation.caretThicknessEm,
+                  valueLabel:
+                      '${(presentation.caretThicknessEm * 100).round()}%',
+                  min: PresentationConfig.minCaretThicknessEm,
+                  max: PresentationConfig.maxCaretThicknessEm,
+                  divisions: 20,
+                  enabled: _editable,
+                  help:
+                      'How heavy the line of the marker is, as a share of '
+                      'the type size. Separate from its size, so a large '
+                      'light marker and a small heavy one are both '
+                      'available.',
+                  onChanged: (v) => _updatePresentation(
+                    (p) => p.copyWith(caretThicknessEm: v),
+                  ),
+                ),
+            ],
 
-            SwitchListTile(
-              title: const Text('Highlight a fixation letter'),
-              subtitle: const Text(
-                'Marks one letter as a place to look. Offered as a '
-                'preference: none of the studies behind this app tested it.',
+            // Both of these are inert under continuous scroll: there is no
+            // moment at which one word replaces another to fade, and marking
+            // a fixation letter on moving text is a different feature that is
+            // not built. Hidden rather than disabled, and their stored values
+            // are left alone, so switching back restores them.
+            if (!scrolling)
+              SettingSlider(
+                label: 'Fade between words',
+                value: presentation.transitionMs.toDouble(),
+                valueLabel: presentation.transitionMs == 0
+                    ? 'instant'
+                    : '${presentation.transitionMs} ms',
+                min: 0,
+                max: 300,
+                divisions: 30,
+                enabled: _editable,
+                onChanged: (v) => _updatePresentation(
+                  (p) => p.copyWith(transitionMs: v.round()),
+                ),
+                warning: fadeWarning(_draft),
               ),
-              value: presentation.orpHighlight,
-              onChanged: _editable
-                  ? (v) =>
-                        _updatePresentation((p) => p.copyWith(orpHighlight: v))
-                  : null,
-            ),
+
+            if (!scrolling)
+              SwitchListTile(
+                title: const Text('Highlight a fixation letter'),
+                subtitle: const Text(
+                  'Marks one letter as a place to look. Offered as a '
+                  'preference: none of the studies behind this app tested it.',
+                ),
+                value: presentation.orpHighlight,
+                onChanged: _editable
+                    ? (v) => _updatePresentation(
+                        (p) => p.copyWith(orpHighlight: v),
+                      )
+                    : null,
+              ),
 
             // -- colour ------------------------------------------------
             const _SectionHeader('Colour'),
@@ -551,7 +751,8 @@ class _Preview extends StatefulWidget {
   State<_Preview> createState() => _PreviewState();
 }
 
-class _PreviewState extends State<_Preview> {
+class _PreviewState extends State<_Preview>
+    with SingleTickerProviderStateMixin {
   /// Two sentences, a clause break, and words from two to seven letters, so
   /// every pacing control has something to act on. Fixed rather than drawn
   /// from the reader's library: a preview that changes with the book would
@@ -576,11 +777,42 @@ class _PreviewState extends State<_Preview> {
 
   //// The session emits nothing until something happens to it, so the first
   /// frame comes from the session's own description of itself.
-  late PlaybackUpdate _update = _session.current;
+  ///
+  /// A notifier rather than a field behind `setState`, for the reason the
+  /// reader's is one: under continuous scroll this emits once a frame, and
+  /// rebuilding the editor's whole preview column for it would put the
+  /// slider labels on the animation path.
+  late final ValueNotifier<PlaybackUpdate?> _update = ValueNotifier(
+    _session.current,
+  );
+
+  /// Time and geometry for a scrolling profile. The reader's clock, in the
+  /// preview, so the two surfaces move at the same speed for one profile.
+  late final ScrollClock _clock = ScrollClock(
+    session: _session,
+    vsync: this,
+    tokens: _text.tokens,
+    isParagraphEnd: _text.isParagraphEndAt,
+    // A preview is one paragraph of one sample sentence and has no table of
+    // contents to draw a chapter gap from. Empty rather than invented.
+    chapterStarts: const {},
+  );
+
+  /// Watched so the play button and the elicited hint rebuild on a state
+  /// change and on nothing else.
+  ///
+  /// Seeded in [initState] rather than in the initialiser. A `late` field is
+  /// evaluated on first *access*, which is inside the listener, by which
+  /// time the session has already moved — so the first transition would
+  /// compare playing against playing and the button would keep the label it
+  /// had before the reader pressed it.
+  late PlaybackState _lastState;
 
   @override
   void initState() {
     super.initState();
+
+    _lastState = _session.state;
 
     _sub = _session.updates.listen((update) {
       if (!mounted) return;
@@ -595,8 +827,19 @@ class _PreviewState extends State<_Preview> {
         return;
       }
 
-      setState(() => _update = update);
+      _update.value = update;
+      _clock.sync();
+
+      if (update.state != _lastState) {
+        setState(() => _lastState = update.state);
+      }
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _clock.applyPresentation(widget.presentation);
   }
 
   @override
@@ -608,12 +851,19 @@ class _PreviewState extends State<_Preview> {
     if (!identical(oldWidget.profile, widget.profile)) {
       _session.profile = widget.profile;
     }
+
+    // Presentation reaches the surface as a prop, but the scroll clock
+    // measures against it: a type size or a mode change has to reach the
+    // measurement or the marquee is drawn from a stale run.
+    _clock.applyPresentation(widget.presentation);
   }
 
   @override
   void dispose() {
     _sub?.cancel();
+    _clock.dispose();
     _session.dispose();
+    _update.dispose();
     super.dispose();
   }
 
@@ -662,9 +912,13 @@ class _PreviewState extends State<_Preview> {
                   // Clipped because the surface honours the profile's type
                   // size, and 96pt has no reason to fit a 200px box.
                   child: ClipRect(
-                    child: RsvpView(
-                      update: _update,
+                    // The real surface, chosen the one way it is chosen —
+                    // so a scrolling profile previews as a marquee and the
+                    // contrast readout below still measures what is drawn.
+                    child: ReadingSurface(
+                      updates: _update,
                       presentation: presentation,
+                      layout: _clock.layout,
                     ),
                   ),
                 ),
