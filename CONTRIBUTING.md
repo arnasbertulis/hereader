@@ -51,6 +51,49 @@ sections: `git log` is read in a terminal, and a body that is a list of commit
 subjects says what a reader could already see from the diff instead of why any
 of it happened.
 
+## Scope of a change
+
+A change is split into a stack of pull requests when it crosses a package
+boundary, or when it exceeds roughly 800 lines of hand-written diff, whichever
+comes first. Generated files and test fixtures do not count toward that budget.
+
+The stack is built bottom-up, one layer per PR, lowest first: the pure packages,
+then the app's plumbing, then the screens that use it, then the documentation
+describing the result. **Every PR in the stack passes every required check on
+its own**, with the layers above it unwritten. That is what makes `git bisect`
+useful and a revert surgical rather than all-or-nothing.
+
+This works because the pure packages are path dependencies (ADR 0001): a change
+to `rsvp_engine` merges and `app` picks it up with no publish and no version
+bump. It depends on the lower layer's change being **additive**. Where it is not
+— a field removed, a JSON shape changed, a signature narrowed — the addition and
+the removal are separate PRs, the removal landing only after every caller has
+stopped using the old form, so that no single PR both breaks a caller and fixes
+it.
+
+A change that genuinely cannot be decomposed this way stays in one PR, and its
+Notes section says why. Those are rarer than they look: adding the new form
+beside the old one usually works even where it first appears not to, and the
+cost of carrying both for two PRs is smaller than the cost of a diff nobody can
+read in one sitting.
+
+The ADR opens the stack rather than closing it. An ADR is written the day the
+decision is made rather than reconstructed afterward, and for a stacked change
+that means the design and its rejected alternatives land first, with the
+Verification section stating that the work is not yet built. The last PR in the
+stack fills that section in with what was actually run.
+
+Two costs, both accepted deliberately. Intermediate PRs merge code that nothing
+calls yet, which is unreachable on `main` until the stack completes — so a stack
+is finished rather than abandoned partway. And each PR carries its own
+description and its own CI run, which is more ceremony than one large PR. The
+trade is worth it once a change stops fitting in a single reading.
+
+For reference, [#94](https://github.com/arnasbertulis/hereader/pull/94) is the
+counter-example: one commit, 33 files, +5,458/−285, across two packages and the
+docs. Its engine layer was strictly additive — `playback_session.dart` deleted
+nothing at all — so the split was available and simply was not taken.
+
 ## Architecture Decision Records
 
 A substantial decision gets an ADR in `docs/adr/`, written the same day the
