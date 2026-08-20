@@ -24,6 +24,13 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # `dart format`, not `flutter format`, which was removed. The rule is
+      # the same one ci-dart.yml enforces on the pure packages: formatting
+      # this package by hand for as long as CI did not check it is how a diff
+      # ends up carrying reflowed lines nobody chose to touch.
+      - name: Verify formatting
+        run: dart format --output=none --set-exit-if-changed .
+
       - name: Analyze
         run: flutter analyze
 

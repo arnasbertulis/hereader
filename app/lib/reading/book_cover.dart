@@ -55,18 +55,16 @@ class BookCoverImage extends StatelessWidget {
                 // at print resolution, so a 1600px image would otherwise be
                 // decoded in full to fill a 172px box, on the target where
                 // decode happens on the thread that draws frames.
-                cacheWidth:
-                    (width * MediaQuery.devicePixelRatioOf(context)).round(),
+                cacheWidth: (width * MediaQuery.devicePixelRatioOf(context))
+                    .round(),
                 // A stored image that will not decode is a broken picture,
                 // not a broken book.
-                errorBuilder: (context, _, _) =>
-                    _GeneratedFace(bookId: bookId),
+                errorBuilder: (context, _, _) => _GeneratedFace(bookId: bookId),
               ),
       ),
     );
   }
 }
-
 
 /// A book's cover once its bytes have been read.
 ///

@@ -175,15 +175,17 @@ void main() {
     setUp(() => database = AppDatabase(NativeDatabase.memory()));
     tearDown(() => database.close());
 
-    Widget editor(ReadingProfile profile, {Brightness app = Brightness.light}) =>
-        MaterialApp(
-          theme: appTheme(brightness: app),
-          home: ProfileEditScreen(
-            profile: profile,
-            repository: LibraryRepository(database),
-            issueStamp: _stamp,
-          ),
-        );
+    Widget editor(
+      ReadingProfile profile, {
+      Brightness app = Brightness.light,
+    }) => MaterialApp(
+      theme: appTheme(brightness: app),
+      home: ProfileEditScreen(
+        profile: profile,
+        repository: LibraryRepository(database),
+        issueStamp: _stamp,
+      ),
+    );
 
     testWidgets(
       'draws through the reading surface rather than its own sample',

@@ -271,9 +271,7 @@ void main() {
       // platform slide, which carries no scale at all.
       expect(transitionAround('arrived'), findsOneWidget);
 
-      final scale = tester.widget<ScaleTransition>(
-        transitionAround('arrived'),
-      );
+      final scale = tester.widget<ScaleTransition>(transitionAround('arrived'));
       expect(scale.scale.value, greaterThanOrEqualTo(0.98));
       expect(scale.scale.value, lessThanOrEqualTo(1.0));
 

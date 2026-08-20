@@ -195,6 +195,11 @@ boilerplate check.
 `flutter analyze` and `dart analyze` run in CI on every push and fail on any
 diagnostic, so a rule added is a rule enforced.
 
+`dart format` is verified the same way, in every package including `app`.
+Formatting left unchecked is not neutral: it turns up later as reflowed lines
+in the diff of whatever change happens to touch that file next, which is churn
+a reviewer has to read past to find the actual change.
+
 ## Documentation
 
 Package-level READMEs (`app/README.md`, `server/README.md`, and the

@@ -7,10 +7,7 @@ import 'package:rsvp_engine/rsvp_engine.dart';
 /// 250 words a minute, so a count of words divides into minutes by four.
 const _steady = PacingConfig(kind: PacingModelKind.constant, baseWpm: 250);
 
-const _elicited = PacingConfig(
-  kind: PacingModelKind.elicited,
-  baseWpm: 250,
-);
+const _elicited = PacingConfig(kind: PacingModelKind.elicited, baseWpm: 250);
 
 BookSummary _book({
   int wordCount = 10000,
@@ -24,11 +21,7 @@ BookSummary _book({
   wordCount: wordCount,
   importedAt: DateTime.utc(2026, 1, 1),
   sourceFormat: 'epub',
-  position: const Locator(
-    blockId: 'block-7',
-    charOffset: 0,
-    parserVersion: 1,
-  ),
+  position: const Locator(blockId: 'block-7', charOffset: 0, parserVersion: 1),
   tokenIndex: tokenIndex,
   chapterTitle: chapterTitle,
   chapterEndIndex: chapterEndIndex,
@@ -103,11 +96,7 @@ void main() {
         '40 min left',
       );
       expect(
-        remainingLabel(
-          _book(wordCount: 100000),
-          _steady,
-          TimeLeftScope.book,
-        ),
+        remainingLabel(_book(wordCount: 100000), _steady, TimeLeftScope.book),
         '6 h 40 min left',
       );
     });
