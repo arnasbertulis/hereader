@@ -131,6 +131,45 @@ take.
 Tracking issues for a stack of pull requests are a different thing again, with
 their own rules under *Tracking the stack* above.
 
+## Releases
+
+Landing a change on `main` does not ship it. A deploy runs from a `v*` tag, for
+the reasons in [ADR 0023](docs/adr/0023-continuous-deployment.md), which also
+covers what a rollback needs and why the server only ever pulls.
+
+Versions are semantic and pre-1.0: a release carrying a feature takes the minor
+number, one that is only fixes or documentation takes the patch. 1.0 is not a
+milestone that arrives by accumulation, and until something decides it, the
+major stays at zero.
+
+**Check the workflows are green on the exact commit before tagging, not on the
+branch.** The three CI workflows are separate files and cannot gate each other,
+so `main` is green only in the sense that each workflow passed independently;
+`gh run list --branch main` names the sha each result belongs to. Tagging a
+commit whose checks are still running is how a deploy starts from something
+nobody has verified.
+
+The tag is annotated, never lightweight — a lightweight tag carries no message,
+and the message is the only place a release says what it contains:
+
+```powershell
+git tag -a v0.2.0 <commit>    # opens the editor; -F - reads a piped message
+git push origin v0.2.0
+```
+
+Written as prose, in the same voice as a squash commit body, and for the same
+reason: a list of the pull requests in the range is something `git log` already
+answers. Say what a reader of the app gets out of this release, and what
+changed on the server. The subject line does **not** repeat the version, since
+`git tag -n` prints the tag name beside it and `v0.2.0 v0.2.0 ...` is what
+repeating it looks like.
+
+After the push, watch the deploy — `gh run watch <id> --exit-status` — and then
+check the deployment yourself rather than reading the workflow's own result.
+The pipeline polls `/health` and reports what it saw at that moment; a request
+to `/api/health` and to the site root afterwards is a different question, asked
+from outside the machine that just answered it.
+
 ## Architecture Decision Records
 
 A substantial decision gets an ADR in `docs/adr/`, written the same day the
