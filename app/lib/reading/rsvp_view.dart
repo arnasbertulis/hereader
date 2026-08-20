@@ -46,14 +46,7 @@ class RsvpView extends StatelessWidget {
     // unresolved config reaching a paint call by looking close enough.
     final config = presentation.config;
 
-    final style = TextStyle(
-      fontFamily: config.fontFamily,
-      fontSize: config.fontSizePt,
-      letterSpacing: config.fontSizePt * config.letterSpacingEm,
-      height: 1.2,
-      color: colorOf(inkArgbFor(presentation.polarity)),
-      fontFeatures: const [FontFeature.tabularFigures()],
-    );
+    final style = readingTextStyle(presentation);
 
     final token = update?.token;
 
@@ -97,10 +90,7 @@ class RsvpView extends StatelessWidget {
       color: colorOf(surfaceArgbFor(presentation)),
       child: Align(
         // Anchor fractions map onto Alignment's -1..1 range.
-        alignment: Alignment(
-          config.anchorX * 2 - 1,
-          config.anchorY * 2 - 1,
-        ),
+        alignment: Alignment(config.anchorX * 2 - 1, config.anchorY * 2 - 1),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: transition == 0

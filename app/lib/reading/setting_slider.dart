@@ -79,29 +79,43 @@ class SettingSlider extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 4),
               child: Text(help!, style: theme.textTheme.bodySmall),
             ),
-          if (warning != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    AppIcons.settingWarns,
-                    size: 16,
-                    color: theme.colorScheme.error,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      warning!,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.error,
-                      ),
-                    ),
-                  ),
-                ],
+          if (warning != null) SettingWarning(warning!),
+        ],
+      ),
+    );
+  }
+}
+
+/// One warning line under a setting, in the error colour.
+///
+/// Lifted out of [SettingSlider] when a control that is not a slider needed
+/// the same line: the presentation mode is a segmented button, and a reader
+/// should not be able to tell from the styling which kind of control the
+/// warning came from.
+class SettingWarning extends StatelessWidget {
+  final String text;
+
+  const SettingWarning(this.text, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(AppIcons.settingWarns, size: 16, color: theme.colorScheme.error),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.error,
               ),
             ),
+          ),
         ],
       ),
     );

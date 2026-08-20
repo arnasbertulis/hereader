@@ -82,6 +82,40 @@ the mechanism is confirmed rather than assumed, and it is not a
 transformation. Central field loss slows reading for reasons beyond eye
 movements, and no presentation format addresses those.
 
+### RSVP compared with scrolling, in the same population
+
+The study above compares RSVP with a static page. It does not compare
+RSVP with the other dynamic format, and when someone did, the ordering
+was not the one this project assumed.
+
+Visually impaired observers read both scrolled text and RSVP faster than
+a normal page view. Between the two dynamic formats the groups diverge:
+
+- **Sighted observers read RSVP 1.3 times faster than the scroll
+  display.**
+- **Visually impaired observers read 13% *slower* from RSVP than from the
+  scroll display** — a difference that did not reach statistical
+  significance, which is why the paper's own title reports the two as
+  similar rather than ranking them.
+
+> Fine EM, Peli E (1995). Scrolled and rapid serial visual presentation
+> texts are read at similar rates by the visually impaired. *Journal of
+> the Optical Society of America A* 12(10):2286–2292. PMID 7500210.
+> doi:10.1364/JOSAA.12.002286
+
+**Honest reading of it:** this is not evidence that scrolling is better.
+The direct comparison was null. What it does establish is that the
+advantage RSVP shows over a page in sighted readers **does not transfer**
+to this project's target reader, and that scrolling is a legitimate
+dynamic format rather than the thing RSVP replaces. A tool built for
+central field loss that offers only RSVP is picking one of two formats
+that the evidence declines to rank.
+
+**Feature:** `continuousScroll` as a presentation mode alongside the
+fixed anchor, offered rather than defaulted to. No preset changes format
+on this finding, because the null result does not support a change of
+default in either direction.
+
 ---
 
 ## 3. Reader-controlled advance beats fixed-rate RSVP
@@ -207,6 +241,29 @@ Spacing controls still ship, because they have support for dyslexia
 (below) and because reader comfort justifies a setting. They are not
 presented as a low-vision feature.
 
+**RSVP loses to scrolling on comprehension in central vision
+loss.** Reading was compared across static text, horizontally scrolling
+text, and RSVP, in people with simulated central vision loss and in
+people with actual macular degeneration. Scrolling text supported
+effective reading in both groups and is described by the authors as
+having potential as a reading aid. RSVP produced **lower overall
+comprehension and high error rates**, in the simulated and the actual
+groups alike.
+
+> Akthar Z, Griffiths H, Chen Y, Latham K, Crossland MD (2021). A
+> comparison of reading, in people with simulated and actual central
+> vision loss, with static text, horizontally scrolling text, and rapid
+> serial visual presentation. *Journal of Vision* 21(12):5.
+> PMID 34751737. doi:10.1167/jov.21.12.5
+
+This is the single strongest finding against the project's core
+presentation, and it is against it in exactly the population the project
+was built for. It is also the only comprehension measurement anywhere in
+these notes; everything else here is a rate. The response is to ship the
+format it favours as a first-class alternative rather than to argue with
+it, and to say in the README that the reader has two formats because the
+literature does not agree on one.
+
 **Magnification alone does not solve it.** People with macular
 degeneration read slowly even when print size adequately compensates for
 their acuity loss, and oculomotor deficits cannot fully explain the size
@@ -265,6 +322,8 @@ default.
 | Line spacing does not help AMD | Chung et al. 2008 | Spacing offered, not framed as low-vision |
 | Letter spacing helps dyslexic children, contested | Zorzi 2012, Skottun & Skoyles 2012 | Spacing control, no efficacy claim |
 | Reading speed under RSVP improves with practice | Chung 2011 | First-session speed is not treated as a ceiling |
+| Visually impaired readers read 13% slower from RSVP than from scroll, not significant | Fine & Peli 1995 | `continuousScroll` presentation mode, offered not defaulted |
+| Scrolling beat RSVP on comprehension in central vision loss | Akthar et al. 2021 | Same; and the README states why two formats ship |
 
 ---
 
@@ -282,6 +341,10 @@ default.
   highlighting. Most of what exists publicly is vendor material.
 - Word frequency scaling is planned on the reasoning that rare words need
   longer, but no source has been found testing this under RSVP.
-- **Comprehension is not measured in any study cited here.** Every figure
-  above is a reading-rate figure. That is a gap in the evidence base, not
-  only in this implementation.
+- **Comprehension is measured in exactly one study cited here**, Akthar
+  et al. (2021), and it favours scrolling over RSVP. Every other figure
+  above is a reading-rate figure: not one of the studies this project's
+  *rate* claims rest on measured whether the reader understood what went
+  past. That is still a gap in the evidence base rather than only in this
+  implementation, but it is no longer an empty one, and the single data
+  point that exists does not favour the default presentation.

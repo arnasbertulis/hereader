@@ -39,6 +39,23 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1));
   }
 
+  /// Opens the reader with a sliding profile already active.
+  Future<void> openScrolling(WidgetTester tester) async {
+    final repository = LibraryRepository(database);
+    final profile = ReadingProfile(
+      id: 'scroll-test',
+      name: 'Sliding',
+      presentation: const PresentationConfig(
+        mode: PresentationMode.continuousScroll,
+      ),
+    );
+    await repository.saveProfile(profile, hlc: await _stamp());
+    await repository.setActiveProfile(profile.id, hlc: await _stamp());
+
+    await tester.pumpWidget(reader());
+    await tester.pumpAndSettle();
+  }
+
   group('the reading surface', () {
     // The gap this file exists for. The surface is the app's primary
     // control and was a bare GestureDetector: no role, no label, nothing
@@ -219,6 +236,94 @@ void main() {
         tester.getSemantics(find.byKey(readerParagraphButtonKey)).tooltip,
         'Forward a paragraph',
       );
+
+      handle.dispose();
+      await disposeTree(tester);
+    });
+  });
+
+  group('the sliding surface', () {
+    // One node, not three. A screen-reader user finding three buttons where
+    // a sighted user finds one surface would be reading a different app —
+    // and ADR 0020 removed the zones as a concept here, not as pixels.
+    testWidgets('is one button carrying the word', (tester) async {
+      final handle = tester.ensureSemantics();
+
+      await openScrolling(tester);
+
+      expect(
+        tester.getSemantics(find.byKey(readerScrollSurfaceKey)),
+        isSemantics(
+          isButton: true,
+          hasTapAction: true,
+          label: 'Start reading',
+          value: 'Alpha',
+        ),
+      );
+
+      expect(find.byKey(readerTapBackKey), findsNothing);
+      expect(find.byKey(readerTapCentreKey), findsNothing);
+      expect(find.byKey(readerTapForwardKey), findsNothing);
+
+      handle.dispose();
+      await disposeTree(tester);
+    });
+
+    // The edges were a screen-reader user's only way to step, and deleting
+    // them with no replacement would regress the axis this file exists for.
+    // `increase`/`decrease` is the idiom for a control moving along a
+    // continuum, which this surface literally is; TalkBack and NVDA offer it
+    // as a swipe on the focused node.
+    testWidgets('steps by the configured amount without the edge zones', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+
+      await openScrolling(tester);
+
+      expect(
+        tester.getSemantics(find.byKey(readerScrollSurfaceKey)),
+        isSemantics(
+          hasIncreaseAction: true,
+          hasDecreaseAction: true,
+          increasedValue: 'beta',
+          decreasedValue: 'Alpha',
+        ),
+      );
+
+      tester.semantics.increase(find.semantics.byLabel('Start reading'));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getSemantics(find.byKey(readerScrollSurfaceKey)).value,
+        'beta',
+      );
+
+      handle.dispose();
+      await disposeTree(tester);
+    });
+
+    // Same rule as the centre zone, and more so: sixty frames a second is an
+    // order of magnitude past the rate ADR 0020 already declined to announce.
+    testWidgets('says nothing while the text is moving', (tester) async {
+      final handle = tester.ensureSemantics();
+
+      await openScrolling(tester);
+
+      await tester.tap(find.byKey(readerScrollSurfaceKey));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 16));
+
+      final node = tester.getSemantics(find.byKey(readerScrollSurfaceKey));
+      expect(node.label, 'Pause reading');
+      expect(node.value, '');
+      // Both or neither, which `SemanticsNode` asserts on for a node
+      // offering `increase`.
+      expect(node.increasedValue, '');
+      expect(node.decreasedValue, '');
+
+      await tester.tap(find.byKey(readerScrollSurfaceKey));
+      await tester.pumpAndSettle();
 
       handle.dispose();
       await disposeTree(tester);

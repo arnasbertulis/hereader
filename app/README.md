@@ -256,9 +256,42 @@ value it was seeded with at open and the guard silently ate every completion
 write. The state transition was the fact worth keying on; the index was a
 proxy that happened to work for every book long enough to look like the rule.
 
-The reading surface is three regions, split 25 / 50 / 25. The left and right
-quarters step back and forward and stop there; the centre half keeps play,
-pause and the elicited advance. `arrowLeft` and `arrowRight` do the same two
+There are two reading surfaces, and `ReadingSurface` is the one place that
+decides which a profile draws — the reader and the settings preview both call
+it, so the contrast readout beside the preview cannot end up measuring a pair
+the reader never sees. The switch is exhaustive with no `default`, so a fourth
+`PresentationMode` is a compile error in exactly one file.
+
+Under sliding text the book is one unbroken line moving right to left at a
+steady speed past a fixed eye point, marked by a caret beside the line rather
+than over it — above, below or both, solid, outline or chevron, at a distance,
+a size and (for outline and chevron) a stroke thickness the reader sets, all
+independent of one another, in the accent colour where that can be told apart
+from the background and in the surface ink where it cannot. Reaching the end
+of the book clears the caret along with the line, rather than leaving it
+pointing at text that stopped moving. A `Ticker` supplies the time and
+`PlaybackSession` keeps the position; about sixty tokens around the anchor are
+measured at a time, never the book. Dragging a finger scrubs 1:1 — the pointer
+landing pauses immediately, from a raw `Listener` rather than `onTapDown`,
+which is deferred by up to `kPressTimeout` — and lifting it stops where it was
+released, with no fling. A tap that was not a drag starts or stops. The three
+tap zones are not built in this mode; the four jump buttons, the chapter
+drawer and the keyboard bindings are unchanged. See
+[ADR 0025](../docs/adr/0025-continuous-scroll.md).
+
+The reader's profile sheet carries a switch for sliding text that has to be
+reversible: turning it on for a preset forks it, and turning it back off
+returns to the preset rather than leaving the reader on a fork still named
+after the mode they just turned off. The pairing is computed by value rather
+than stored, in `mode_fork.dart` — a fork identical to its preset in
+everything but id, name and mode *is* that preset, so nothing needs
+remembering. A fork the reader has only changed the caret settings on is kept
+rather than deleted, since those controls exist only under sliding, and is
+found and reused the next time the switch goes on rather than duplicated.
+
+Under one word at a time the reading surface is three regions, split
+25 / 50 / 25. The left and right quarters step back and forward and stop
+there; the centre half keeps play, pause and the elicited advance. `arrowLeft` and `arrowRight` do the same two
 things as the edges, so a reader on a keyboard or a switch is not on a
 different set of controls from a reader with a thumb.
 
@@ -437,6 +470,30 @@ screen and nowhere else.
 Windows only.** Nothing in any of them animates or translates a large area,
 which is the shape Chrome's main-thread throttle actually reaches, but that is
 an expectation rather than a result.
+
+**Sliding text does translate a large area, every frame, and it has not been
+measured on a phone.** It is the first thing in this app that animates
+continuously, so the root README's claim that reading is unaffected by
+Chrome-on-Android's main-frame throttle no longer covers both surfaces — it is
+corrected there. What is done structurally: a `RepaintBoundary`, a painter
+driven by `CustomPainter(repaint:)` so no widget rebuilds between token
+crossings, and the text measured about once every forty tokens rather than per
+frame. What is not done is a number from `HEREADER_FRAME_STATS` on a real
+device. See ADR 0025.
+
+**Sliding text runs left to right only.** `measureRun` and `MarqueePainter`
+take `TextDirection.ltr` explicitly rather than reading the ambient
+`Directionality`, which would mirror shaping within each token while the run
+itself still travelled right to left. Consistently wrong beats
+half-mirrored — the same discipline `app_icons.dart` applies to
+`matchTextDirection`.
+
+**The sliding surface gives a screen reader nothing the fixed anchor did
+not.** It is one node with `onTap`, `onIncrease` and `onDecrease`, and the
+step actions have the same standing as ADR 0020's keyboard bindings: covered
+by a widget test group and by no real assistive technology. Continuous scroll
+is a visual presentation; anyone who needs speech rather than sight is better
+served by the whole book read aloud.
 
 ## Testing
 

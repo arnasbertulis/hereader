@@ -240,11 +240,31 @@ int readerInkArgbFor(ResolvedPresentation presentation) =>
 /// background and re-deriving the composite in a test is the arrangement
 /// that had the WCAG readout in settings judging a pair the app never drew.
 Color readerTrackFor(ResolvedPresentation presentation) => Color.alphaBlend(
-  colorOf(
-    readerInkArgbFor(presentation),
-  ).withValues(alpha: readerTrackOpacity),
+  colorOf(readerInkArgbFor(presentation)).withValues(alpha: readerTrackOpacity),
   colorOf(surfaceArgbFor(presentation)),
 );
+
+/// The accent where it reads against [background], the ink where it does not.
+///
+/// Two things on the reading surface take the accent and they sit on
+/// different backgrounds — the progress fill on its own track, the scroll
+/// caret on the bare surface — so the background is a parameter rather than
+/// baked in. One function, because a second one measuring a different pair
+/// is how the contrast readout came to report colours the app never painted.
+///
+/// Falls back to the ink rather than to a lightened accent: a washed accent
+/// is still an accent and would report a colour the reader did not choose.
+Color readerAccentOn(
+  Color background, {
+  required ColorScheme scheme,
+  required ResolvedPresentation presentation,
+}) {
+  final reads =
+      contrastRatio(scheme.primary.toARGB32(), background.toARGB32()) >=
+      readerMinControlContrast;
+
+  return reads ? scheme.primary : colorOf(readerInkArgbFor(presentation));
+}
 
 /// The filled part of the progress bar: the accent where it reads, the ink
 /// where it does not.
@@ -274,14 +294,33 @@ Color readerTrackFor(ResolvedPresentation presentation) => Color.alphaBlend(
 Color readerProgressFillFor({
   required ColorScheme scheme,
   required ResolvedPresentation presentation,
-}) {
-  final track = readerTrackFor(presentation);
-  final reads =
-      contrastRatio(scheme.primary.toARGB32(), track.toARGB32()) >=
-      readerMinControlContrast;
+}) => readerAccentOn(
+  readerTrackFor(presentation),
+  scheme: scheme,
+  presentation: presentation,
+);
 
-  return reads ? scheme.primary : colorOf(readerInkArgbFor(presentation));
-}
+/// The eye-point caret on the sliding surface: the accent where it reads
+/// against the reading surface itself, the ink where it does not.
+///
+/// The caret is measured against `surfaceArgbFor` rather than against the
+/// progress track, because that is what is actually behind it. Routing it
+/// through [readerProgressFillFor] would have judged a pair it never sits
+/// on — the exact shape of the bug `RsvpView`'s doc comment records.
+///
+/// This is the second accented object on the reading surface, which widens
+/// ADR 0015's one-accent-per-screen rule. Deliberate: the caret is the eye
+/// point, which is the single thing a reader of a moving line has to find,
+/// and it is only ever on screen beside the progress fill while the text is
+/// stopped. See ADR 0025.
+Color readerCaretFor({
+  required ColorScheme scheme,
+  required ResolvedPresentation presentation,
+}) => readerAccentOn(
+  colorOf(surfaceArgbFor(presentation)),
+  scheme: scheme,
+  presentation: presentation,
+);
 
 /// A theme for the panels the reader screen opens over its surface.
 ///
@@ -347,9 +386,7 @@ ThemeData readerChromeTheme({
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(AppRadii.md),
-        ),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadii.md)),
       ),
     ),
 
@@ -380,7 +417,47 @@ ThemeData readerChromeTheme({
   );
 }
 
+/// The type the reading surface draws in.
+///
+/// One function, because both surfaces need it and continuous scroll needs
+/// it *twice* — once to measure the run and once to paint it. Three copies
+/// of one style is three chances for the geometry the session walks to stop
+/// matching the glyphs on screen.
+TextStyle readingTextStyle(ResolvedPresentation presentation) {
+  final config = presentation.config;
+
+  return TextStyle(
+    fontFamily: config.fontFamily,
+    fontSize: config.fontSizePt,
+    letterSpacing: config.fontSizePt * config.letterSpacingEm,
+    height: 1.2,
+    color: colorOf(inkArgbFor(presentation.polarity)),
+    fontFeatures: const [FontFeature.tabularFigures()],
+  );
+}
+
 // -- descriptions -------------------------------------------------------
+
+/// The pacing to *estimate* a time from, for a profile.
+///
+/// Continuous scroll always has a rate, including under elicited pacing:
+/// the marquee outranks the pacing model, so nothing waits for the reader
+/// and `baseWpm` describes the text going past. Seconds per token there is
+/// `meanAdvance / velocity`, and velocity is `(baseWpm / 60) * meanAdvance`,
+/// so the mean width divides out and the answer is exactly what
+/// [remainingReadingTime] already computes for constant pacing.
+///
+/// A substitution at the call site rather than a second estimator. One
+/// function still computes this figure, and `PacingModel` still knows
+/// nothing about presentation — ADR 0003 §3 holds. The substitution is
+/// honest: under scroll the pacing genuinely is constant.
+///
+/// ADR 0014's rule is unchanged for the fixed anchor. The estimate is
+/// withheld when there is no rate; scroll always has one.
+PacingConfig estimationPacing(ReadingProfile profile) =>
+    profile.presentation.mode == PresentationMode.continuousScroll
+    ? profile.pacing.copyWith(kind: PacingModelKind.constant)
+    : profile.pacing;
 
 /// Says when the crossfade outlasts the word it is fading.
 ///
@@ -394,6 +471,13 @@ ThemeData readerChromeTheme({
 /// readout is: the value is not unsafe and a reader may want it, but nobody
 /// should arrive at overlapping words without being told.
 String? fadeWarning(ReadingProfile profile) {
+  // Continuous scroll fades nothing: there is no moment at which one word
+  // replaces another, so `transitionMs` has no effect and a warning about it
+  // would be describing a control that is not on screen.
+  if (profile.presentation.mode == PresentationMode.continuousScroll) {
+    return null;
+  }
+
   final display = referenceDisplay(profile.pacing);
   if (display == null) return null;
 
@@ -403,6 +487,43 @@ String? fadeWarning(ReadingProfile profile) {
   return 'Longer than the ${display.inMilliseconds} ms each word is shown, '
       'so words will overlap as one fades into the next.';
 }
+
+/// Says that a continuously moving surface is about to ignore a system
+/// preference asking for less motion.
+///
+/// Warned about rather than acted on, like [fadeWarning] and the contrast
+/// readout. Reduce-motion exists to suppress decoration that moves; here the
+/// motion *is* the reading method, and a reader who chose this mode chose it
+/// knowing what their device asks for generally. Silently falling back to a
+/// fixed anchor would take away the thing they selected. Nobody should
+/// arrive at it uninformed, which is what this line is for.
+String? reduceMotionWarning(ReadingProfile profile, {required bool disabled}) {
+  if (!disabled) return null;
+  if (profile.presentation.mode != PresentationMode.continuousScroll) {
+    return null;
+  }
+
+  return 'Your device asks apps to reduce motion. This mode moves text '
+      'continuously and will keep doing so.';
+}
+
+/// How a presentation mode reads, in the reader's terms.
+///
+/// [PresentationMode.shiftingWindow] is not built and never reaches a
+/// reader-facing control, so it is not described. The switch is exhaustive
+/// rather than defaulted, so building it would be a compile error here.
+String describePresentationMode(PresentationMode mode) => switch (mode) {
+  PresentationMode.fixedSingle =>
+    'One word at a time, held where your eyes already are. Cuts about 1.3 '
+        'saccades a word for readers with central field loss (Rubin & Turano '
+        '1994).',
+  PresentationMode.shiftingWindow => 'A short window of words. Not built.',
+  PresentationMode.continuousScroll =>
+    'A line of text slides past a fixed mark. Read at much the same speed as '
+        'one word at a time by visually impaired readers (Fine & Peli 1995), '
+        'and ahead of it on comprehension in central vision loss '
+        '(Akthar 2021).',
+};
 
 /// One line summarising how a profile reads, for a list row.
 String describeProfile(ReadingProfile profile) => switch (profile.pacing.kind) {

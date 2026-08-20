@@ -18,6 +18,7 @@ import 'book_progress.dart';
 import 'library_book.dart';
 import 'note_editor_screen.dart';
 import 'paste_reader_screen.dart';
+import 'profile_presentation.dart';
 import 'reading_display.dart';
 
 /// Identifies the add button, for a test that would otherwise match its
@@ -150,7 +151,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     unawaited(_restorePreferences());
 
     _profile = _repo.watchActiveProfile().listen((profile) {
-      if (mounted) setState(() => _pacing = profile.pacing);
+      if (mounted) setState(() => _pacing = estimationPacing(profile));
     });
 
     widget.display.addListener(_onDisplayChanged);
@@ -843,11 +844,7 @@ class _BookTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                BookCoverFuture(
-                  bookId: book.id,
-                  cover: cover,
-                  width: width,
-                ),
+                BookCoverFuture(bookId: book.id, cover: cover, width: width),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   book.title,
@@ -937,11 +934,7 @@ class _BookRow extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  BookCoverFuture(
-                    bookId: book.id,
-                    cover: cover,
-                    width: 72,
-                  ),
+                  BookCoverFuture(bookId: book.id, cover: cover, width: 72),
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: Column(
@@ -972,11 +965,7 @@ class _BookRow extends StatelessWidget {
                             ),
                           ),
                         const SizedBox(height: AppSpacing.xs),
-                        BookPlaceLine(
-                          book: book,
-                          pacing: pacing,
-                          scope: scope,
-                        ),
+                        BookPlaceLine(book: book, pacing: pacing, scope: scope),
                         const SizedBox(height: AppSpacing.sm),
                         BookProgressLine(book: book),
                       ],

@@ -2,6 +2,7 @@ import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
 import 'package:app/reading/library_book.dart';
 import 'package:app/reading/reader_screen.dart';
+import 'package:app/reading/scrolling_text_view.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -49,6 +50,66 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 1));
   }
+
+  /// Opens the reader with a sliding profile already active.
+  Future<void> openScrolling(WidgetTester tester) async {
+    final repository = LibraryRepository(database);
+    final profile = ReadingProfile(
+      id: 'scroll-test',
+      name: 'Sliding',
+      presentation: const PresentationConfig(
+        mode: PresentationMode.continuousScroll,
+      ),
+    );
+    await repository.saveProfile(profile, hlc: await _stamp());
+    await repository.setActiveProfile(profile.id, hlc: await _stamp());
+
+    await tester.pumpWidget(reader());
+    await tester.pumpAndSettle();
+  }
+
+  // The guard on the notifier, for the mode that needs it fifteen times more
+  // than the fixed anchor does. A scrolling session emits once a frame, and
+  // `_current` exists precisely so that does not rebuild the Scaffold, the
+  // chapter panel and the controls to move some text sideways.
+  //
+  // Asserted on widget identity: `_ReaderScreenState.build` constructs a new
+  // Scaffold every time it runs, so the same instance across many frames
+  // means it did not run.
+  testWidgets('a sliding surface does not rebuild the screen per frame', (
+    tester,
+  ) async {
+    await openScrolling(tester);
+
+    await tester.tap(find.byKey(readerScrollSurfaceKey));
+    await tester.pump();
+
+    final scaffold = tester.widget(find.byType(Scaffold));
+    final painter =
+        tester
+                .widget<CustomPaint>(
+                  find.descendant(
+                    of: find.byType(ScrollingTextView),
+                    matching: find.byType(CustomPaint),
+                  ),
+                )
+                .painter!
+            as MarqueePainter;
+    final start = painter.updates.value!.index;
+
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+
+    // Guards against passing vacuously: the frames above have to have moved
+    // the reader, or "did not rebuild" says nothing.
+    expect(painter.updates.value!.index, greaterThan(start));
+    expect(identical(tester.widget(find.byType(Scaffold)), scaffold), isTrue);
+
+    await tester.tap(find.byKey(readerScrollSurfaceKey));
+    await tester.pumpAndSettle();
+    await disposeTree(tester);
+  });
 
   group('the reading surface', () {
     // The direct guard on this change. Playing no longer calls setState, so
