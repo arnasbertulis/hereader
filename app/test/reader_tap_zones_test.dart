@@ -349,24 +349,23 @@ void main() {
       await disposeTree(tester);
     });
 
-    testWidgets(
-      'already on a block start moves to the block before',
-      (tester) async {
-        await tester.pumpWidget(
-          reader(startIndex: 6, text: _multiSentenceText()),
-        );
-        await tester.pumpAndSettle();
+    testWidgets('already on a block start moves to the block before', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        reader(startIndex: 6, text: _multiSentenceText()),
+      );
+      await tester.pumpAndSettle();
 
-        expect(_word(tester), 'Eta');
+      expect(_word(tester), 'Eta');
 
-        await tester.tap(find.byKey(readerBackParagraphButtonKey));
-        await tester.pumpAndSettle();
+      await tester.tap(find.byKey(readerBackParagraphButtonKey));
+      await tester.pumpAndSettle();
 
-        expect(_word(tester), 'Alpha');
+      expect(_word(tester), 'Alpha');
 
-        await disposeTree(tester);
-      },
-    );
+      await disposeTree(tester);
+    });
 
     testWidgets('both back buttons are disabled at the very start', (
       tester,
@@ -598,24 +597,23 @@ void main() {
       await disposeTree(tester);
     });
 
-    testWidgets(
-      'from the last word of a sentence lands on the next sentence',
-      (tester) async {
-        await tester.pumpWidget(
-          reader(startIndex: 1, text: _multiSentenceText()),
-        );
-        await tester.pumpAndSettle();
+    testWidgets('from the last word of a sentence lands on the next sentence', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        reader(startIndex: 1, text: _multiSentenceText()),
+      );
+      await tester.pumpAndSettle();
 
-        expect(_word(tester), 'beta.');
+      expect(_word(tester), 'beta.');
 
-        await tester.tap(find.byKey(readerSentenceButtonKey));
-        await tester.pumpAndSettle();
+      await tester.tap(find.byKey(readerSentenceButtonKey));
+      await tester.pumpAndSettle();
 
-        expect(_word(tester), 'Gamma');
+      expect(_word(tester), 'Gamma');
 
-        await disposeTree(tester);
-      },
-    );
+      await disposeTree(tester);
+    });
 
     testWidgets('from the middle of the second sentence lands correctly', (
       tester,
@@ -680,39 +678,38 @@ void main() {
       await disposeTree(tester);
     });
 
-    testWidgets(
-      'a jump survives a pause taken after it, before resuming',
-      (tester) async {
-        // `stopAt` suppresses exactly one resume rewind, and
-        // `PlaybackSession.pause` clears that suppression when it runs.
-        // Opening the profile sheet calls `pause()`, but the session is
-        // already `paused` from the jump, and `pause()` guards on the state
-        // already being `playing` or `awaitingAdvance` — so the sheet's call
-        // never reaches the line that clears the suppression. `_resumeHere`
-        // survives untouched, and resuming after the sheet closes lands back
-        // exactly where the jump left it. ADR 0020 section 2's "any pause()
-        // clears it" is true of `pause()` running, not of calling it — the
-        // distinction this test pins.
-        await tester.pumpWidget(reader(text: _multiSentenceText()));
-        await tester.pumpAndSettle();
+    testWidgets('a jump survives a pause taken after it, before resuming', (
+      tester,
+    ) async {
+      // `stopAt` suppresses exactly one resume rewind, and
+      // `PlaybackSession.pause` clears that suppression when it runs.
+      // Opening the profile sheet calls `pause()`, but the session is
+      // already `paused` from the jump, and `pause()` guards on the state
+      // already being `playing` or `awaitingAdvance` — so the sheet's call
+      // never reaches the line that clears the suppression. `_resumeHere`
+      // survives untouched, and resuming after the sheet closes lands back
+      // exactly where the jump left it. ADR 0020 section 2's "any pause()
+      // clears it" is true of `pause()` running, not of calling it — the
+      // distinction this test pins.
+      await tester.pumpWidget(reader(text: _multiSentenceText()));
+      await tester.pumpAndSettle();
 
-        await tester.tap(find.byKey(readerSentenceButtonKey));
-        await tester.pumpAndSettle();
-        expect(_word(tester), 'Gamma');
+      await tester.tap(find.byKey(readerSentenceButtonKey));
+      await tester.pumpAndSettle();
+      expect(_word(tester), 'Gamma');
 
-        await tester.tap(find.byKey(readerProfileButtonKey));
-        await tester.pumpAndSettle();
-        // Dismiss the sheet by tapping its scrim.
-        await tester.tapAt(const Offset(10, 10));
-        await tester.pumpAndSettle();
+      await tester.tap(find.byKey(readerProfileButtonKey));
+      await tester.pumpAndSettle();
+      // Dismiss the sheet by tapping its scrim.
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
 
-        await tester.tap(find.byKey(readerPlayButtonKey));
-        await tester.pump();
+      await tester.tap(find.byKey(readerPlayButtonKey));
+      await tester.pump();
 
-        expect(_word(tester), 'Gamma');
+      expect(_word(tester), 'Gamma');
 
-        await disposeTree(tester);
-      },
-    );
+      await disposeTree(tester);
+    });
   });
 }

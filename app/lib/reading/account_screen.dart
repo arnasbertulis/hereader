@@ -26,9 +26,9 @@ class AccountScreen extends StatelessWidget {
   const AccountScreen({super.key, required this.api, required this.sync});
 
   Future<void> _signIn(BuildContext context) async {
-    final signedIn = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => SignInScreen(api: api)),
-    );
+    final signedIn = await Navigator.of(
+      context,
+    ).push<bool>(MaterialPageRoute(builder: (_) => SignInScreen(api: api)));
 
     if (signedIn == true) unawaited(sync.syncNow());
   }
@@ -75,7 +75,9 @@ class AccountScreen extends StatelessWidget {
             children: [
               ListTile(
                 leading: Icon(
-                  signedIn ? AppIcons.accountSignedIn : AppIcons.accountSignedOut,
+                  signedIn
+                      ? AppIcons.accountSignedIn
+                      : AppIcons.accountSignedOut,
                 ),
                 title: Text(signedIn ? 'Signed in' : 'Not signed in'),
                 // No address. AuthStore holds tokens and a device id and

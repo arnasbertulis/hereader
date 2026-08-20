@@ -52,8 +52,7 @@ abstract final class AppAccents {
 /// the better choice flips. The swatch is the one place the raw accent hex
 /// is painted rather than handed to `fromSeed`, and a selected swatch has to
 /// show a check rather than relying on colour alone.
-Color onAccent(Color accent) =>
-    relativeLuminance(accent.toARGB32()) > 0.179
+Color onAccent(Color accent) => relativeLuminance(accent.toARGB32()) > 0.179
     ? const Color(0xFF000000)
     : const Color(0xFFFFFFFF);
 

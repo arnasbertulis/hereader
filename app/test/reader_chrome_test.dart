@@ -60,9 +60,7 @@ Map<String, ResolvedPresentation> _backgrounds() => {
   'tint below the flip': _resolved(
     const PresentationConfig(tintArgb: 0xFF6E6E6E),
   ),
-  'tint on the flip': _resolved(
-    const PresentationConfig(tintArgb: 0xFF777777),
-  ),
+  'tint on the flip': _resolved(const PresentationConfig(tintArgb: 0xFF777777)),
   'tint above the flip': _resolved(
     const PresentationConfig(tintArgb: 0xFF808080),
   ),
@@ -83,10 +81,7 @@ void main() {
     test('a profile stating no polarity takes the app it is opened in', () {
       const following = PresentationConfig();
 
-      expect(
-        surfaceArgbFor(_resolved(following)),
-        lightSurfaceArgb,
-      );
+      expect(surfaceArgbFor(_resolved(following)), lightSurfaceArgb);
       expect(
         surfaceArgbFor(_resolved(following, app: Brightness.dark)),
         darkSurfaceArgb,
@@ -172,9 +167,7 @@ void main() {
       // second pair: nothing about the surface changes when the reader's
       // eye moves from the word to the controls.
       for (final polarity in Polarity.values) {
-        final presentation = _resolved(
-          PresentationConfig(polarity: polarity),
-        );
+        final presentation = _resolved(PresentationConfig(polarity: polarity));
 
         expect(
           readerInkArgbFor(presentation),
@@ -202,9 +195,7 @@ void main() {
       // sheet came out coloured. These roles have to be the same greys the
       // library list is drawn on.
       for (final polarity in Polarity.values) {
-        final presentation = _resolved(
-          PresentationConfig(polarity: polarity),
-        );
+        final presentation = _resolved(PresentationConfig(polarity: polarity));
         final scheme = themeFor(presentation).colorScheme;
         final app = buildScheme(
           accent: AppAccents.defaultAccent.color,
@@ -313,10 +304,7 @@ void main() {
             ).colorScheme;
 
             expect(
-              readerProgressFillFor(
-                scheme: scheme,
-                presentation: presentation,
-              ),
+              readerProgressFillFor(scheme: scheme, presentation: presentation),
               scheme.primary,
               reason:
                   '${accent.name} fell back to the ink on ${preset.name} '
