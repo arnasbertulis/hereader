@@ -180,7 +180,10 @@ String semanticsForBook(
 
   return <String>[
     book.title,
-    ?book.author,
+    // The date stands in for the author the same way the tile does it, rather
+    // than being appended: a note has no author, and this is the slot that
+    // fact is drawn in.
+    ?(book.author ?? noteDateLabel(book)),
     place,
     ?where.chapter,
     ?where.figure,
