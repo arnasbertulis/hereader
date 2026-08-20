@@ -63,31 +63,42 @@ describing the result. **Every PR in the stack passes every required check on
 its own**, with the layers above it unwritten. That is what makes `git bisect`
 useful and a revert surgical rather than all-or-nothing.
 
-This works because the pure packages are path dependencies (ADR 0001): a change
-to `rsvp_engine` merges and `app` picks it up with no publish and no version
-bump. It depends on the lower layer's change being **additive**. Where it is not
-— a field removed, a JSON shape changed, a signature narrowed — the addition and
-the removal are separate PRs, the removal landing only after every caller has
-stopped using the old form, so that no single PR both breaks a caller and fixes
-it.
-
-A change that genuinely cannot be decomposed this way stays in one PR, and its
-Notes section says why. Those are rarer than they look: adding the new form
-beside the old one usually works even where it first appears not to, and the
-cost of carrying both for two PRs is smaller than the cost of a diff nobody can
-read in one sitting.
+Path dependencies (ADR 0001) make this cheap: an engine change merges and `app`
+picks it up with no publish and no version bump. It requires the lower layer to
+be **additive**. Where a function changes shape instead, the new form lands
+beside the old one, the callers move, and the old form is deleted last, so no
+single PR both breaks a caller and fixes it. A change that genuinely cannot be
+decomposed that way stays in one PR and says why in its Notes — rarer than it
+looks, since adding the new form beside the old usually works even where it
+first appears not to.
 
 The ADR opens the stack rather than closing it. An ADR is written the day the
-decision is made rather than reconstructed afterward, and for a stacked change
-that means the design and its rejected alternatives land first, with the
-Verification section stating that the work is not yet built. The last PR in the
-stack fills that section in with what was actually run.
+decision is made rather than reconstructed afterward; ordering it first also
+means every later PR has the design available without depending on whoever
+wrote the one before. Its Verification section states that the work is not yet
+built, and the last PR in the stack fills it in with what was actually run.
 
-Two costs, both accepted deliberately. Intermediate PRs merge code that nothing
-calls yet, which is unreachable on `main` until the stack completes — so a stack
-is finished rather than abandoned partway. And each PR carries its own
-description and its own CI run, which is more ceremony than one large PR. The
-trade is worth it once a change stops fitting in a single reading.
+Two costs, accepted deliberately. Intermediate PRs merge code nothing calls yet,
+unreachable on `main` until the stack completes — so a stack is finished rather
+than abandoned partway. And each layer carries its own description and CI run.
+
+### Tracking the stack
+
+A stack of three or more layers gets a tracking issue, opened before the first
+PR. Its body carries the goal, a link to the ADR, and the layers as a task
+list. It is edited whenever the plan changes, which is the reason the plan
+lives there rather than in a committed file that would need its own commit to
+correct.
+
+Each PR links back from its Notes section: `Part of #96` on every PR but the
+last, which uses `Closes #96` so the issue closes on merge. Both go in the PR
+description rather than the commit body, where a stray closing keyword would
+fire early.
+
+Branches are cut from a freshly pulled `main` each time, never from the
+previous layer's branch. Branches based on each other have to be rebased every
+time a lower layer changes, and that only pays for itself where waiting on a
+reviewer is the bottleneck — which it is not here.
 
 For reference, [#94](https://github.com/arnasbertulis/hereader/pull/94) is the
 counter-example: one commit, 33 files, +5,458/−285, across two packages and the
