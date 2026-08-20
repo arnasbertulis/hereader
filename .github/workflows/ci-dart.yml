@@ -5,6 +5,18 @@ on:
     branches: [main]
   pull_request:
 
+# A second push to a pull request supersedes the first, so the run against
+# the commit nobody will merge is cancelled rather than finished. Keyed on
+# the ref, so two pull requests never cancel each other.
+#
+# Never on a push to main: the branch ruleset gates on the run against the
+# pull request head, and a cancelled run here would leave the commit that
+# is actually deployed from with no green run of its own. cd.yml goes
+# further and never cancels at all, for a stronger reason it states itself.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     runs-on: ubuntu-latest
