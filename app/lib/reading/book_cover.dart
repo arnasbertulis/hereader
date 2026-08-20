@@ -130,7 +130,7 @@ class _GeneratedFace extends StatelessWidget {
         children: [
           SizedBox(
             height: AppSpacing.sm,
-            child: ColoredBox(color: bandColorFor(bookId, scheme.brightness)),
+            child: ColoredBox(color: _bandColorFor(bookId, scheme.brightness)),
           ),
           // No title here. The tile below already draws it, and a stand-in
           // cover repeating text six pixels from itself reads as a bug, not
@@ -147,9 +147,9 @@ class _GeneratedFace extends StatelessWidget {
 /// Muted rather than saturated, so a wall of them reads as a bookshelf
 /// rather than as a colour chart, and dimmer in the dark scheme for the same
 /// reason the neutral ramp never reaches white.
-Color bandColorFor(String bookId, Brightness brightness) => HSLColor.fromAHSL(
+Color _bandColorFor(String bookId, Brightness brightness) => HSLColor.fromAHSL(
   1,
-  hueFor(bookId),
+  _hueFor(bookId),
   0.35,
   brightness == Brightness.light ? 0.52 : 0.40,
 ).toColor();
@@ -164,7 +164,7 @@ Color bandColorFor(String bookId, Brightness brightness) => HSLColor.fromAHSL(
 ///
 /// Weak as a hash and strong enough for a stripe. Two books can share a hue;
 /// the title underneath is what identifies the book.
-double hueFor(String bookId) {
+double _hueFor(String bookId) {
   var hue = 0;
   for (final unit in bookId.codeUnits) {
     hue = (hue * 31 + unit) % 360;

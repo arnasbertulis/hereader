@@ -63,14 +63,14 @@ String? noteDateLabel(BookSummary book) {
   final progress = book.progress;
 
   if (progress != null) {
-    return (label: '${percentRead(progress)}%', value: progress);
+    return (label: '${_percentRead(progress)}%', value: progress);
   }
   if (book.started) return (label: 'In progress', value: null);
 
   return (label: 'Not started', value: null);
 }
 
-int percentRead(double progress) => (progress * 100).round();
+int _percentRead(double progress) => (progress * 100).round();
 
 /// The words still ahead of the reader, in [scope], or null when no honest
 /// count exists.
@@ -165,7 +165,7 @@ String semanticsForBook(
 
   final String place;
   if (progress != null) {
-    place = '${percentRead(progress)} percent read';
+    place = '${_percentRead(progress)} percent read';
   } else if (book.started) {
     place = 'in progress';
   } else {

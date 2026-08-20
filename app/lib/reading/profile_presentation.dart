@@ -57,7 +57,7 @@ extension type ResolvedPresentation._(PresentationConfig config) {
 /// states no polarity draws light on a phone set light and dark on a desktop
 /// set dark, both signed into the same account. That follows from theme mode
 /// being device-local rather than working around it.
-Polarity polarityFor(Brightness appBrightness) => switch (appBrightness) {
+Polarity _polarityFor(Brightness appBrightness) => switch (appBrightness) {
   Brightness.light => Polarity.darkOnLight,
   Brightness.dark => Polarity.lightOnDark,
 };
@@ -72,7 +72,7 @@ ResolvedPresentation resolvePresentation(
   PresentationConfig presentation,
   Brightness appBrightness,
 ) => ResolvedPresentation._(
-  presentation.resolvedWith(polarityFor(appBrightness)),
+  presentation.resolvedWith(_polarityFor(appBrightness)),
 );
 
 // -- polarity defaults --------------------------------------------------
@@ -188,7 +188,7 @@ const double readerMinControlContrast = 3;
 /// [readerMinControlContrast] for one that also failed it. At 0.16 the worst
 /// of the same set is 3.31, and the track still separates from the surface
 /// by 1.26 to 1.55, which is a groove rather than a second bar.
-const double readerTrackOpacity = 0.16;
+const double _readerTrackOpacity = 0.16;
 
 /// Whether controls drawn on this profile's reading surface should be light
 /// or dark.
@@ -240,7 +240,9 @@ int readerInkArgbFor(ResolvedPresentation presentation) =>
 /// background and re-deriving the composite in a test is the arrangement
 /// that had the WCAG readout in settings judging a pair the app never drew.
 Color readerTrackFor(ResolvedPresentation presentation) => Color.alphaBlend(
-  colorOf(readerInkArgbFor(presentation)).withValues(alpha: readerTrackOpacity),
+  colorOf(
+    readerInkArgbFor(presentation),
+  ).withValues(alpha: _readerTrackOpacity),
   colorOf(surfaceArgbFor(presentation)),
 );
 
