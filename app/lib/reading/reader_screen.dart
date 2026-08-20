@@ -1396,7 +1396,7 @@ class _ReaderScreenState extends State<ReaderScreen>
 /// Read-only and flat. Depth is shown as indentation rather than as
 /// collapsible sections: a reader looking for Act III Scene II wants to see
 /// it, not to expand Act III first.
-class _ChapterPanel extends StatelessWidget {
+class _ChapterPanel extends StatefulWidget {
   final String bookTitle;
   final List<Chapter> chapters;
   final int currentIndex;
@@ -1408,6 +1408,61 @@ class _ChapterPanel extends StatelessWidget {
     required this.currentIndex,
     required this.onSelected,
   });
+
+  @override
+  State<_ChapterPanel> createState() => _ChapterPanelState();
+}
+
+class _ChapterPanelState extends State<_ChapterPanel> {
+  final _controller = ScrollController();
+  final _currentKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+
+    // In initState because `DrawerController` does not build its child while
+    // the drawer is dismissed, so this state is created afresh every time the
+    // panel opens — which is exactly when the reveal is wanted, and only
+    // then. A reader who scrolls away afterwards is not dragged back.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _revealCurrent());
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  /// Scrolls the chapter being read into view.
+  ///
+  /// Two steps, because a lazy list has no element for a tile that has never
+  /// been on screen and `ensureVisible` cannot scroll to one that does not
+  /// exist. The jump is an estimate — the scrollable's own extent, divided by
+  /// index — which is exact for uniform tiles and close enough for wrapped
+  /// ones to bring the target into the build window. `ensureVisible` then
+  /// places it properly. The estimate is never the final word, so a title
+  /// that wraps costs a few pixels of scroll and nothing else.
+  void _revealCurrent() {
+    if (!mounted || widget.currentIndex < 0) return;
+    if (!_controller.hasClients || widget.chapters.length < 2) return;
+
+    final position = _controller.position;
+    final fraction = widget.currentIndex / (widget.chapters.length - 1);
+
+    _controller.jumpTo(
+      (position.maxScrollExtent * fraction).clamp(0, position.maxScrollExtent),
+    );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final target = _currentKey.currentContext;
+      if (!mounted || target == null) return;
+
+      // Centred rather than pinned to the top edge: the chapters either side
+      // are how a reader confirms it is the right one.
+      unawaited(Scrollable.ensureVisible(target, alignment: 0.5));
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1423,7 +1478,7 @@ class _ChapterPanel extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(bookTitle, style: theme.textTheme.titleMedium),
+                  Text(widget.bookTitle, style: theme.textTheme.titleMedium),
                   const SizedBox(height: 4),
                   Text(
                     'From this book’s own table of contents',
@@ -1435,11 +1490,13 @@ class _ChapterPanel extends StatelessWidget {
             const Divider(height: 1),
             Expanded(
               child: ListView.builder(
-                itemCount: chapters.length,
+                controller: _controller,
+                itemCount: widget.chapters.length,
                 itemBuilder: (context, i) {
-                  final chapter = chapters[i];
+                  final chapter = widget.chapters[i];
 
                   return ListTile(
+                    key: i == widget.currentIndex ? _currentKey : null,
                     // Indentation carries the nesting. Capped so a deeply
                     // nested book does not push its titles off the panel.
                     contentPadding: EdgeInsets.only(
@@ -1452,8 +1509,8 @@ class _ChapterPanel extends StatelessWidget {
                           ? theme.textTheme.titleSmall
                           : theme.textTheme.bodyMedium,
                     ),
-                    selected: i == currentIndex,
-                    onTap: () => onSelected(chapter),
+                    selected: i == widget.currentIndex,
+                    onTap: () => widget.onSelected(chapter),
                   );
                 },
               ),

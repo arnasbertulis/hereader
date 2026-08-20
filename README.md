@@ -350,7 +350,6 @@ start: the browser database drift uses needs a secure context. Use `https://`,
 - The supporting research is small-sample and predates modern displays. Rubin and Turano tested 23 people in 1994; Arditi tested 15 in 1999. These are the best available comparisons, not large trials.
 - No study cited here measures reading comprehension. Every figure is a reading rate.
 - A book that declares no table of contents shows no chapter button. Both EPUB 2 and EPUB 3 require one, so this only affects malformed files, but the reader has no way to tell an absent list from an absent feature.
-- The chapter panel does not scroll to the current chapter when it opens. The current chapter is highlighted, so a reader deep in a long book has to scroll to find where they are.
 - A table of contents entry whose fragment names something the normalizer dropped lands at the start of its document rather than at the entry's own position.
 - Chapter titles are shown exactly as the book writes them, including publisher noise and inconsistent casing.
 - The reader chrome, the library controls and the note editor have been verified on Windows only. Nothing in any of them animates or translates a large area, which is the shape the Chrome throttle above actually reaches, but that is an expectation rather than a result. Sliding text *does* translate a large area, every frame, and it has not been measured on a phone either.

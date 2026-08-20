@@ -25,6 +25,27 @@ Block _block(String id, String href, int index, String text) => Block(
   text: text,
 );
 
+/// Forty blocks, each its own chapter, which is more than fits a panel.
+(TokenizedText, List<Chapter>) _longBook() {
+  final blocks = [
+    for (var i = 0; i < 40; i++) (id: 'c$i', text: 'Word$i more words here.'),
+  ];
+
+  final text = TokenizedText.from(blocks, parserVersion: 1);
+
+  return (
+    text,
+    [
+      for (var i = 0; i < 40; i++)
+        Chapter(
+          title: 'Chapter $i',
+          depth: 0,
+          tokenIndex: text.startOfBlock('c$i')!,
+        ),
+    ],
+  );
+}
+
 void main() {
   group('chaptersOf', () {
     test('resolves each entry to the first token of its block', () {
@@ -182,6 +203,79 @@ void main() {
       // The surface is showing the chapter's first token, paused, rather
       // than having resumed playback somewhere the reader has not looked.
       expect(find.text('Delta'), findsOneWidget);
+    });
+
+    testWidgets('opening the panel reveals the chapter being read', (
+      tester,
+    ) async {
+      final (text, chapters) = _longBook();
+
+      await tester.pumpWidget(
+        reader(
+          LibraryBook(
+            id: 'b',
+            title: 'A Book',
+            text: text,
+            chapters: chapters,
+            contentStartIndex: chapters[30].tokenIndex,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Chapters'));
+      await tester.pumpAndSettle();
+
+      final height =
+          tester.view.physicalSize.height / tester.view.devicePixelRatio;
+
+      // On screen, and roughly centred rather than merely built: a non-lazy
+      // list builds every tile, so finding the text proves nothing about
+      // where the panel is scrolled to.
+      final current = tester.getCenter(find.text('Chapter 30')).dy;
+      expect(current, greaterThan(0));
+      expect(current, lessThan(height));
+
+      // The control: the first chapter is where an unscrolled panel would be
+      // sitting, and a lazy list does not build a tile it has scrolled past,
+      // so its absence is what says a scroll happened at all.
+      expect(find.text('Chapter 0'), findsNothing);
+    });
+
+    testWidgets('it reveals the new chapter on a second open, not the first', (
+      tester,
+    ) async {
+      final (text, chapters) = _longBook();
+
+      await tester.pumpWidget(
+        reader(
+          LibraryBook(
+            id: 'b',
+            title: 'A Book',
+            text: text,
+            chapters: chapters,
+            contentStartIndex: chapters[30].tokenIndex,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Chapters'));
+      await tester.pumpAndSettle();
+
+      // Near the centred current chapter, so it is on screen to be tapped.
+      await tester.tap(find.text('Chapter 32'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Chapters'));
+      await tester.pumpAndSettle();
+
+      final height =
+          tester.view.physicalSize.height / tester.view.devicePixelRatio;
+      final current = tester.getCenter(find.text('Chapter 32')).dy;
+
+      expect(current, greaterThan(0));
+      expect(current, lessThan(height));
     });
 
     testWidgets('a book that declares no chapters offers no button', (
