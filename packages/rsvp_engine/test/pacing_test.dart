@@ -4,7 +4,6 @@ import 'package:rsvp_engine/rsvp_engine.dart';
 import 'package:test/test.dart';
 
 /// Minimal token builder for pacing tests.
-/// Adjust to match your actual Token constructor.
 Token _tok(String text, {PauseAfter pause = PauseAfter.none}) =>
     Token(text: text, charOffset: 0, pauseAfter: pause);
 
