@@ -168,7 +168,11 @@ make the pause button meaningless in that mode and would fire the profile's
 rewind on every single word.
 
 Resuming from `paused` steps back by `rewindWords`; an explicit `rewind()` does
-not, so holding a back button does not compound one on top of the other.
+not, so holding a back button does not compound one on top of the other. A
+`rewindWords` of zero is not a small move but no move at all, and that
+includes the sub-token offset: under continuous scroll, zeroing it would snap
+the reader to the leading edge of the word they had stopped in, which is
+exactly what a rewind of none asks not to happen.
 
 `stopAt(index)` is the move a reader made deliberately: it stops where it lands
 and suppresses exactly one resume rewind, because someone who has just stepped

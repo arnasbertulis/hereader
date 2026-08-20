@@ -381,6 +381,22 @@ void main() {
       }
     });
 
+    test('a rewind of none leaves the offset where the reader stopped', () {
+      // The fixed anchor cannot show this one: it has no sub-token offset, so
+      // a rewind of none is genuinely nothing there. Here it used to snap the
+      // reader to the leading edge of the word they had stopped in.
+      final s = _session(profile: _profile(rewindWords: 0), startIndex: 3);
+      s.play();
+      s.tick(const Duration(milliseconds: 100));
+      s.pause();
+      expect(s.tokenOffset, closeTo(10, 0.001));
+
+      s.play();
+      expect(s.index, 3);
+      expect(s.tokenOffset, closeTo(10, 0.001));
+      s.dispose();
+    });
+
     test('a resume rewind lands on a leading edge too', () {
       final s = _session(startIndex: 3);
       s.play();
