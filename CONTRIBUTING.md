@@ -105,6 +105,32 @@ counter-example: one commit, 33 files, +5,458/−285, across two packages and th
 docs. Its engine layer was strictly additive — `playback_session.dart` deleted
 nothing at all — so the split was available and simply was not taken.
 
+## Issues
+
+A bug found and not fixed the same day gets an issue, and so does cleanup that
+is deferred rather than done. The alternative is a note somewhere outside the
+repository, which is invisible to anyone reading the project and is where
+deferred work goes to be forgotten.
+
+An issue and a known limitation are not the same thing and the distinction is
+worth keeping. An issue is for something meant to change. The README's *Known
+limitations* is for a trade taken deliberately, and the issue templates already
+point a reporter there first, so a fact that lands in both will drift.
+
+Two templates in `.github/ISSUE_TEMPLATE/`, `bug_report.yml` and
+`feature_request.yml`, applying the `bug` and `enhancement` labels. Blank
+issues are switched off, so an issue opened through the web interface has to
+pick one of them.
+
+`gh issue create` bypasses templates entirely, and that is the path used here,
+so an issue filed from the command line carries the same fields by hand: what
+happened, what was expected instead, how to reproduce it, and which platform.
+Otherwise the templates are enforced on the one path this project does not
+take.
+
+Tracking issues for a stack of pull requests are a different thing again, with
+their own rules under *Tracking the stack* above.
+
 ## Architecture Decision Records
 
 A substantial decision gets an ADR in `docs/adr/`, written the same day the
