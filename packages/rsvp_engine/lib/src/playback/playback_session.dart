@@ -194,7 +194,13 @@ class PlaybackSession {
 
     if (_state == PlaybackState.finished) return;
 
-    if (_state == PlaybackState.paused && !_resumeHere) {
+    // A rewind of no words is not a move, so it must not zero [_offset]
+    // either. Under continuous scroll that would snap the reader back to the
+    // leading edge of the word they stopped in, which is the one thing a
+    // rewind of none promises not to do.
+    if (_state == PlaybackState.paused &&
+        !_resumeHere &&
+        _profile.rewindWords > 0) {
       _index = (_index - _profile.rewindWords).clamp(0, tokens.length - 1);
       _offset = 0;
     }

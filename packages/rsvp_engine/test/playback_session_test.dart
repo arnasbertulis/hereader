@@ -132,6 +132,24 @@ void main() {
       });
     });
 
+    test('a rewind of none holds the reader where they paused', () {
+      fakeAsync((async) {
+        final s = PlaybackSession(
+          tokens: _tokens(),
+          profile: _profile(rewindWords: 0),
+        );
+        s.play();
+        async.elapse(const Duration(milliseconds: 600));
+        expect(s.index, 3);
+
+        s.pause();
+        s.play();
+        expect(s.index, 3);
+
+        s.dispose();
+      });
+    });
+
     test('rewind on resume clamps at the first token', () {
       fakeAsync((async) {
         final s = PlaybackSession(
