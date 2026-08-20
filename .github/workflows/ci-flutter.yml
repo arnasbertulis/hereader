@@ -6,16 +6,22 @@ on:
   pull_request:
 
 # A second push to a pull request supersedes the first, so the run against
-# the commit nobody will merge is cancelled rather than finished. Keyed on
-# the ref, so two pull requests never cancel each other.
+# the commit nobody will merge is cancelled rather than finished.
 #
-# Never on a push to main: the branch ruleset gates on the run against the
-# pull request head, and a cancelled run here would leave the commit that
-# is actually deployed from with no green run of its own. cd.yml goes
-# further and never cancels at all, for a stronger reason it states itself.
+# The group is head_ref on a pull request — the source branch, shared by
+# every push to it — falling back to the sha on a push to main, where
+# head_ref is empty. Each main commit therefore gets a group of its own,
+# which is the point: cancel-in-progress does not mean "leave the other run
+# alone", it means "queue behind it", so one shared main group would make
+# the second of two quick merges wait out the first before starting. A
+# group of one has nothing to queue behind and nothing to cancel, and the
+# run against a tagged commit is the only test evidence it ever gets —
+# cd.yml builds and deploys, it does not test.
+#
+# cd.yml is the deliberate opposite, for a reason it states itself.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   app:
