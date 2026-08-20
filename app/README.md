@@ -461,11 +461,6 @@ profile now reaches both polarity defaults on one device.
 **Web imports block the interface.** `compute()` does not offload on Flutter
 web; see the note under how a book gets read.
 
-**A note's date does not reach a screen reader.** The library tile shows
-"Added" or "Edited" and a date in a note's empty author slot, but
-`semanticsForBook` was not extended to announce it, so the fact is on
-screen and nowhere else.
-
 **The reader chrome, the library controls and the note editor are verified on
 Windows only.** Nothing in any of them animates or translates a large area,
 which is the shape Chrome's main-thread throttle actually reaches, but that is

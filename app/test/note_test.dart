@@ -385,5 +385,25 @@ void main() {
         startsWith('Edited'),
       );
     });
+
+    test('a screen reader is told the date, not only the tile', () {
+      // The date sits in the slot a book draws its author in, so a note that
+      // showed it on screen and said nothing was exactly the regression
+      // semanticsForBook's own doc comment warns about.
+      expect(semanticsForBook(noteAt()), contains(noteDateLabel(noteAt())!));
+    });
+
+    test('a book with an author still announces the author', () {
+      final book = BookSummary(
+        id: 'b',
+        title: 'A Book',
+        author: 'An Author',
+        wordCount: 5,
+        importedAt: DateTime.utc(2026, 8, 18, 14, 5),
+        sourceFormat: 'epub',
+      );
+
+      expect(semanticsForBook(book), contains('An Author'));
+    });
   });
 }
