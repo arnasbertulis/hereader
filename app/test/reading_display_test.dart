@@ -1,8 +1,9 @@
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
 import 'package:app/reading/reading_display.dart';
-import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'test_database.dart';
 
 void main() {
   late AppDatabase db;
@@ -18,7 +19,7 @@ void main() {
       ReadingDisplayController(repository: repo, issueStamp: issueStamp);
 
   setUp(() {
-    db = AppDatabase(NativeDatabase.memory());
+    db = AppDatabase(testExecutor());
     repo = LibraryRepository(db);
     stamps = 0;
   });

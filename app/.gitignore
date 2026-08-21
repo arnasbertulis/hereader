@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Copied from web/sqlite3.wasm at test time so flutter_tools' static handler
+# can serve it to the Chrome test run. Not a second tracked copy — see ADR
+# 0009.
+/test/sqlite3.wasm

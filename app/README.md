@@ -496,6 +496,31 @@ served by the whole book read aloud.
 flutter test
 ```
 
+runs the suite on the Dart VM. A second command runs the same suite in a real
+Chrome instead:
+
+```bash
+cp web/sqlite3.wasm test/sqlite3.wasm
+flutter test --platform chrome $(find test -maxdepth 1 -name '*_test.dart' ! -name 'schema_migration_test.dart' ! -name 'web_shell_colors_test.dart')
+```
+
+The copy is gitignored and made fresh each time from the one tracked
+`web/sqlite3.wasm`, because `flutter_tools` serves `<cwd>/test` at the test
+server's root rather than `<cwd>/web`. The file list excludes the two
+`@TestOn('vm')` suites by name rather than relying on the annotation:
+`flutter test --platform chrome` compiles every discovered test file into
+one shared bundle before `@TestOn` filtering ever runs, so a suite that
+imports `dart:ffi` or `dart:io` — `schema_migration_test.dart` needs a real
+file on disk to prove a migration survives a reopen, `web_shell_colors_test.dart`
+reads `web/index.html` — breaks the whole compile even though it would never
+execute on this platform. See ADR 0009.
+
+The Chrome run compiles with DDC, not `dart2js` — the compiler the deployed
+web build actually uses — so it proves app code runs in a browser at all, not
+that it survives `dart2js`'s narrower integer semantics. That half of the
+arithmetic risk stays where ADR 0009 puts it: in `rsvp_engine` and
+`epub_reader`, proven under `dart test -p chrome`.
+
 Widget tests open an in-memory database rather than mocking the repository, so
 they exercise the real queries. `LibraryRepository` tests do the same for
 pending positions specifically: holding one, draining it on import, and

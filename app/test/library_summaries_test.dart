@@ -1,9 +1,10 @@
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
 import 'package:drift/drift.dart' hide isNotNull, isNull;
-import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
+
+import 'test_database.dart';
 
 /// Records the SQL of every select the database runs.
 ///
@@ -35,7 +36,7 @@ void main() {
 
   setUp(() {
     selects = _RecordedSelects();
-    database = AppDatabase(NativeDatabase.memory().interceptWith(selects));
+    database = AppDatabase(testExecutor().interceptWith(selects));
     repo = LibraryRepository(database);
   });
 

@@ -5,10 +5,11 @@ import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
 import 'package:app/reading/book_progress.dart';
 import 'package:app/reading/library_book.dart';
-import 'package:drift/native.dart';
 import 'package:epub_reader/epub_reader.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
+
+import 'test_database.dart';
 
 Uint8List _bytesOf(String text) => Uint8List.fromList(utf8.encode(text));
 
@@ -166,7 +167,7 @@ void main() {
     late LibraryRepository repo;
 
     setUp(() {
-      db = AppDatabase(NativeDatabase.memory());
+      db = AppDatabase(testExecutor());
       repo = LibraryRepository(db);
     });
 
@@ -214,7 +215,7 @@ void main() {
     late LibraryRepository repo;
 
     setUp(() async {
-      db = AppDatabase(NativeDatabase.memory());
+      db = AppDatabase(testExecutor());
       repo = LibraryRepository(db);
 
       await repo.addBook(

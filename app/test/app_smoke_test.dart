@@ -17,11 +17,12 @@ import 'package:app/theme/app_colors.dart';
 import 'package:app/theme/app_icons.dart';
 import 'package:app/theme/app_tokens.dart';
 import 'package:app/theme/appearance.dart';
-import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
+
+import 'test_database.dart';
 
 /// Everything the app needs, wired against an in-memory database.
 ///
@@ -47,7 +48,7 @@ class _Harness {
   });
 
   factory _Harness.create() {
-    final database = AppDatabase(NativeDatabase.memory());
+    final database = AppDatabase(testExecutor());
     final repository = LibraryRepository(database);
     final auth = AuthStore();
     final api = ApiClient(baseUrl: Uri.parse('http://localhost'), auth: auth);
@@ -289,7 +290,7 @@ void main() {
   testWidgets('the paste screen enables reading once there is text', (
     tester,
   ) async {
-    final database = AppDatabase(NativeDatabase.memory());
+    final database = AppDatabase(testExecutor());
     addTearDown(database.close);
 
     await tester.pumpWidget(

@@ -2,8 +2,9 @@ import 'dart:typed_data';
 
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
-import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'test_database.dart';
 
 Uint8List _bytes(List<int> values) => Uint8List.fromList(values);
 
@@ -24,7 +25,7 @@ void main() {
   late LibraryRepository repository;
 
   setUp(() {
-    db = AppDatabase(NativeDatabase.memory());
+    db = AppDatabase(testExecutor());
     repository = LibraryRepository(db);
   });
 

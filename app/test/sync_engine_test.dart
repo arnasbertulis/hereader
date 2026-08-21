@@ -6,11 +6,11 @@ import 'package:app/data/library_repository.dart';
 import 'package:app/sync/api_client.dart';
 import 'package:app/sync/auth_store.dart';
 import 'package:app/sync/sync_engine.dart';
-import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import 'fakes.dart';
+import 'test_database.dart';
 
 void main() {
   late AppDatabase database;
@@ -21,7 +21,7 @@ void main() {
   late SyncEngine sync;
 
   setUp(() async {
-    database = AppDatabase(NativeDatabase.memory());
+    database = AppDatabase(testExecutor());
     repository = LibraryRepository(database);
 
     storage = FakeSecureStorage();

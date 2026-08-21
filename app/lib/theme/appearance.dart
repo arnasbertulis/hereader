@@ -128,9 +128,9 @@ String _pair(int component) =>
 /// Read two hex digits at a time rather than six at once. Every value that
 /// exists here is at most 255, so there is no arithmetic whose result could
 /// differ between the VM and `dart2js` — the failure class ADR 0009 exists
-/// for. This file could not run in a browser test anyway, since `app/test/`
-/// reaches `dart:ffi` through drift, which is precisely why it is written so
-/// that being untestable there costs nothing.
+/// for. `app/test/` now runs under DDC in a real browser, but DDC is not
+/// dart2js and cannot stand in for it; this file is written so that being
+/// unproven there costs nothing.
 Color decodeAccent(String? value) {
   if (value == null || !_accentHex.hasMatch(value)) {
     return AppearanceSettings.defaults.accent;

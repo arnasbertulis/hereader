@@ -2,9 +2,10 @@ import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
 import 'package:app/theme/app_colors.dart';
 import 'package:app/theme/appearance.dart';
-import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'test_database.dart';
 
 void main() {
   late AppDatabase db;
@@ -20,7 +21,7 @@ void main() {
       AppearanceController(repository: repo, issueStamp: issueStamp);
 
   setUp(() {
-    db = AppDatabase(NativeDatabase.memory());
+    db = AppDatabase(testExecutor());
     repo = LibraryRepository(db);
     stamps = 0;
   });

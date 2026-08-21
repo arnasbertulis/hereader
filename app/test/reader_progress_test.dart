@@ -3,11 +3,12 @@ import 'package:app/data/library_repository.dart';
 import 'package:app/reading/library_book.dart';
 import 'package:app/reading/reader_screen.dart';
 import 'package:app/reading/scrolling_text_view.dart';
-import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
+
+import 'test_database.dart';
 
 Future<String> _stamp() async => '0000000000001-00000-test';
 
@@ -27,7 +28,7 @@ void main() {
   late TokenizedText text;
 
   setUp(() {
-    database = AppDatabase(NativeDatabase.memory());
+    database = AppDatabase(testExecutor());
     text = _text();
   });
 
