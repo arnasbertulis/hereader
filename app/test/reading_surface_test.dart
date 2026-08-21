@@ -6,10 +6,11 @@ import 'package:app/reading/profile_presentation.dart';
 import 'package:app/reading/reader_screen.dart';
 import 'package:app/reading/rsvp_view.dart';
 import 'package:app/theme/app_theme.dart';
-import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
+
+import 'test_database.dart';
 
 Future<String> _stamp() async => '0000000000001-00000-test';
 
@@ -134,7 +135,7 @@ void main() {
   group('the reader screen', () {
     late AppDatabase database;
 
-    setUp(() => database = AppDatabase(NativeDatabase.memory()));
+    setUp(() => database = AppDatabase(testExecutor()));
     tearDown(() => database.close());
 
     // The wiring ADR 0016 is for. Nothing in this test names a polarity: the
@@ -172,7 +173,7 @@ void main() {
   group('the settings preview', () {
     late AppDatabase database;
 
-    setUp(() => database = AppDatabase(NativeDatabase.memory()));
+    setUp(() => database = AppDatabase(testExecutor()));
     tearDown(() => database.close());
 
     Widget editor(

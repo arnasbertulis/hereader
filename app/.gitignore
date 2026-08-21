@@ -43,3 +43,16 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Copied from web/sqlite3.wasm at test time so flutter_tools' static handler
+# can serve it to the Chrome test run. Not a second tracked copy — see ADR
+# 0009.
+/test/sqlite3.wasm
+
+# Copied from the Flutter SDK on Windows only. flutter_tools'
+# _localCanvasKitHandler builds its path with `path.fromUri` and then guards
+# on `startsWith('canvaskit/')`, which never matches a backslash path, so the
+# engine assets 404 and Chrome never reaches a test. The next handler in the
+# cascade serves <cwd>/test correctly, so a copy here is what gets served.
+# See app/README.md's Testing section.
+/test/canvaskit/

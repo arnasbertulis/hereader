@@ -34,8 +34,9 @@ what the settings screen uses to warn that a fade outlasts a word, so the
 estimate and the warning cannot disagree about how long a word is shown.
 
 In the engine rather than the app for the reason ADR 0009 gives: it is
-arithmetic, the suite there runs under `dart2js` as well as the VM, and
-`app/test/` cannot run in a browser at all.
+arithmetic, and the suite there runs under `dart2js` as well as the VM.
+`app/test/` now runs in a browser too, but under DDC, not `dart2js` — see
+ADR 0009.
 
 ### Under elicited pacing there is no estimate
 

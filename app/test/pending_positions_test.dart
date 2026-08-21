@@ -2,9 +2,11 @@ import 'dart:typed_data';
 
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
-import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
+import 'package:sqlite3/common.dart';
+
+import 'test_database.dart';
 
 /// A stamp in the wire format: `{millis:013d}-{counter:05d}-{deviceId}`.
 ///
@@ -25,7 +27,7 @@ void main() {
   late LibraryRepository repository;
 
   setUp(() {
-    db = AppDatabase(NativeDatabase.memory());
+    db = AppDatabase(testExecutor());
     repository = LibraryRepository(db);
   });
 

@@ -1,8 +1,9 @@
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
-import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
+
+import 'test_database.dart';
 
 String stamp(int millis, {int counter = 0, String device = 'test-device'}) =>
     HlcStamp(millis: millis, counter: counter, deviceId: device).toString();
@@ -12,7 +13,7 @@ void main() {
   late LibraryRepository repo;
 
   setUp(() {
-    db = AppDatabase(NativeDatabase.memory());
+    db = AppDatabase(testExecutor());
     repo = LibraryRepository(db);
   });
 

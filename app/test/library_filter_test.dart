@@ -9,9 +9,10 @@ import 'package:app/reading/reading_display.dart';
 import 'package:app/sync/api_client.dart';
 import 'package:app/sync/auth_store.dart';
 import 'package:app/sync/sync_engine.dart';
-import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'test_database.dart';
 
 /// Drift schedules a zero-duration timer when a query stream is cancelled.
 /// Left to teardown it is never pumped and the framework reports a leaked
@@ -29,7 +30,7 @@ void main() {
   late SyncEngine sync;
 
   setUp(() {
-    db = AppDatabase(NativeDatabase.memory());
+    db = AppDatabase(testExecutor());
     repository = LibraryRepository(db);
     auth = AuthStore();
     api = ApiClient(baseUrl: Uri.parse('http://localhost'), auth: auth);

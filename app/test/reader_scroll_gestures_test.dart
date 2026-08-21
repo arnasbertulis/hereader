@@ -4,10 +4,11 @@ import 'package:app/reading/library_book.dart';
 import 'package:app/reading/reader_screen.dart';
 import 'package:app/reading/rsvp_view.dart';
 import 'package:app/reading/scrolling_text_view.dart';
-import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
+
+import 'test_database.dart';
 
 /// **`pumpAndSettle` never settles while a scroll session is playing.**
 ///
@@ -45,7 +46,7 @@ void main() {
   late LibraryRepository repository;
 
   setUp(() {
-    database = AppDatabase(NativeDatabase.memory());
+    database = AppDatabase(testExecutor());
     repository = LibraryRepository(database);
   });
 

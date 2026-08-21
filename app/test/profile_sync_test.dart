@@ -2,9 +2,10 @@ import 'dart:convert';
 
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
-import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
+
+import 'test_database.dart';
 
 /// A stamp for a write at [millis].
 ///
@@ -19,7 +20,7 @@ void main() {
   late LibraryRepository repo;
 
   setUp(() {
-    db = AppDatabase(NativeDatabase.memory());
+    db = AppDatabase(testExecutor());
     repo = LibraryRepository(db);
   });
 

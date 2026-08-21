@@ -2,9 +2,10 @@ import 'dart:typed_data';
 
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
-import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
+
+import 'test_database.dart';
 
 /// The chapter a stored position claims to be in, read straight from the
 /// table.
@@ -31,7 +32,7 @@ void main() {
   late LibraryRepository repository;
 
   setUp(() {
-    db = AppDatabase(NativeDatabase.memory());
+    db = AppDatabase(testExecutor());
     repository = LibraryRepository(db);
   });
 
