@@ -4,7 +4,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
@@ -12,6 +14,8 @@ import org.springframework.web.context.WebApplicationContext;
 import java.util.UUID;
 
 import static org.hamcrest.Matchers.notNullValue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -29,6 +33,9 @@ class AuthControllerIntegrationTest {
 
     @Autowired
     private WebApplicationContext context;
+
+    @MockitoSpyBean
+    private PasswordEncoder passwordEncoder;
 
     private MockMvc mvc;
 
@@ -137,6 +144,20 @@ class AuthControllerIntegrationTest {
         // which addresses are registered.
         org.assertj.core.api.Assertions.assertThat(wrongPassword)
                 .isEqualTo(unknownEmail);
+    }
+
+    @Test
+    void anUnknownEmailStillPaysTheBcryptCost() throws Exception {
+        mvc().perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(credentials(freshEmail(), "password123")))
+                .andExpect(status().isUnauthorized());
+
+        // Proves the timing fix rather than the response: an unknown email
+        // must still run a bcrypt comparison, or it answers in microseconds
+        // while a known email pays a real one, and the identical response
+        // above stops being identical in the one dimension that matters.
+        verify(passwordEncoder).matches(anyString(), anyString());
     }
 
     @Test

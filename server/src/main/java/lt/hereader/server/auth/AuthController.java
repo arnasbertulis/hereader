@@ -29,11 +29,17 @@ class AuthController {
     private final PasswordEncoder passwords;
     private final TokenService tokens;
 
+    /// A bcrypt hash of a fixed string, encoded once at startup with the same
+    /// encoder as real passwords, so the unknown-email path in `login` can pay
+    /// the same cost as a real comparison instead of returning early.
+    private final String dummyHash;
+
     AuthController(UserRepository users, PasswordEncoder passwords,
                    TokenService tokens) {
         this.users = users;
         this.passwords = passwords;
         this.tokens = tokens;
+        this.dummyHash = passwords.encode("timing-side-channel-dummy");
     }
 
     @PostMapping("/register")
@@ -54,13 +60,20 @@ class AuthController {
 
     @PostMapping("/login")
     Tokens login(@Valid @RequestBody Credentials body) {
-        var user = users.findByEmail(normalise(body.email()))
-                .orElseThrow(AuthController::badCredentials);
+        var user = users.findByEmail(normalise(body.email()));
 
-        if (!passwords.matches(body.password(), user.passwordHash())) {
+        if (user.isEmpty()) {
+            // Pay the same bcrypt cost as a real comparison would, so an
+            // unknown email cannot be told apart from a wrong password by
+            // response time.
+            passwords.matches(body.password(), dummyHash);
             throw badCredentials();
         }
-        return issueFor(user.id());
+
+        if (!passwords.matches(body.password(), user.get().passwordHash())) {
+            throw badCredentials();
+        }
+        return issueFor(user.get().id());
     }
 
     /// Trades a refresh token for a new pair, so a device that has not been
