@@ -5,12 +5,13 @@ import 'dart:math' as math;
 ///
 /// This lived in the app as part of `profile_presentation.dart` until the UI
 /// pass. It touches only `int` and `dart:math`, so keeping it in the app put
-/// it on the one platform the CI browser run cannot reach: `app/test/`
-/// builds its database through `dart:ffi` and can only run on the Dart VM.
-/// Moving it here means the scheme-contrast test that checks every accent
-/// against every surface now runs under `dart test -p chrome` as well,
-/// which is the rule ADR 0009 states for anything whose correctness could
-/// depend on the compilation target.
+/// it on the one platform the CI `dart2js` run cannot reach: `app/test/` is
+/// compiled by DDC, whose integer semantics differ from `dart2js` at exactly
+/// the width edges this file avoids. Moving it here means the
+/// scheme-contrast test that checks every accent against every surface now
+/// runs under `dart test -p chrome` as well, which is the rule ADR 0009
+/// states for anything whose correctness could depend on the compilation
+/// target.
 
 /// Component reads and writes use division and modulo rather than shifts and
 /// masks.
