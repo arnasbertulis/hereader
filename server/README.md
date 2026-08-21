@@ -164,6 +164,7 @@ property of the deployment and not a secret.
 POST /auth/register          email and password, returns a token pair
 POST /auth/login             same
 POST /auth/refresh           trades a refresh token for a fresh pair
+POST /auth/logout            revokes every refresh token issued so far
 
 POST /sync/events            push a batch from a device's outbox
 GET  /sync/events?since=N    everything after a sequence number
@@ -212,6 +213,14 @@ real cost, so both are amplifiers for a caller with no limit. Exceeding it
 answers 429 with a `ProblemDetail` body and a `Retry-After` header. The limit
 is per-process, in memory — correct for the single instance this runs as
 today (ADR 0006), not for a future one with more than one `app` container.
+
+`POST /auth/logout` revokes by bumping the caller's `token_version`
+(ADR 0027), which invalidates every refresh token issued for that user, on
+every device, from that moment on — there is no per-device granularity. An
+access token already in hand keeps working until it expires on its own, at
+most `JWT_ACCESS_MINUTES` later, since checking the version on every
+authenticated request would put a database read on the hot path for a window
+expiry already bounds.
 
 ## Sync
 
@@ -297,7 +306,7 @@ Never edit an applied migration: Flyway stores a checksum and startup fails
 if one changes. Schema changes go in a new file.
 
 ```
-users                 accounts
+users                 accounts, including token_version for logout revocation
 user_sync_state       the sequence counter, one row per user
 sync_events           append-only log
 entity_state          current resolved value per entity
@@ -308,6 +317,7 @@ position_conflicts    divergences awaiting the reader
 V1  initial schema
 V2  entity_state, the resolved value per entity
 V3  the deleted flag on sync_events — see the deletion note above
+V4  token_version on users, for logout revocation (ADR 0027)
 ```
 
 No JPA. The queries here are simple enough that `JdbcClient` and plain SQL are

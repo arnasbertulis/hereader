@@ -9,7 +9,7 @@ import java.util.UUID;
 @Repository
 public class UserRepository {
 
-    public record User(UUID id, String email, String passwordHash) {}
+    public record User(UUID id, String email, String passwordHash, long tokenVersion) {}
 
     private final JdbcClient jdbc;
 
@@ -19,7 +19,7 @@ public class UserRepository {
 
     public Optional<User> findByEmail(String email) {
         return jdbc.sql("""
-                select id, email, password_hash
+                select id, email, password_hash, token_version
                 from users
                 where email = :email
                 """)
@@ -28,11 +28,24 @@ public class UserRepository {
                 .optional();
     }
 
-    public boolean exists(UUID id) {
-        return jdbc.sql("select exists(select 1 from users where id = :id)")
+    public Optional<User> findById(UUID id) {
+        return jdbc.sql("""
+                select id, email, password_hash, token_version
+                from users
+                where id = :id
+                """)
                 .param("id", id)
-                .query(Boolean.class)
-                .single();
+                .query(User.class)
+                .optional();
+    }
+
+    /// Invalidates every refresh token already issued for this user: the
+    /// next `/auth/refresh` compares its claim against this new value and
+    /// no longer matches.
+    public void bumpTokenVersion(UUID id) {
+        jdbc.sql("update users set token_version = token_version + 1 where id = :id")
+                .param("id", id)
+                .update();
     }
 
     /// Creates the user and their sync state together. A user without a
@@ -52,6 +65,6 @@ public class UserRepository {
                 .param("id", id)
                 .update();
 
-        return new User(id, email, passwordHash);
+        return new User(id, email, passwordHash, 0);
     }
 }

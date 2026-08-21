@@ -27,19 +27,21 @@ class TokenServiceTest {
     }
 
     @Test
-    void refreshTokenCarriesTheUserId() {
+    void refreshTokenCarriesTheUserIdAndVersion() {
         var userId = UUID.randomUUID();
 
-        var token = tokens.issueRefreshToken(userId);
+        var token = tokens.issueRefreshToken(userId, 3L);
 
-        assertThat(tokens.userIdFromRefreshToken(token)).isEqualTo(userId);
+        var info = tokens.refreshTokenInfo(token);
+        assertThat(info.userId()).isEqualTo(userId);
+        assertThat(info.tokenVersion()).isEqualTo(3L);
     }
 
     @Test
     void aRefreshTokenIsNotAcceptedWhereAnAccessTokenBelongs() {
         // Without the type claim this would pass, and every session would
         // quietly last as long as the refresh window.
-        var token = tokens.issueRefreshToken(UUID.randomUUID());
+        var token = tokens.issueRefreshToken(UUID.randomUUID(), 0L);
 
         assertThat(tokens.userIdFromAccessToken(token)).isNull();
     }
@@ -48,7 +50,7 @@ class TokenServiceTest {
     void anAccessTokenIsNotAcceptedWhereARefreshTokenBelongs() {
         var token = tokens.issueAccessToken(UUID.randomUUID());
 
-        assertThat(tokens.userIdFromRefreshToken(token)).isNull();
+        assertThat(tokens.refreshTokenInfo(token)).isNull();
     }
 
     @Test

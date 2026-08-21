@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -55,7 +56,7 @@ class AuthController {
         var user = users.create(
                 UUID.randomUUID(), email, passwords.encode(body.password()));
 
-        return issueFor(user.id());
+        return issueFor(user.id(), user.tokenVersion());
     }
 
     @PostMapping("/login")
@@ -73,26 +74,46 @@ class AuthController {
         if (!passwords.matches(body.password(), user.get().passwordHash())) {
             throw badCredentials();
         }
-        return issueFor(user.get().id());
+        return issueFor(user.get().id(), user.get().tokenVersion());
     }
 
     /// Trades a refresh token for a new pair, so a device that has not been
-    /// opened in weeks does not force the reader to log in again.
+    /// opened in weeks does not force the reader to log in again. Rejects a
+    /// token whose version claim no longer matches the user's current
+    /// value — the effect of a logout (ADR 0027).
     @PostMapping("/refresh")
     Tokens refresh(@Valid @RequestBody RefreshRequest body) {
-        var userId = tokens.userIdFromRefreshToken(body.refreshToken());
-
-        if (userId == null || !users.exists(userId)) {
+        var info = tokens.refreshTokenInfo(body.refreshToken());
+        if (info == null) {
             throw new ResponseStatusException(
                     HttpStatus.UNAUTHORIZED, "That token is not usable.");
         }
-        return issueFor(userId);
+
+        var user = users.findById(info.userId());
+        if (user.isEmpty() || user.get().tokenVersion() != info.tokenVersion()) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "That token is not usable.");
+        }
+        return issueFor(user.get().id(), user.get().tokenVersion());
     }
 
-    private Tokens issueFor(UUID userId) {
+    /// Invalidates every refresh token issued for the caller, on every
+    /// device, from this moment on (ADR 0027). An access token already in
+    /// hand keeps working until it expires on its own.
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void logout(@AuthenticationPrincipal UUID userId) {
+        if (userId == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "That token is not usable.");
+        }
+        users.bumpTokenVersion(userId);
+    }
+
+    private Tokens issueFor(UUID userId, long tokenVersion) {
         return new Tokens(
                 tokens.issueAccessToken(userId),
-                tokens.issueRefreshToken(userId));
+                tokens.issueRefreshToken(userId, tokenVersion));
     }
 
     /// One message for both "no such user" and "wrong password". Telling
