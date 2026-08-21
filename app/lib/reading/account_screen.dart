@@ -55,7 +55,7 @@ class AccountScreen extends StatelessWidget {
       ),
     );
 
-    if (confirmed == true) await api.auth.clear();
+    if (confirmed == true) await api.logOut();
   }
 
   @override
