@@ -42,7 +42,9 @@ $env:JWT_SECRET = [Convert]::ToBase64String((1..48 | ForEach-Object { Get-Random
 Flyway applies the schema on first start. `GET /api/health` reports whether the
 service can reach its database rather than merely whether the process is
 alive, because a health check that always answers ok makes a broken deploy
-look healthy.
+look healthy. It runs `select 1` and answers with nothing about the data
+itself — earlier it ran `select count(*) from users`, disclosing the account
+count to an unauthenticated caller for no reason the check needed.
 
 Everything sits under a `/api` context path, set by
 `server.servlet.context-path`, so that Caddy can serve the web build from the
@@ -170,6 +172,13 @@ GET  /health                 open, reports database reachability
 Everything under `/sync` requires a bearer token. The user id comes from that
 token and never from the request body: accepting an owner from the body would
 let any account write into any other account's stream.
+
+`POST /sync/events` rejects a push over 16MB by `Content-Length`, before the
+body is parsed — `SyncRequestSizeFilter`. Bean validation on `PushRequest`
+alone doesn't bound memory, since Jackson has already built the object graph
+by the time it runs. `server/Caddyfile`'s `request_body` directive enforces
+the same limit against actual bytes as they stream in, ahead of the JVM,
+which also covers a request that omits `Content-Length` altogether.
 
 ## Auth
 

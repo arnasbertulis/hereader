@@ -2,6 +2,7 @@ package lt.hereader.server.config;
 
 import lt.hereader.server.auth.AuthRateLimitFilter;
 import lt.hereader.server.auth.JwtAuthFilter;
+import lt.hereader.server.sync.SyncRequestSizeFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -31,7 +32,10 @@ class SecurityConfig {
 
     @Bean
     SecurityFilterChain filterChain(
-            HttpSecurity http, AuthRateLimitFilter rateLimit, JwtAuthFilter jwt)
+            HttpSecurity http,
+            AuthRateLimitFilter rateLimit,
+            JwtAuthFilter jwt,
+            SyncRequestSizeFilter sizeLimit)
             throws Exception {
         return http
                 .csrf(csrf -> csrf.disable())
@@ -46,6 +50,11 @@ class SecurityConfig {
                         .anyRequest().authenticated())
                 .addFilterBefore(jwt, AuthorizationFilter.class)
                 .addFilterBefore(rateLimit, JwtAuthFilter.class)
+                // Anchored to rateLimit rather than jwt directly for the
+                // same reason PR4 anchors rateLimit to jwt: a custom filter
+                // class only works as an anchor once it is already in the
+                // chain, and rateLimit was added last above.
+                .addFilterBefore(sizeLimit, AuthRateLimitFilter.class)
                 .build();
     }
 
