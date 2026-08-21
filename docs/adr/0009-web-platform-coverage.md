@@ -162,10 +162,10 @@ gains both `flutter test --platform chrome` and the existing `flutter build
 web` — see Verification for the wall-clock cost. Both are cheap against the
 manual web testing that found the first two bugs.
 
-The browser run is the most expensive step in the workflow: about five
-minutes against the VM run's forty-odd seconds, for the same assertions.
-Most of that is per-suite overhead — each of the 31 suites boots a browser,
-initialises the engine and fetches the sqlite3 module — not test time. The
+The browser run is the most expensive step in the workflow: 2m50s on CI
+against the VM run's 46s, for very nearly the same assertions. Most of that
+is per-suite overhead — each of the 31 suites boots a browser, initialises
+the engine and fetches the sqlite3 module — not test time. The
 step carries `--timeout 60s` and `timeout-minutes: 15` so that a suite which
 stops making progress fails fast and prints what it got through, rather than
 holding a runner at the ten-minute per-test default until someone cancels
@@ -297,9 +297,11 @@ the ones expected:**
 amendment. `flutter analyze` and `dart format --output=none
 --set-exit-if-changed .` are both clean.
 
-**The browser run passes in full: 1053 tests across 31 suites, in 4m56s
-wall clock**, on this machine, with no suite needing an exclusion beyond the
-two already marked `@TestOn('vm')`. The arithmetic against the VM run is
+**The browser run passes in full: 1053 tests across 31 suites**, with no
+suite needing an exclusion beyond the two already marked `@TestOn('vm')`.
+4m56s locally, 2m50s on CI — the runner is faster than this machine, so the
+`timeout-minutes: 15` sized from the local number carries more headroom in
+the place it actually applies. The arithmetic against the VM run is
 exact — 1061 minus the 7 tests in `schema_migration_test.dart` and the 1 in
 `web_shell_colors_test.dart` is 1053 — so the browser covers every assertion
 the VM does except those two suites.
