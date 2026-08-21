@@ -11,8 +11,8 @@ import 'package:test/test.dart';
 /// `dart test -p chrome` as well.
 ///
 /// The app's own contrast test builds `ColorScheme`s and needs Flutter, so it
-/// stays in `app/test` on the VM. This file is the part that could break in a
-/// browser.
+/// stays in `app/test`, where a browser run means DDC. This file is the half
+/// proven under `dart2js`, which is the target the arithmetic could break on.
 
 void main() {
   const white = 0xFFFFFFFF;

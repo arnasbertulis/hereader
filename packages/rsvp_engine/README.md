@@ -155,7 +155,10 @@ rather than stored, so nothing arriving over the wire can claim to be a preset.
 bits, never inside that namespace. It lives here rather than in the app both
 because the rule it satisfies does, and because its entropy is drawn as two
 16-bit values multiplied together — `nextInt(1 << 32)` is `nextInt(0)` under
-`dart2js`, which throws, and this is the package whose suite runs in a browser.
+`dart2js`, which throws, and this is the package whose suite runs under
+`dart2js`. The app's suite reaches a browser too, but through DDC, where a
+shift count of 32 wraps to zero and `1 << 32` is `1`: the throw never happens
+and the bug goes unseen. Only the run here is evidence.
 
 ## Playback
 
@@ -280,8 +283,8 @@ taking those integers apart. `ContrastRating` is `high`, `adequate`, `low` or
 `veryLow`.
 
 They are here rather than in the app for the reason profiles hold colours as
-integers: they touch no Flutter type, and the app is the one target the browser
-test run cannot reach. The app maps them to `Color` at its boundary, in the
+integers: they touch no Flutter type, and the app is the one target the
+`dart2js` run cannot reach. The app maps them to `Color` at its boundary, in the
 same file that holds the polarity constants, so a colour the app paints and a
 colour it judges cannot drift apart.
 
