@@ -1,5 +1,6 @@
 package lt.hereader.server.auth;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -37,7 +38,7 @@ class AuthController {
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    Tokens register(@RequestBody Credentials body) {
+    Tokens register(@Valid @RequestBody Credentials body) {
         var email = normalise(body.email());
 
         if (users.findByEmail(email).isPresent()) {
@@ -52,7 +53,7 @@ class AuthController {
     }
 
     @PostMapping("/login")
-    Tokens login(@RequestBody Credentials body) {
+    Tokens login(@Valid @RequestBody Credentials body) {
         var user = users.findByEmail(normalise(body.email()))
                 .orElseThrow(AuthController::badCredentials);
 
@@ -65,7 +66,7 @@ class AuthController {
     /// Trades a refresh token for a new pair, so a device that has not been
     /// opened in weeks does not force the reader to log in again.
     @PostMapping("/refresh")
-    Tokens refresh(@RequestBody RefreshRequest body) {
+    Tokens refresh(@Valid @RequestBody RefreshRequest body) {
         var userId = tokens.userIdFromRefreshToken(body.refreshToken());
 
         if (userId == null || !users.exists(userId)) {
