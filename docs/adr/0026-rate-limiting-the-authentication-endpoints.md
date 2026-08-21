@@ -92,6 +92,23 @@ window, not to total request volume.
 
 ## Verification
 
-Not yet built. This ADR opens the stack tracked in #128; the filter and its
-tests land in the PR implementing this decision, which fills in this section
-with what was actually run.
+Built in the PR implementing this decision (part of #128). `AuthRateLimitFilter`
+is an `OncePerRequestFilter` registered ahead of `JwtAuthFilter` in
+`SecurityConfig`, matching requests under `/auth/**` by servlet path and
+counting them per `getRemoteAddr()` in a fixed one-minute window, held in a
+bounded `ConcurrentHashMap` evicted every five minutes. The limit is
+configurable (`AUTH_RATE_LIMIT_PER_MINUTE`, default 10) so tests can raise or
+lower it without touching production behaviour.
+
+`AuthRateLimitFilterTest` runs against a real embedded server
+(`webEnvironment = RANDOM_PORT`), not `MockMvc`, because `X-Forwarded-For`
+translation only happens in the servlet container's own `ForwardedHeaderFilter`,
+which `MockMvc`'s `webAppContextSetup` never invokes. With the limit overridden
+to 2 for that test class: a third `/auth/register` from the same IP in one
+window gets 429 with a `Retry-After` header, and a request carrying a
+different `X-Forwarded-For` still succeeds — proving the forwarded-header
+wiring this ADR called load-bearing, not just the counter.
+
+`./mvnw --batch-mode verify` passes with the new filter and test in place; CI
+(`app`, `server`, `test (rsvp_engine)`, `test (epub_reader)`) is green on the
+PR.
