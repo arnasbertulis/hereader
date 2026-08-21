@@ -39,10 +39,25 @@ things checked directly show the rewrite is not what this needs:
 - `app/lib` has zero `dart:io` imports. The app layer was already
   browser-clean; only the test harness's database setup reached `dart:ffi`.
 - Drift's own `WasmDatabase.inMemory`, given a loaded `WasmSqlite3`, is a
-  `QueryExecutor` like `NativeDatabase.memory()` is. Wrapped in a
-  `LazyDatabase` for the async load, every call site that constructs
-  `AppDatabase(NativeDatabase.memory())` keeps its shape — the executor is
-  swapped, not the test.
+  `QueryExecutor` like `NativeDatabase.memory()` is, and constructs
+  synchronously (`drift/lib/wasm.dart:82`; the delegate's `openDatabase` at
+  `:349` is `_sqlite3!.openInMemory()`, and the `inMemory` factory passes
+  `null` for both the path and the filesystem, so there is no real I/O left
+  in the open path once the module is loaded). Every call site that
+  constructs `AppDatabase(NativeDatabase.memory())` keeps its shape — the
+  executor is swapped, not the test.
+- Loading the module, however, is a real browser fetch, and **where** it
+  happens is the whole constraint. A `testWidgets` body runs inside
+  `FakeAsync`, which cannot advance real asynchronous work
+  (`flutter_test/lib/src/widget_tester.dart:820-822`; `runAsync` exists to
+  escape it). So the load has to complete before any test is declared, in
+  `test/flutter_test_config.dart` — which flutter_tools honours on the web
+  entrypoint as well as the VM one
+  (`flutter_tools/lib/src/test/web_test_compiler.dart:63-78` and
+  `web/bootstrap.dart:590-604` emit it as `entryPointRunner`;
+  `flutter_test/lib/src/_test_selector_web.dart:52-56` and
+  `test_api/lib/src/backend/remote_listener.dart:137` await it ahead of
+  `declarer.declare`).
 - `flutter_tools/lib/src/test/flutter_web_platform.dart:117` mounts
   `createDirectoryHandler(<cwd>/test)` in the server cascade the browser test
   run serves from. Anything placed in `app/test/` — including a copy of the
@@ -69,11 +84,14 @@ a large, permanently ugly artifact for one test.
 against the exact artifact production serves, since deployment is a manual
 copy of that folder.
 
-`flutter test --platform chrome` also runs in CI now, against every
-`app/test/` suite whose database construction was swapped from
-`NativeDatabase.memory()` to a `testExecutor()` helper (`test_database.dart`,
-conditionally exporting a VM file or a web file). This covers the runtime
-class of failure for app code, in a real browser, for the first time.
+`flutter test --platform chrome` also runs in CI now, against all 31
+`app/test/` suites not marked `@TestOn('vm')` — every suite in the package
+except `schema_migration_test.dart` and `web_shell_colors_test.dart`. Each
+one's database construction was swapped from `NativeDatabase.memory()` to a
+`testExecutor()` helper (`test_database.dart`, conditionally exporting a VM
+file or a web file, with the module load hoisted into
+`flutter_test_config.dart`). This covers the runtime class of failure for
+app code, in a real browser, for the first time.
 
 It is not dart2js coverage, and the distinction is load-bearing rather than
 pedantic. `flutter test --platform chrome` compiles with **DDC**
@@ -141,9 +159,17 @@ one.
 
 CI gains roughly a minute on the Dart workflow, and the Flutter workflow
 gains both `flutter test --platform chrome` and the existing `flutter build
-web` — see Verification for the actual wall-clock cost, recorded from CI
-since it could not be measured locally on this machine (also Verification).
-Both are cheap against the manual web testing that found the first two bugs.
+web` — see Verification for the wall-clock cost. Both are cheap against the
+manual web testing that found the first two bugs.
+
+The browser run is the most expensive step in the workflow: about five
+minutes against the VM run's forty-odd seconds, for the same assertions.
+Most of that is per-suite overhead — each of the 31 suites boots a browser,
+initialises the engine and fetches the sqlite3 module — not test time. The
+step carries `--timeout 60s` and `timeout-minutes: 15` so that a suite which
+stops making progress fails fast and prints what it got through, rather than
+holding a runner at the ten-minute per-test default until someone cancels
+it.
 
 All three additions are steps inside existing jobs rather than new jobs, so
 the required status checks in the repository ruleset — `test (rsvp_engine)`,
@@ -168,12 +194,22 @@ chrome` generates one shared entrypoint that imports every discovered test
 file's `main` before any `@TestOn` filtering happens
 (`generateTestEntrypoint` in `flutter_tools/lib/src/web/bootstrap.dart`), so
 either file's own `dart:ffi` or `dart:io` import breaks the whole run even
-though neither ever executes on this platform. The two files are excluded by
-name from the file list `ci-flutter.yml` passes to the Chrome step, rather
-than left to the annotation alone. This is a real difference from
-`dart test -p chrome`'s handling of `epub_golden_test.dart` above, which
-does exclude at compile time — the two test runners are not the same tool
-and this ADR's "cannot work" era conflated them.
+though neither ever executes on this platform. Both files are therefore also
+kept out of the file list `ci-flutter.yml` passes to the Chrome step. That
+list is built by `grep -L "@TestOn('vm')" test/*_test.dart` rather than by
+naming the two files, so the annotation is the single marker and the next
+VM-only suite is excluded without anyone remembering the step exists. This
+is a real difference from `dart test -p chrome`'s handling of
+`epub_golden_test.dart` above, which does exclude at compile time — the two
+test runners are not the same tool and this ADR's "cannot work" era
+conflated them.
+
+`schema_migration_test.dart` did not in fact carry the annotation when the
+sentence above was first written; it was excluded by name only, and this
+document asserted a state of the repository that was not true. The
+annotation is now on the file, with its own reason — it opens real database
+files through `NativeDatabase` — which makes it correct on its own merits
+as well as load-bearing for the `grep`.
 
 A future contributor — including this one, later — will try `flutter test
 --platform chrome` bare, without the file-list exclusion, because it is the
@@ -185,14 +221,37 @@ here and in a comment on the workflow itself.
 **`flutter test --platform chrome` for the app, rejected as a rewrite.**
 This was the original call in this document, on the premise that every
 database test would need moving onto drift's WASM setup. The premise was
-wrong: `WasmDatabase.inMemory` behind a `LazyDatabase` is a drop-in
-`QueryExecutor`, so the fix was a ~60-line helper (`test_database.dart` and
-its two conditional halves) and a mechanical swap at each of the 25
+wrong, and so was the first correction of it — which is worth recording in
+full, because this is the second time a rejection in this repository turned
+out to rest on a reasoning error rather than on a constraint (ADR 0015's
+contrast guard was the first, un-rejected by a test that found the unguarded
+fill at 1.92).
+
+The original rejection was wrong because `WasmDatabase.inMemory` is a
+drop-in `QueryExecutor`: the fix is a helper (`test_database.dart` and its
+two conditional halves) and a mechanical swap at each of the 25
 `AppDatabase(NativeDatabase.memory())` call sites, not a parallel test
-suite. The result is still not the production pipeline — DDC is not
-dart2js, and `WasmDatabase.inMemory` is not the OPFS-and-worker path a real
-deploy opens — which is exactly why the rule under Decision survives this
-amendment rather than being replaced by it.
+suite.
+
+The first correction then said that helper wrapped the executor in a
+`LazyDatabase` for the async load, and that this was what let every call
+site keep its shape. The call sites do keep their shape, but not that way.
+`LazyDatabase` defers the module load to the first query, which happens
+inside a test body, inside `FakeAsync` — so it does not solve the async load
+so much as move it to the one zone where it can never complete. It hangs
+until the runner's wall-clock timeout: two ten-minute timeouts in one CI job
+before it was cancelled at 25 minutes, with no pass/fail list to show for
+it. What actually makes the swap work is a suite-level warm-up in
+`flutter_test_config.dart`, after which `testExecutor()` is synchronous on
+both targets. Dropping `LazyDatabase` is not cosmetic: a synchronous
+executor throws immediately and names the reason if the warm-up is ever
+skipped, where a lazy one goes back to hanging.
+
+The corrected rejection therefore turns on the `FakeAsync` constraint, not
+on the rewrite the original claimed. The result is still not the production
+pipeline — DDC is not dart2js, and `WasmDatabase.inMemory` is not the
+OPFS-and-worker path a real deploy opens — which is exactly why the rule
+under Decision survives this amendment rather than being replaced by it.
 
 **A second tracked copy of `sqlite3.wasm` under `app/test/`.** Rejected: two
 paths writing one fact. A stale test copy would test a different SQLite
@@ -238,43 +297,60 @@ the ones expected:**
 amendment. `flutter analyze` and `dart format --output=none
 --set-exit-if-changed .` are both clean.
 
-The negative control passes, but only its compile-time half could be run
-locally: reverting `active_profile_test.dart` to
-`AppDatabase(NativeDatabase.memory())` with its `drift/native.dart` import
-restored makes `flutter test --platform chrome test/active_profile_test.dart`
-fail in well under a minute with the same `dart:ffi is not available on this
-platform` errors quoted under Decision, confirming the file-list exclusion
-above is load-bearing and not cosmetic. `flutter test` on the same reverted
-file still passes on the VM.
+**The browser run passes in full: 1053 tests across 31 suites, in 4m56s
+wall clock**, on this machine, with no suite needing an exclusion beyond the
+two already marked `@TestOn('vm')`. The arithmetic against the VM run is
+exact — 1061 minus the 7 tests in `schema_migration_test.dart` and the 1 in
+`web_shell_colors_test.dart` is 1053 — so the browser covers every assertion
+the VM does except those two suites.
 
-**A full `flutter test --platform chrome` run of the app's suite could not be
-completed on this machine**, for a reason unrelated to any code in this
-repository. The command compiles and launches Chrome successfully, then
-hangs indefinitely at zero CPU. Connecting to the browser directly over the
-Chrome DevTools Protocol (`Runtime.enable` / `Log.enable` on the page target)
-rather than trusting flutter_tools' own output — which shows nothing once
-Chrome launches — surfaced the actual failure: the Flutter web engine's
-bootstrap fetches `canvaskit/chromium/canvaskit.js` and `.wasm` from the test
-server and gets `404`, throws an uncaught `TypeError`, and nothing downstream
-of engine initialization ever proceeds, including plain non-widget `test()`
-suites. A direct `curl` against the running test server's own
-`/canvaskit/chromium/canvaskit.js` confirms the `404` outside the browser
-too.
+Three suspects were expected to need attention and did not.
+`token_run_measure_test.dart` measures glyph runs, `reader_semantics_test.dart`
+reads the semantics tree, and both pass unchanged; the web target gets the
+same 800×600 logical surface (`_test_selector_web.dart:47-50` sets 2400×1800
+at DPR 3.0, matching `flutter_test/lib/src/binding.dart:99`) and the same
+test font (`ui_web.TestEnvironment.flutterTester()` sets `forceTestFonts`
+and `disableFontFallbacks`), so layout-sensitive assertions behave
+identically. `library_filter_test.dart`'s `compute()` path passes too, since
+`compute` runs inline on web.
 
-The file exists on disk at
-`<flutter_web_sdk>/canvaskit/chromium/canvaskit.js`, and
-`flutter_web_platform.dart` has a handler for exactly this path
-(`_localCanvasKitHandler`), so this reads as a bug in that handler rather
-than a missing asset. The handler's guard compares
-`_fileSystem.path.fromUri(request.url)` — which resolves through the local
-OS path context — against the literal `'canvaskit/'`; on Windows that
-produces a backslash-separated path that never matches, so the handler falls
-through to the cascade's generic `404` every time. This is consistent with
-being Windows-specific: `ci-flutter.yml` runs on `ubuntu-latest`, where the
-path context is posix and the same comparison would match. Filed upstream
-tracking is left for a future pass; recorded here so the discovery costs a
-search rather than a repeat of this investigation. The pass/fail list for
-individual suites and the wall-clock cost for the Flutter workflow are
-therefore not from a local run — they come from this PR's own CI run, the
-first real execution of `flutter test --platform chrome` against this
-suite anywhere.
+An earlier attempt at this run did *not* pass, and what it cost is the
+reason the executor is shaped the way it is. With the module load behind a
+`LazyDatabase`, pure `test()` suites passed in the first 45 seconds and the
+first `testWidgets` suite produced two consecutive `TimeoutException after
+0:10:00`, the job being cancelled at 25 minutes having reported nothing
+about the other 28 suites. No matcher failed anywhere in that log — the
+failure was entirely the `FakeAsync` constraint described under Context, and
+nothing about layout, fonts or assertions was implicated. Both `--timeout
+60s` and `timeout-minutes: 15` exist so that a regression of that shape
+costs a minute and prints a list.
+
+The negative control passes on both halves. Reverting `active_profile_test.dart`
+to `AppDatabase(NativeDatabase.memory())` with its `drift/native.dart`
+import restored makes `flutter test --platform chrome test/active_profile_test.dart`
+fail in well under a minute with `Dart library 'dart:ffi' is not available on
+this platform` — confirming the file-list exclusion is load-bearing and not
+cosmetic — while `flutter test` on the same reverted file still passes on the
+VM. Restoring the file leaves an empty diff.
+
+**One local-only obstacle, unrelated to any code in this repository**, sat in
+front of all of the above and is worth recording so the discovery costs a
+search rather than a repeat of the investigation. On Windows the run
+compiles, launches Chrome and then hangs at zero CPU with no output.
+Connecting to the browser directly over the Chrome DevTools Protocol
+(`Runtime.enable` / `Log.enable` on the page target) rather than trusting
+flutter_tools' own output surfaced it: the engine bootstrap fetches
+`canvaskit/chromium/canvaskit.js` from the test server, gets a `404`, throws
+an uncaught `TypeError`, and nothing downstream of engine initialization
+proceeds. The file exists at `<flutter_web_sdk>/canvaskit/chromium/canvaskit.js`
+and `flutter_web_platform.dart` has a handler for exactly that path
+(`_localCanvasKitHandler`, `:518`), but its guard compares
+`_fileSystem.path.fromUri(request.url)` — resolved through the local OS path
+context — against the literal `'canvaskit/'`, which a backslash path never
+matches. It is Windows-specific: CI runs on `ubuntu-latest`, where the path
+context is posix and the comparison matches. The cascade's next handler
+serves `<cwd>/test` and builds its path correctly, so copying the SDK's
+`canvaskit` directory to `app/test/canvaskit/` serves what the broken
+handler should have. That copy is gitignored and documented in
+`app/README.md`'s Testing section as a development-environment step, not
+here — it is a workaround, not a reason for the decision.

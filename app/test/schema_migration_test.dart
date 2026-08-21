@@ -1,3 +1,9 @@
+// Opens real database files on disk through `NativeDatabase`, so this suite
+// is VM-only. The annotation is also what the Chrome step's file list reads
+// to exclude it — see .github/workflows/ci-flutter.yml.
+@TestOn('vm')
+library;
+
 import 'dart:io';
 import 'dart:typed_data';
 

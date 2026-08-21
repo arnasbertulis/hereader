@@ -501,19 +501,46 @@ Chrome instead:
 
 ```bash
 cp web/sqlite3.wasm test/sqlite3.wasm
-flutter test --platform chrome $(find test -maxdepth 1 -name '*_test.dart' ! -name 'schema_migration_test.dart' ! -name 'web_shell_colors_test.dart')
+flutter test --platform chrome --timeout 60s $(grep -L "@TestOn('vm')" test/*_test.dart)
 ```
 
 The copy is gitignored and made fresh each time from the one tracked
 `web/sqlite3.wasm`, because `flutter_tools` serves `<cwd>/test` at the test
-server's root rather than `<cwd>/web`. The file list excludes the two
-`@TestOn('vm')` suites by name rather than relying on the annotation:
+server's root rather than `<cwd>/web`. The file list leaves out the
+`@TestOn('vm')` suites rather than relying on the annotation to skip them:
 `flutter test --platform chrome` compiles every discovered test file into
 one shared bundle before `@TestOn` filtering ever runs, so a suite that
 imports `dart:ffi` or `dart:io` — `schema_migration_test.dart` needs a real
 file on disk to prove a migration survives a reopen, `web_shell_colors_test.dart`
 reads `web/index.html` — breaks the whole compile even though it would never
-execute on this platform. See ADR 0009.
+execute on this platform. Reading the annotation with `grep -L` keeps the
+exclusion in one place instead of two. See ADR 0009.
+
+The module is fetched once per suite by `test/flutter_test_config.dart`,
+before `main()`, and not on demand: a `testWidgets` body runs inside
+`FakeAsync`, which cannot advance a real network fetch, so a lazily-loaded
+executor hangs there until the runner's timeout rather than failing. This is
+also why `testExecutor()` is synchronous — if the warm-up is ever skipped it
+throws and says so.
+
+**On Windows, one extra step before the Chrome run:**
+
+```bash
+cp -r "$(dirname $(dirname $(which flutter)))/bin/cache/flutter_web_sdk/canvaskit" test/canvaskit
+```
+
+Without it the run compiles, launches Chrome and then hangs at zero CPU with
+no output. `flutter_tools`' `_localCanvasKitHandler`
+(`flutter_web_platform.dart:518`) builds its path with
+`_fileSystem.path.fromUri` and then guards on `startsWith('canvaskit/')` —
+on Windows that is a backslash-separated path, so the guard never matches
+and the engine's own bootstrap gets a `404` for `canvaskit/chromium/
+canvaskit.js`. Nothing downstream of engine initialization then proceeds.
+The next handler in the server cascade serves `<cwd>/test` and builds its
+path correctly, so a copy of the SDK's `canvaskit` directory there is what
+gets served instead. It is gitignored, and CI does not need it —
+`ci-flutter.yml` runs on `ubuntu-latest`, where the path context is posix
+and the handler's guard matches.
 
 The Chrome run compiles with DDC, not `dart2js` — the compiler the deployed
 web build actually uses — so it proves app code runs in a browser at all, not

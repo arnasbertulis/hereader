@@ -77,20 +77,29 @@ jobs:
       # Chrome ships preinstalled on ubuntu-latest and flutter_tools launches
       # it headless, same as ci-dart.yml already relies on.
       #
-      # The file list excludes the two suites marked @TestOn('vm')
-      # (schema_migration_test.dart, web_shell_colors_test.dart) rather than
-      # relying on that annotation alone: flutter_tools compiles every
-      # discovered test file into one shared DDC bundle before any @TestOn
-      # filtering happens (`generateTestEntrypoint` in
-      # flutter_tools/lib/src/web/bootstrap.dart), so a file's own
-      # `dart:ffi` or `dart:io` import breaks the whole run even though that
-      # file would never execute on this platform. See ADR 0009.
+      # The file list is built by reading the @TestOn('vm') marker rather
+      # than by trusting it: flutter_tools compiles every discovered test
+      # file into one shared DDC bundle before any @TestOn filtering happens
+      # (`generateTestEntrypoint` in flutter_tools/lib/src/web/bootstrap.dart),
+      # so a file's own `dart:ffi` or `dart:io` import breaks the whole run
+      # even though that file would never execute on this platform. The
+      # annotation is therefore necessary but not sufficient, and the file
+      # has to be kept out of the argument list too. `grep -L` states that
+      # intent — run every suite not marked VM-only — so the next VM-only
+      # file is handled without anyone remembering this step exists. Two
+      # files today: schema_migration_test.dart and
+      # web_shell_colors_test.dart. See ADR 0009.
+      #
+      # --timeout 60s, against a suite whose slowest test takes about two
+      # seconds. The ten-minute default is why a single hanging test once
+      # cost 25 minutes of runner time and produced no pass/fail list at all;
+      # timeout-minutes is the backstop for a hang outside any test, sized
+      # from a local run of about five minutes.
       - name: Run tests (Chrome)
+        timeout-minutes: 15
         run: >-
-          flutter test --platform chrome
-          $(find test -maxdepth 1 -name '*_test.dart'
-          ! -name 'schema_migration_test.dart'
-          ! -name 'web_shell_colors_test.dart')
+          flutter test --platform chrome --timeout 60s
+          $(grep -L "@TestOn('vm')" test/*_test.dart)
 
       # Building covers the compile-time half of the risk against the exact
       # artifact that gets served in production: the 64-bit block-id hash
