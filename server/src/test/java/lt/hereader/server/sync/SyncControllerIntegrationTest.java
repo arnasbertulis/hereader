@@ -348,6 +348,21 @@ class SyncControllerIntegrationTest {
                 .andExpect(status().isBadRequest());
     }
 
+    // -- request size ----------------------------------------------------
+
+    @Test
+    void anOversizedPushIsRejectedBeforeItIsParsed() throws Exception {
+        // Not valid JSON: SyncRequestSizeFilter checks Content-Length before
+        // the body ever reaches Jackson, so the content need not parse.
+        var oversized = new byte[(int) SyncRequestSizeFilter.MAX_PUSH_REQUEST_BYTES + 1];
+
+        mvc.perform(post("/sync/events")
+                        .header("Authorization", auth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(oversized))
+                .andExpect(status().isPayloadTooLarge());
+    }
+
     // -- deletions -----------------------------------------------------
 
     private static String profilePush(String device, String key,

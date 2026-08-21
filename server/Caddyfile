@@ -5,6 +5,16 @@
     }
 
     handle /api/* {
+        # Bounds memory on a 4GB VPS shared with Postgres against an
+        # authenticated client posting an arbitrarily large sync batch.
+        # Limits actual bytes as they stream in, not just a declared
+        # Content-Length, so it also catches a chunked request that omits
+        # one. Keep this equal to SyncRequestSizeFilter.MAX_PUSH_REQUEST_BYTES
+        # (server/src/main/java/lt/hereader/server/sync/SyncRequestSizeFilter.java)
+        # — that file has the derivation.
+        request_body {
+            max_size 16MB
+        }
         reverse_proxy app:8080
     }
 
