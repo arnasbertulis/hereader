@@ -51,6 +51,19 @@ sections: `git log` is read in a terminal, and a body that is a list of commit
 subjects says what a reader could already see from the diff instead of why any
 of it happened.
 
+A pull request is not opened until the claim it exists to make has been
+observed to hold, locally, at least once. An adjacent green check is not that
+observation: `flutter build web` proves the app compiles, and ADR 0009 exists
+because compiling is not executing. Where the run that would prove the claim
+cannot be made to finish, that is the work — CI confirms a result already
+seen rather than being the first place it is attempted.
+
+The cost of getting this backwards is paid in half-hour cycles. #109 was
+opened on a browser test run that had never completed on the author's
+machine; the CI step then hung for 25 minutes and was cancelled, twice,
+before the cause turned out to be readable in `flutter_test`'s own source
+without running anything at all.
+
 ## Scope of a change
 
 A change is split into a stack of pull requests when it crosses a package
