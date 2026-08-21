@@ -92,6 +92,7 @@ services:
       DATABASE_USER: ${DATABASE_USER}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://204-168-240-12.sslip.io}
 
   # Caddy plus the compiled web bundle, built by CI from app/web.Dockerfile.
   # It has no `build` stanza because building it needs a `flutter build web`
