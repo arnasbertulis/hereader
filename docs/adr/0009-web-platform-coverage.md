@@ -229,9 +229,9 @@ fill at 1.92).
 
 The original rejection was wrong because `WasmDatabase.inMemory` is a
 drop-in `QueryExecutor`: the fix is a helper (`test_database.dart` and its
-two conditional halves) and a mechanical swap at each of the 25
-`AppDatabase(NativeDatabase.memory())` call sites, not a parallel test
-suite.
+two conditional halves) and a mechanical swap at each of the 29
+`AppDatabase(NativeDatabase.memory())` call sites across 24 files, not a
+parallel test suite.
 
 The first correction then said that helper wrapped the executor in a
 `LazyDatabase` for the async load, and that this was what let every call
