@@ -148,6 +148,10 @@ signing secret, which has none.
 
 `.env` holds the secret and the database password on a developer's machine and
 on the server, populated separately in each place and never committed.
+`compose.yaml` passes `CORS_ALLOWED_ORIGINS` through to the `app` container
+with the deployed origin as its default — the deployed `.env` should still set
+it explicitly to the deployed origin only, since the default exists for a
+fresh checkout and not as a substitute for a deliberate value.
 
 The backup job reads none of these. Its connection comes from the standard
 `PG*` variables that `compose.yaml` sets for it, and its one setting,
