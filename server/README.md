@@ -142,6 +142,7 @@ signing secret, which has none.
 | `JWT_ACCESS_MINUTES` | 60 | |
 | `JWT_REFRESH_DAYS` | 60 | |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:*`, plus the deployed hostname | Comma-separated. Load-bearing for a Flutter dev server on a random port |
+| `AUTH_RATE_LIMIT_PER_MINUTE` | 10 | Per client IP, against `/auth/**` |
 
 `.env` holds the secret and the database password on a developer's machine and
 on the server, populated separately in each place and never committed.
@@ -191,6 +192,13 @@ refresh rather than log the reader out.
 CORS is configured explicitly. Spring Security sends no CORS headers by
 default, so a browser client on a different origin gets a request that the
 service handled correctly and the browser then discarded.
+
+`/auth/**` is rate-limited to 10 requests per minute per client IP (ADR 0026):
+`/auth/register` writes two rows and `/auth/login` runs a bcrypt comparison at
+real cost, so both are amplifiers for a caller with no limit. Exceeding it
+answers 429 with a `ProblemDetail` body and a `Retry-After` header. The limit
+is per-process, in memory — correct for the single instance this runs as
+today (ADR 0006), not for a future one with more than one `app` container.
 
 ## Sync
 

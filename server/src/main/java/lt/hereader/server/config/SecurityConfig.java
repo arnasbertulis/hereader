@@ -1,5 +1,6 @@
 package lt.hereader.server.config;
 
+import lt.hereader.server.auth.AuthRateLimitFilter;
 import lt.hereader.server.auth.JwtAuthFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -29,7 +30,8 @@ class SecurityConfig {
     private String allowedOrigins;
 
     @Bean
-    SecurityFilterChain filterChain(HttpSecurity http, JwtAuthFilter jwt)
+    SecurityFilterChain filterChain(
+            HttpSecurity http, AuthRateLimitFilter rateLimit, JwtAuthFilter jwt)
             throws Exception {
         return http
                 .csrf(csrf -> csrf.disable())
@@ -43,6 +45,7 @@ class SecurityConfig {
                         .requestMatchers("/health", "/auth/**").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwt, AuthorizationFilter.class)
+                .addFilterBefore(rateLimit, JwtAuthFilter.class)
                 .build();
     }
 
