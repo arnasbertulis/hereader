@@ -185,6 +185,34 @@ class AuthControllerIntegrationTest {
     }
 
     @Test
+    void aShortPasswordIsRejected() throws Exception {
+        mvc().perform(post("/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(credentials(freshEmail(), "short")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(notNullValue()));
+    }
+
+    @Test
+    void aNonEmailAddressIsRejected() throws Exception {
+        mvc().perform(post("/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(credentials("not-an-email", "password123")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.detail").value(notNullValue()));
+    }
+
+    @Test
+    void nullEmailAndPasswordAreBadRequestNotAServerError() throws Exception {
+        mvc().perform(post("/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email": null, "password": null}
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void healthIsReachableWithoutAToken() throws Exception {
         mvc().perform(get("/health"))
                 .andExpect(status().isOk())
