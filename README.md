@@ -168,6 +168,7 @@ Every substantial decision has an ADR carrying the alternatives that were reject
 | [0023](docs/adr/0023-continuous-deployment.md) | CI builds the images, a version tag deploys them, and the server only pulls |
 | [0024](docs/adr/0024-database-backups.md) | Backups are a nightly `pg_dump` from a compose service, kept on the same machine |
 | [0025](docs/adr/0025-continuous-scroll.md) | Sliding text is a second reading surface, driven by a ticker and dragged with a finger |
+| [0026](docs/adr/0026-rate-limiting-the-authentication-endpoints.md) | The authentication endpoints are rate-limited by an in-process, IP-keyed filter |
 
 ---
 
