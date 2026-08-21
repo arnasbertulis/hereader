@@ -7,6 +7,7 @@ import '../data/library_repository.dart';
 import '../theme/app_icons.dart';
 import 'profile_presentation.dart';
 import 'reading_surface.dart';
+import 'rgb_sliders.dart';
 import 'scroll_clock.dart';
 import 'setting_slider.dart';
 
@@ -1004,12 +1005,13 @@ class _ContrastReadout extends StatelessWidget {
   }
 }
 
-/// Background colour, as red, green and blue.
+/// Background colour: a swatch, a hex readout, a Reset button, and the three
+/// channels of [RgbSliders] below them.
 ///
-/// Sliders rather than a colour wheel: this app is used by people who cannot
-/// reliably hit a small target, and three large tracks are easier than a
-/// gradient square. Alpha is fixed opaque, since a translucent reading
-/// background would composite against whatever the platform put behind it.
+/// The hex readout names a followed polarity when [ResolvedPresentation]
+/// carries no explicit tint. Alpha is fixed opaque, since a translucent
+/// reading background would composite against whatever the platform put
+/// behind it.
 class _BackgroundField extends StatelessWidget {
   final ResolvedPresentation presentation;
   final bool enabled;
@@ -1026,9 +1028,6 @@ class _BackgroundField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final argb = surfaceArgbFor(presentation);
-    final red = redOf(argb);
-    final green = greenOf(argb);
-    final blue = blueOf(argb);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1062,36 +1061,7 @@ class _BackgroundField extends StatelessWidget {
             ],
           ),
         ),
-        SettingSlider(
-          label: 'Red',
-          value: red.toDouble(),
-          valueLabel: '$red',
-          min: 0,
-          max: 255,
-          divisions: 255,
-          enabled: enabled,
-          onChanged: (v) => onChanged(argbFrom(v.round(), green, blue)),
-        ),
-        SettingSlider(
-          label: 'Green',
-          value: green.toDouble(),
-          valueLabel: '$green',
-          min: 0,
-          max: 255,
-          divisions: 255,
-          enabled: enabled,
-          onChanged: (v) => onChanged(argbFrom(red, v.round(), blue)),
-        ),
-        SettingSlider(
-          label: 'Blue',
-          value: blue.toDouble(),
-          valueLabel: '$blue',
-          min: 0,
-          max: 255,
-          divisions: 255,
-          enabled: enabled,
-          onChanged: (v) => onChanged(argbFrom(red, green, v.round())),
-        ),
+        RgbSliders(argb: argb, enabled: enabled, onChanged: onChanged),
       ],
     );
   }

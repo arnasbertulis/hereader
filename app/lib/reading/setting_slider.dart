@@ -12,6 +12,10 @@ import '../theme/app_icons.dart';
 ///
 /// [value] is a double even where the setting is a whole number, because
 /// that is what [Slider] takes; callers round on the way out.
+///
+/// [onChangeEnd] is for a caller that paints on every frame of a drag and
+/// persists once on release, because each write on the appearance path is a
+/// preference row and a clock stamp.
 class SettingSlider extends StatelessWidget {
   final String label;
   final String valueLabel;
@@ -26,6 +30,7 @@ class SettingSlider extends StatelessWidget {
   /// saveable but produces something the reader probably did not intend.
   final String? warning;
   final ValueChanged<double> onChanged;
+  final ValueChanged<double>? onChangeEnd;
 
   const SettingSlider({
     super.key,
@@ -35,6 +40,7 @@ class SettingSlider extends StatelessWidget {
     required this.min,
     required this.max,
     required this.onChanged,
+    this.onChangeEnd,
     this.divisions,
     this.enabled = true,
     this.help,
@@ -73,6 +79,7 @@ class SettingSlider extends StatelessWidget {
             divisions: divisions,
             label: valueLabel,
             onChanged: enabled ? onChanged : null,
+            onChangeEnd: enabled ? onChangeEnd : null,
           ),
           if (help != null)
             Padding(

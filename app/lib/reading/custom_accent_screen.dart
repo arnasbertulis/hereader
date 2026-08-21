@@ -4,8 +4,8 @@ import '../theme/app_colors.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import '../theme/appearance.dart';
-import '../theme/rgb_sliders.dart';
 import 'profile_presentation.dart';
+import 'rgb_sliders.dart';
 
 /// An accent outside the six named ones.
 ///
@@ -66,12 +66,12 @@ class _CustomAccentScreenState extends State<CustomAccentScreen> {
             ),
           ),
           RgbSliders(
-            color: _color,
+            argb: _color.toARGB32(),
             // The swatch above follows the drag; the app follows the
             // release. Both are visible at once, so a reader dragging can
             // see where they are going before the whole screen goes there.
-            onChanged: (color) => setState(() => _color = color),
-            onSettled: widget.controller.setAccent,
+            onChanged: (argb) => setState(() => _color = colorOf(argb)),
+            onSettled: (argb) => widget.controller.setAccent(colorOf(argb)),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(

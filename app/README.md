@@ -76,12 +76,6 @@ lib/
 │  │                             is a position error integrated over time and
 │  │                             a long slow translation is the worst case a
 │  │                             web build can draw
-│  ├─ rgb_sliders.dart          A colour as three sliders — long tracks rather
-│  │                             than a two-dimensional field, for readers who
-│  │                             cannot reliably hit a small target. Built by
-│  │                             custom_accent_screen.dart only; the profile
-│  │                             editor has its own copy, which is a real
-│  │                             duplication rather than a decision
 │  └─ appearance.dart           Theme mode, accent and high contrast: stored,
 │                                read before the first frame, notified from.
 │                                Device-local, each write passing sync: false
@@ -145,6 +139,11 @@ lib/
    ├─ custom_accent_screen.dart An accent outside the six named ones. Needed
    │                             no migration: the stored form has always
    │                             been six hex digits rather than a name
+   ├─ rgb_sliders.dart          A colour as three sliders — long tracks rather
+   │                             than a two-dimensional field, for readers who
+   │                             cannot reliably hit a small target. The one
+   │                             RGB picker, used by custom_accent_screen.dart
+   │                             and the profile editor's background field
    ├─ sync_screen.dart          What sync has done and a way to run it now.
    │                             Reports rather than configures, and shows no
    │                             count of what is waiting — see Sync below
