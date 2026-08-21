@@ -86,7 +86,20 @@ class ApiClient {
     return session;
   }
 
-  Future<void> logOut() => auth.clear();
+  /// Best-effort: signing out succeeds from the device's point of view
+  /// whether or not the server call lands, so a failure here still falls
+  /// through to clearing local storage.
+  Future<void> logOut() async {
+    try {
+      await _send('POST', '/auth/logout');
+    } on ApiException {
+      // Rejected or already revoked. Nothing more to do server-side.
+    } on NetworkException {
+      // Offline. The token stays valid server-side, but the device signs
+      // out locally regardless.
+    }
+    await auth.clear();
+  }
 
   // -- sync ----------------------------------------------------------
 
