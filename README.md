@@ -107,7 +107,7 @@ Recorded in [`docs/adr/0005-sync-event-log.md`](docs/adr/0005-sync-event-log.md)
 
 ## Design decisions worth knowing
 
-Every substantial decision has an ADR carrying the alternatives that were rejected and why; the [index below](#architecture-decision-records) lists all twenty-five. These are the ones that shape the most code.
+Every substantial decision has an ADR carrying the alternatives that were rejected and why; the [index below](#architecture-decision-records) lists all twenty-seven. These are the ones that shape the most code.
 
 **Reading positions are character offsets, never word indices.** A word index shifts the moment the tokenizer changes, which would silently move every saved position in every book — and nobody reports "my bookmark is forty words off", they quietly lose their place. Character offsets index into the text the tokenizer *reads*, not the text it produces, and locators carry a `parserVersion` so future changes can be migrated deliberately. Recorded in [`docs/adr/0002-locator-format.md`](docs/adr/0002-locator-format.md).
 
@@ -169,6 +169,7 @@ Every substantial decision has an ADR carrying the alternatives that were reject
 | [0024](docs/adr/0024-database-backups.md) | Backups are a nightly `pg_dump` from a compose service, kept on the same machine |
 | [0025](docs/adr/0025-continuous-scroll.md) | Sliding text is a second reading surface, driven by a ticker and dragged with a finger |
 | [0026](docs/adr/0026-rate-limiting-the-authentication-endpoints.md) | The authentication endpoints are rate-limited by an in-process, IP-keyed filter |
+| [0027](docs/adr/0027-refresh-token-revocation.md) | Refresh-token revocation is a `token_version` column, checked at refresh |
 
 ---
 
