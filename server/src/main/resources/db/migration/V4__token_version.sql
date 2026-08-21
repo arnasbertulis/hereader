@@ -1,0 +1,11 @@
+-- ADR 0027: refresh-token revocation via a version stamp on the user.
+--
+-- Every refresh token carries the token_version it was issued under, as a
+-- claim. POST /auth/refresh rejects a token whose claim no longer matches
+-- the user's current value. POST /auth/logout bumps this column, which
+-- invalidates every refresh token issued before that moment for that user
+-- in one comparison, with no revocation table to write to on every refresh.
+--
+-- Default 0 so every existing user starts revocable from the same baseline
+-- their already-issued refresh tokens were minted under.
+alter table users add column token_version bigint not null default 0;

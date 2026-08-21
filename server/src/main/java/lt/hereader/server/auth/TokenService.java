@@ -23,8 +23,14 @@ import java.util.UUID;
 public class TokenService {
 
     private static final String TYPE_CLAIM = "typ";
+    private static final String VERSION_CLAIM = "ver";
     private static final String ACCESS = "access";
     private static final String REFRESH = "refresh";
+
+    /// The user id and the token_version a refresh token was issued under,
+    /// read back from its `ver` claim. `/auth/refresh` compares this against
+    /// the user's current value so a logout (ADR 0027) can invalidate it.
+    public record RefreshTokenInfo(UUID userId, long tokenVersion) {}
 
     private final SecretKey key;
     private final Duration accessLifetime;
@@ -47,25 +53,31 @@ public class TokenService {
     }
 
     public String issueAccessToken(UUID userId) {
-        return issue(userId, ACCESS, accessLifetime);
+        return issue(userId, ACCESS, accessLifetime, null);
     }
 
     /// Long-lived on purpose. A reading app that logs you out weekly is
-    /// worse than one that trusts a device for two months.
-    public String issueRefreshToken(UUID userId) {
-        return issue(userId, REFRESH, refreshLifetime);
+    /// worse than one that trusts a device for two months. Carries the
+    /// version it was issued under so a later logout can invalidate it
+    /// without a revocation table (ADR 0027).
+    public String issueRefreshToken(UUID userId, long tokenVersion) {
+        return issue(userId, REFRESH, refreshLifetime, tokenVersion);
     }
 
-    private String issue(UUID userId, String type, Duration lifetime) {
+    private String issue(UUID userId, String type, Duration lifetime, Long tokenVersion) {
         var now = Instant.now();
 
-        return Jwts.builder()
+        var builder = Jwts.builder()
                 .subject(userId.toString())
                 .claim(TYPE_CLAIM, type)
                 .issuedAt(Date.from(now))
-                .expiration(Date.from(now.plus(lifetime)))
-                .signWith(key)
-                .compact();
+                .expiration(Date.from(now.plus(lifetime)));
+
+        if (tokenVersion != null) {
+            builder.claim(VERSION_CLAIM, tokenVersion);
+        }
+
+        return builder.signWith(key).compact();
     }
 
     /// The user id in a valid access token, or null if the token is
@@ -76,14 +88,29 @@ public class TokenService {
     /// same thing to the caller, and distinguishing them in a response
     /// tells an attacker which part of their forgery was wrong.
     public UUID userIdFromAccessToken(String token) {
-        return userId(token, ACCESS);
+        var claims = claims(token, ACCESS);
+        return claims == null ? null : UUID.fromString(claims.getSubject());
     }
 
-    public UUID userIdFromRefreshToken(String token) {
-        return userId(token, REFRESH);
+    /// The user id and token_version a refresh token was issued under, or
+    /// null if the token is unusable for any reason: bad signature, expired,
+    /// wrong type, or (a token issued before this claim existed) missing the
+    /// version claim entirely.
+    public RefreshTokenInfo refreshTokenInfo(String token) {
+        var claims = claims(token, REFRESH);
+        if (claims == null) {
+            return null;
+        }
+
+        Long version = claims.get(VERSION_CLAIM, Long.class);
+        if (version == null) {
+            return null;
+        }
+
+        return new RefreshTokenInfo(UUID.fromString(claims.getSubject()), version);
     }
 
-    private UUID userId(String token, String expectedType) {
+    private Claims claims(String token, String expectedType) {
         try {
             Claims claims = Jwts.parser()
                     .verifyWith(key)
@@ -94,7 +121,7 @@ public class TokenService {
             if (!expectedType.equals(claims.get(TYPE_CLAIM, String.class))) {
                 return null;
             }
-            return UUID.fromString(claims.getSubject());
+            return claims;
 
         } catch (JwtException | IllegalArgumentException e) {
             return null;

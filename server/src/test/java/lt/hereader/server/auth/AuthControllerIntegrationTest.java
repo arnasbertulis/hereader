@@ -206,6 +206,39 @@ class AuthControllerIntegrationTest {
     }
 
     @Test
+    void loggingOutInvalidatesTheRefreshTokenAlreadyIssued() throws Exception {
+        var email = freshEmail();
+
+        var registered = mvc().perform(post("/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(credentials(email, "password123")))
+                .andReturn().getResponse().getContentAsString();
+
+        var mapper = com.fasterxml.jackson.databind.json.JsonMapper.builder().build();
+        var accessToken = mapper.readTree(registered).get("accessToken").asText();
+        var refreshToken = mapper.readTree(registered).get("refreshToken").asText();
+
+        mvc().perform(post("/auth/logout")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isNoContent());
+
+        // The version bump means this token, minted before logout, no
+        // longer matches the user's current token_version.
+        mvc().perform(post("/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"refreshToken": "%s"}
+                                """.formatted(refreshToken)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void loggingOutWithoutABearerTokenIsUnauthorized() throws Exception {
+        mvc().perform(post("/auth/logout"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void aShortPasswordIsRejected() throws Exception {
         mvc().perform(post("/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
