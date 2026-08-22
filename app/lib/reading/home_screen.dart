@@ -183,11 +183,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['epub'],
-      withData: true,
     );
 
-    final bytes = result?.files.singleOrNull?.bytes;
-    if (bytes == null || !mounted) return;
+    final picked = result.singleOrNull;
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    if (!mounted) return;
 
     setState(() => _busy = true);
 

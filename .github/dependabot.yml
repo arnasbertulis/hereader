@@ -9,14 +9,6 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(app)"
-    ignore:
-    # flutter_secure_storage 11 needs win32 ^6.0.1; file_picker 11.0.3 pins
-    # win32 ^5.9.0 and has no stable release that moves. Taking 11 means
-    # taking file_picker 12.0.0-beta.7, a prerelease on the book import
-    # path, which the deployed web build exercises first. Revisit when
-    # file_picker 12 is stable.
-    - dependency-name: "flutter_secure_storage"
-      update-types: ["version-update:semver-major"]
 
   - package-ecosystem: pub
     directory: /packages/rsvp_engine
