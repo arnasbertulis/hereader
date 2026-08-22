@@ -4,6 +4,18 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Release signing comes from the environment, never checked in. All four
+// must be set or the release build falls back to the debug keys.
+val releaseKeystorePath: String? = System.getenv("HEREADER_KEYSTORE_PATH")
+val releaseKeystorePassword: String? = System.getenv("HEREADER_KEYSTORE_PASSWORD")
+val releaseKeyAlias: String? = System.getenv("HEREADER_KEY_ALIAS")
+val releaseKeyPassword: String? = System.getenv("HEREADER_KEY_PASSWORD")
+val hasReleaseSigning =
+    releaseKeystorePath != null &&
+        releaseKeystorePassword != null &&
+        releaseKeyAlias != null &&
+        releaseKeyPassword != null
+
 android {
     namespace = "com.arnasbertulis.app"
     compileSdk = flutter.compileSdkVersion
@@ -15,21 +27,35 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.arnasbertulis.app"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseKeystorePath!!)
+                storePassword = releaseKeystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                logger.warn(
+                    "HEREADER_KEYSTORE_PATH/HEREADER_KEYSTORE_PASSWORD/HEREADER_KEY_ALIAS/" +
+                        "HEREADER_KEY_PASSWORD not all set; release build signed with debug keys."
+                )
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
