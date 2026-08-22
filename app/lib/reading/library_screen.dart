@@ -252,13 +252,14 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['epub'],
-      // Bytes rather than a path: the web has no file behind the dialog, and
-      // the bytes are what gets stored anyway.
-      withData: true,
     );
 
-    final bytes = result?.files.singleOrNull?.bytes;
-    if (bytes == null || !mounted) return;
+    final picked = result.singleOrNull;
+    if (picked == null) return;
+    // Bytes rather than a path: the web has no file behind the dialog, and
+    // the bytes are what gets stored anyway.
+    final bytes = await picked.readAsBytes();
+    if (!mounted) return;
 
     setState(() => _busy = true);
 
