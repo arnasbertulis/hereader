@@ -1,0 +1,42 @@
+name: codeql
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Catches CVEs disclosed against dependencies between pushes, not just
+    # new code.
+    - cron: '0 5 * * 1'
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # javascript-typescript covers app/web/drift_worker.js, the one JS
+        # file in the repo. No language target exists for Dart, so
+        # app/, packages/rsvp_engine and packages/epub_reader get no
+        # coverage from this workflow.
+        include:
+          - language: java-kotlin
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: '/language:${{ matrix.language }}'
