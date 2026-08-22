@@ -18,6 +18,9 @@ doc/api/
 # Local agent/editor configuration, at the repo root and in every package
 **/.claude/
 
+# graphify knowledge-graph output, regenerated locally
+graphify-out/
+
 # Avoid committing generated Javascript files:
 *.dart.js
 # Produced by the --dump-info flag.
