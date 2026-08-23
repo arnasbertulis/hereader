@@ -23,6 +23,17 @@ jobs:
         # file in the repo. No language target exists for Dart, so
         # app/, packages/rsvp_engine and packages/epub_reader get no
         # coverage from this workflow.
+        #
+        # java-kotlin build-mode is `none` (source scan, no compile) rather
+        # than `autobuild`: app/android has exactly two source files,
+        # MainActivity.kt and the Flutter-generated GeneratedPluginRegistrant
+        # .java, both boilerplate with no first-party logic. Standing up a
+        # full Flutter/NDK toolchain in this job to compile them is not worth
+        # it for what a source scan already covers. The Gradle wrapper is
+        # committed (previously gitignored, the stock `flutter create`
+        # template) so CodeQL's own dependency-graph extraction can still run
+        # `gradlew` and report precise dependencies instead of guessing from
+        # package names.
         include:
           - language: java-kotlin
             build-mode: none
