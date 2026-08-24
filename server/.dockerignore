@@ -1,0 +1,13 @@
+# Dockerfile only ever COPYs .mvn/, mvnw, pom.xml and src/ — everything
+# else here is build context that should never reach the daemon, let alone
+# a layer. .env carries JWT_SECRET and the database password
+# (.claude/rules/server.md, Configuration); it isn't COPYed today, but a
+# future `COPY . .` would silently bake it into an image without this file.
+.env
+.env.example
+target/
+web-dist/
+.idea/
+.git
+backup/
+*.md
