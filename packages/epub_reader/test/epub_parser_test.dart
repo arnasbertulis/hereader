@@ -346,6 +346,33 @@ void main() {
       );
     });
 
+    test('rejects an archive with too many entries', () {
+      final archive = Archive();
+      for (var i = 0; i <= 10000; i++) {
+        archive.addFile(ArchiveFile('f$i', 1, [0]));
+      }
+      final bytes = Uint8List.fromList(ZipEncoder().encode(archive));
+
+      expect(
+        () => const EpubParser().parse(bytes),
+        throwsA(isA<EpubException>()),
+      );
+    });
+
+    test(
+      'rejects an archive whose declared uncompressed size is too large',
+      () {
+        final archive = Archive()
+          ..addFile(ArchiveFile('big.bin', 512 * 1024 * 1024 + 1, [0]));
+        final bytes = Uint8List.fromList(ZipEncoder().encode(archive));
+
+        expect(
+          () => const EpubParser().parse(bytes),
+          throwsA(isA<EpubException>()),
+        );
+      },
+    );
+
     test('rejects a book with no readable documents', () {
       expect(
         () => const EpubParser().parse(
