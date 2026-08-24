@@ -20,7 +20,24 @@
 
     handle {
         root * /srv/web
-        try_files {path} /index.html
+
+        # try_files {path} /index.html alone answers 200 for every missing
+        # path, asset or route alike, because /index.html always exists as
+        # the fallback candidate (issue #124). Gate the fallback to paths
+        # that look like a client-side route: no file extension. A request
+        # for a real but missing asset then reaches file_server unrewritten
+        # and gets a genuine 404. Extensions below are what
+        # `flutter build web` emits today, plus common static-asset types
+        # this bundle doesn't currently use, so a future asset type missing
+        # on deploy still 404s instead of silently returning the SPA shell.
+        @spa {
+            not path *.js *.mjs *.wasm *.map *.json *.png *.jpg *.jpeg *.svg *.ico *.css *.ttf *.otf *.woff *.woff2 *.bin *.symbols *.frag *.last_build_id *.html
+            file {
+                try_files {path} /index.html
+            }
+        }
+        rewrite @spa {file_match.relative}
+
         file_server
     }
 }
