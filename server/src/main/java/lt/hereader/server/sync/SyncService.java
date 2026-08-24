@@ -5,6 +5,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
+
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,9 +36,11 @@ public class SyncService {
     private static final int MAX_PULL_BATCH = 500;
 
     private final SyncRepository repository;
+    private final ObjectMapper objectMapper;
 
-    SyncService(SyncRepository repository) {
+    SyncService(SyncRepository repository, ObjectMapper objectMapper) {
         this.repository = repository;
+        this.objectMapper = objectMapper;
     }
 
     /// Accepts a batch of events from one device.
@@ -257,7 +262,15 @@ public class SyncService {
                     HttpStatus.BAD_REQUEST, "Event payload is missing.");
         }
 
-        if (event.payload().toString().length() > MAX_PAYLOAD_CHARS) {
+        final String encoded;
+        try {
+            encoded = objectMapper.writeValueAsString(event.payload());
+        } catch (JacksonException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Event payload cannot be encoded.");
+        }
+
+        if (encoded.length() > MAX_PAYLOAD_CHARS) {
             throw new ResponseStatusException(
                     HttpStatus.PAYLOAD_TOO_LARGE,
                     "Event payload is too large.");

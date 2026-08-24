@@ -384,6 +384,44 @@ class SyncControllerIntegrationTest {
                 .andExpect(status().isPayloadTooLarge());
     }
 
+    // -- payload size ----------------------------------------------------
+
+    private static String payloadPush(String value, String hlc) {
+        return """
+                {
+                  "deviceId": "laptop",
+                  "events": [{
+                    "idempotencyKey": "k1",
+                    "entityType": "PREFERENCE",
+                    "entityId": "note",
+                    "payload": {"value": "%s"},
+                    "hlc": "%s",
+                    "deleted": false
+                  }]
+                }
+                """.formatted(value, hlc);
+    }
+
+    @Test
+    void aPayloadOverTheEncodedCharacterCapIsRejected() throws Exception {
+        // Encoded JSON, not Map.toString(), is what SyncService measures:
+        // this single-key string payload puts the two well past
+        // MAX_PAYLOAD_CHARS either way, so the rejection is about the
+        // encoded length rather than the measure used to reach it.
+        var body = payloadPush("a".repeat(9_000), stamp(0, "laptop"));
+
+        mvc.perform(post("/sync/events")
+                        .header("Authorization", auth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isPayloadTooLarge());
+    }
+
+    @Test
+    void aPayloadUnderTheEncodedCharacterCapIsAccepted() throws Exception {
+        pushExpectingOk(payloadPush("a".repeat(100), stamp(0, "laptop")));
+    }
+
     // -- deletions -----------------------------------------------------
 
     private static String profilePush(String device, String key,
