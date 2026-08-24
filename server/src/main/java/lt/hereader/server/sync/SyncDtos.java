@@ -3,6 +3,7 @@ package lt.hereader.server.sync;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.util.List;
@@ -30,7 +31,7 @@ public final class SyncDtos {
 
     public record PushEvent(
             @NotBlank @Size(max = 200) String idempotencyKey,
-            EntityType entityType,
+            @NotNull EntityType entityType,
             @NotBlank @Size(max = 200) String entityId,
             /// Shape depends on entityType. Size-capped in the service:
             /// nothing here should be large, and a client that sends

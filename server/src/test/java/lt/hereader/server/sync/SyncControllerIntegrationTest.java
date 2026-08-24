@@ -338,6 +338,27 @@ class SyncControllerIntegrationTest {
     }
 
     @Test
+    void aNullEntityTypeIsRefused() throws Exception {
+        mvc.perform(post("/sync/events")
+                        .header("Authorization", auth)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "deviceId": "laptop",
+                                  "events": [{
+                                    "idempotencyKey": "k1",
+                                    "entityType": null,
+                                    "entityId": "x",
+                                    "payload": {},
+                                    "hlc": "%s",
+                                    "deleted": false
+                                  }]
+                                }
+                                """.formatted(stamp(0, "laptop"))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void anEmptyBatchIsRefused() throws Exception {
         mvc.perform(post("/sync/events")
                         .header("Authorization", auth)
