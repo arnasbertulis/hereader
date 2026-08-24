@@ -106,7 +106,6 @@ class AuthStore {
   void dispose() => _sessions.close();
 
   /// 16 characters from the alphabet the server's stamp format allows.
-  /// 16 characters from the alphabet the server's stamp format allows.
   static String _generateDeviceId() {
     const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
     final random = Random.secure();

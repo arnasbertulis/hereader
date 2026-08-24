@@ -77,8 +77,4 @@ public final class SyncDtos {
             String bookId,
             Map<String, Object> ours,
             Map<String, Object> theirs) {}
-
-    public record ResolveConflictRequest(
-            /// Which side the reader chose. The other is discarded.
-            @NotBlank String choice) {}
 }
