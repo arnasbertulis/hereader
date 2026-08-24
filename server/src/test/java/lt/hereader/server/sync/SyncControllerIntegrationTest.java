@@ -14,8 +14,16 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -36,9 +44,11 @@ class SyncControllerIntegrationTest {
     @Autowired private UserRepository users;
     @Autowired private PasswordEncoder passwords;
     @Autowired private TokenService tokens;
+    @Autowired private SyncRepository repository;
 
     private MockMvc mvc;
     private String auth;
+    private UUID userId;
 
     @BeforeEach
     void setUp() {
@@ -47,7 +57,7 @@ class SyncControllerIntegrationTest {
                 .build();
 
         // A fresh user per test, so no test can see another's events.
-        var userId = UUID.randomUUID();
+        userId = UUID.randomUUID();
         users.create(userId, "sync-" + userId + "@example.com",
                 passwords.encode("password123"));
 
@@ -288,6 +298,39 @@ class SyncControllerIntegrationTest {
 
         mvc.perform(get("/sync/conflicts").header("Authorization", auth))
                 .andExpect(jsonPath("$", hasSize(0)));
+    }
+
+    // -- conflict uniqueness under concurrency --------------------------
+
+    // recordConflict's own `where not exists` is a check-then-insert that
+    // races under read committed. Sequential calls, as above, cannot show
+    // that: this drives real concurrent transactions at
+    // position_conflicts_one_unresolved_per_book (V5) so the guarantee is
+    // the one the database enforces, not the one that happens not to race
+    // in a single-threaded test.
+    @Test
+    void concurrentConflictsForTheSameBookLeaveExactlyOneUnresolvedRow()
+            throws Exception {
+
+        var payload = Map.<String, Object>of("tokenIndex", 100);
+        Callable<Void> attempt = () -> {
+            repository.recordConflict(userId, "book-1", payload, payload);
+            return null;
+        };
+
+        ExecutorService pool = Executors.newFixedThreadPool(8);
+        try {
+            List<Future<Void>> attempts = pool.invokeAll(
+                    List.of(attempt, attempt, attempt, attempt,
+                            attempt, attempt, attempt, attempt));
+            for (Future<Void> attemptResult : attempts) {
+                attemptResult.get(5, TimeUnit.SECONDS);
+            }
+        } finally {
+            pool.shutdown();
+        }
+
+        assertThat(repository.unresolvedConflicts(userId)).hasSize(1);
     }
 
     // -- other entities ------------------------------------------------
