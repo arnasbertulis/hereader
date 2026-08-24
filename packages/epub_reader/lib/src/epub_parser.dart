@@ -12,6 +12,27 @@ import 'toc.dart';
 
 const _containerPath = 'META-INF/container.xml';
 
+/// Maximum number of entries a zip archive may declare.
+///
+/// `decodeBytes` only reads the central directory here (no entry is
+/// decompressed yet), so this is checked before any bytes are inflated.
+/// `test/fixtures/romeo-and-juliet.epub` — an ordinary novel — has 19
+/// entries; 10,000 leaves generous headroom for a large illustrated or
+/// multi-volume EPUB while still bounding a crafted archive with millions
+/// of tiny entries.
+const _maxArchiveEntries = 10000;
+
+/// Maximum sum of declared uncompressed sizes across all entries, in bytes.
+///
+/// Declared, not measured: nothing has been decompressed yet at the point
+/// this is checked. `test/fixtures/romeo-and-juliet.epub` totals ~489 KiB
+/// uncompressed; 512 MiB leaves three orders of magnitude of headroom for a
+/// heavily illustrated book while still bounding a zip bomb that declares
+/// its size honestly. This does not catch an entry whose declared size
+/// understates what it actually inflates to; see the root README's known
+/// limitations.
+const _maxTotalUncompressedBytes = 512 * 1024 * 1024;
+
 /// A table of contents entry before it has been matched to a document.
 ///
 /// [href] is an archive path; [fragment] is the part after the `#`, empty
@@ -36,6 +57,22 @@ class EpubParser {
       archive = ZipDecoder().decodeBytes(bytes);
     } catch (e) {
       throw const EpubException('The file is not a readable zip archive.');
+    }
+
+    if (archive.length > _maxArchiveEntries) {
+      throw const EpubException(
+        'The file declares too many entries to be a readable EPUB.',
+      );
+    }
+    var totalUncompressedBytes = 0;
+    for (final file in archive.files) {
+      totalUncompressedBytes += file.size;
+      if (totalUncompressedBytes > _maxTotalUncompressedBytes) {
+        throw const EpubException(
+          'The file declares too much uncompressed content to be a '
+          'readable EPUB.',
+        );
+      }
     }
 
     final opfPath = _findOpfPath(archive);
