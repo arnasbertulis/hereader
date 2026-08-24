@@ -35,12 +35,10 @@ import java.io.IOException;
 public class SyncRequestSizeFilter extends OncePerRequestFilter {
 
     /// 500 events (`SyncDtos.PushRequest`'s `@Size` cap) at up to 8,192
-    /// decoded characters of payload each (`SyncService.MAX_PAYLOAD_CHARS`),
+    /// encoded JSON characters of payload each (`SyncService.MAX_PAYLOAD_CHARS`),
     /// plus each event's other capped fields, is on the order of 4.3M
-    /// characters for a legitimate maximal batch. `MAX_PAYLOAD_CHARS`
-    /// measures `Map.toString()` rather than encoded JSON length (issue
-    /// #127), and JSON string escaping plus multi-byte UTF-8 can expand a
-    /// character to several bytes on the wire, so this is sized at roughly
+    /// characters for a legitimate maximal batch. Multi-byte UTF-8 can expand
+    /// a character to several bytes on the wire, so this is sized at roughly
     /// 4x that character count rather than treating a character and a byte
     /// as the same thing.
     static final long MAX_PUSH_REQUEST_BYTES = 16L * 1024 * 1024;
