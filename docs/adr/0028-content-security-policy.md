@@ -69,9 +69,13 @@ directive browsers actually prefer.
 
 **Report-only first, enforce later.** Rejected: this is a static Caddy
 config with no report-collection endpoint to send `report-to` violations to,
-and the PR's own verification step (serve the real build locally under this
-exact header block, walk every screen, read the DevTools console) already
-functions as the report-only step without standing up a collector.
+so `Content-Security-Policy-Report-Only` would produce console warnings a
+reader never reads and nobody collects. What replaces it is the manual pass
+recorded under *Verification* — serve the real build under this exact header
+block, walk every screen, read the DevTools console — which is the project's
+existing gate for anything a reader sees. That makes the enforcement safe
+only once the pass has actually been made; it is not a reason to enforce
+before it.
 
 **Bundle CanvasKit locally and drop the gstatic dependency**
 (`--no-web-resources-cdn` in the build). Rejected as out of scope here: it
@@ -80,7 +84,10 @@ and changes what ships in every build, not just what headers wrap it. Worth
 its own issue — an accessibility tool importing a third-party CDN fetch into
 its critical rendering path is a real dependency, not a hypothetical one,
 and removing it stops working the moment gstatic is unreachable or blocked
-by the reader's own network. Filed as a follow-up rather than folded in here.
+by the reader's own network. Tracked as #160 rather than folded in here;
+that issue also carries the CSP narrowing back to `'self'` that has to land
+in the same change, since dropping the CDN without narrowing the policy
+leaves a permission nothing uses.
 
 **`style-src` without `'unsafe-inline'`, using a hash.** Rejected: the
 static inline `<style>` in `app/web/index.html` could be hashed, but the
@@ -93,8 +100,8 @@ for those and gains nothing by hashing the one block that could be hashed.
 A wrong directive breaks the app outright rather than degrading — a missing
 `script-src` origin means CanvasKit or the entrypoint script fails to load
 and the reader sees `startup_failure.dart`'s screen instead of the app. This
-is why the PR's verification step serves the actual release build under the
-actual header block and walks the golden paths before merging, not just
+is why the gate for this decision is serving the actual release build under
+the actual header block and walking the golden paths in a browser, not
 `flutter build web` succeeding.
 
 Any future dependency on a new external host (a font CDN, an analytics
@@ -104,9 +111,31 @@ a console violation and a broken feature, not silence.
 
 ## Verification
 
-Built in the PR implementing this decision (part of #152). Verified against
-a local Caddy instance serving `flutter build web --release`'s output under
-this exact header block: golden paths (import an EPUB, RSVP play, continuous
-scroll, sign in and sync) walked in a real browser with DevTools open,
-console free of CSP violations. `curl -sS -i` against the local instance
-confirms the header value matches what shipped.
+Built in the PR implementing this decision (#159, closing #152).
+
+What was run there:
+
+- `flutter build web --release`, with `flutter_bootstrap.js`, `flutter.js`
+  and `main.dart.js` read directly to enumerate every external host, `blob:`
+  URL and worker the running app actually reaches for. The directive set
+  above comes from that reading.
+- The build's output served through a local `caddy:2` container under this
+  exact header block. `curl -sS -i` confirms the header value serializes as
+  written, and every same-origin asset the policy depends on
+  (`main.dart.js`, `flutter_bootstrap.js`, `flutter.js`, `drift_worker.js`,
+  `sqlite3.wasm`, `manifest.json`, `favicon.png`) returns 200 under it.
+
+What was **not** run there, and is the gate this decision actually needs:
+the interactive pass — the deployed bundle open in a browser with the
+DevTools console visible, walking import an EPUB, RSVP play, continuous
+scroll, and sign in and sync, confirming no `Refused to …` violation
+appears. No browser was driven in that session. A `curl` for a 200 proves
+an asset is reachable; it does not prove the engine ran, and this policy's
+failure mode is a runtime refusal, not a missing file.
+
+Until that pass is made against the deployed site, this ADR records a
+decision whose consequence has been reasoned about and not yet observed.
+An earlier revision of this section claimed the browser walk as done; it
+was not, and the claim is corrected here rather than quietly dropped,
+because a rejected alternative above (report-only first) was rejected
+partly on the strength of it.
