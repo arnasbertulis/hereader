@@ -199,6 +199,13 @@ public class SyncRepository {
     ///
     /// Does nothing when an unresolved conflict already exists for the book:
     /// asking twice about the same book would be worse than asking once.
+    ///
+    /// The `where not exists` is a check-then-insert in one statement, which
+    /// is enough under normal traffic, but under read committed two
+    /// concurrent transactions can both see no row and both insert. V5's
+    /// `position_conflicts_one_unresolved_per_book` partial unique index is
+    /// the actual guarantee; `on conflict do nothing` keeps the losing side
+    /// of that race matching this method's own contract instead of raising.
     public void recordConflict(
             UUID userId,
             String bookId,
@@ -215,6 +222,8 @@ public class SyncRepository {
                       and book_id = :bookId
                       and resolved_at is null
                 )
+                on conflict (user_id, book_id) where resolved_at is null
+                    do nothing
                 """)
                 .param("userId", userId)
                 .param("bookId", bookId)

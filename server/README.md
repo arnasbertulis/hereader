@@ -318,6 +318,10 @@ V1  initial schema
 V2  entity_state, the resolved value per entity
 V3  the deleted flag on sync_events — see the deletion note above
 V4  token_version on users, for logout revocation (ADR 0027)
+V5  drops two duplicate/unused indexes, and replaces
+    position_conflicts' unique constraint (which permitted unlimited
+    unresolved rows per book, NULLs being distinct) with a partial
+    unique index that actually enforces one
 ```
 
 No JPA. The queries here are simple enough that `JdbcClient` and plain SQL are
