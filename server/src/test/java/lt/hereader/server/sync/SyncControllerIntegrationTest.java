@@ -6,7 +6,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -24,6 +26,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -45,6 +48,7 @@ class SyncControllerIntegrationTest {
     @Autowired private PasswordEncoder passwords;
     @Autowired private TokenService tokens;
     @Autowired private SyncRepository repository;
+    @Autowired private JdbcClient jdbc;
 
     private MockMvc mvc;
     private String auth;
@@ -300,14 +304,57 @@ class SyncControllerIntegrationTest {
                 .andExpect(jsonPath("$", hasSize(0)));
     }
 
-    // -- conflict uniqueness under concurrency --------------------------
+    // -- conflict uniqueness --------------------------------------------
+
+    @Test
+    void theIndexRefusesASecondUnresolvedConflictForTheSameBook() {
+        var payload = Map.<String, Object>of("tokenIndex", 100);
+        repository.recordConflict(userId, "book-1", payload, payload);
+
+        // Goes around recordConflict's `where not exists` on purpose. That
+        // guard is the thing a race gets past, so a second call through it
+        // proves only that the guard works when nothing is racing. What V5
+        // added is the index underneath, and this is the assertion that
+        // fails if the migration is reverted: with V2's
+        // `unique (user_id, book_id, resolved_at)`, NULLs being distinct,
+        // this insert succeeds.
+        assertThatThrownBy(() -> insertConflictDirectly(userId, "book-1"))
+                .isInstanceOf(DuplicateKeyException.class);
+    }
+
+    @Test
+    void aResolvedConflictDoesNotBlockTheNextOneForTheSameBook() {
+        var payload = Map.<String, Object>of("tokenIndex", 100);
+        repository.recordConflict(userId, "book-1", payload, payload);
+        repository.resolveConflict(
+                userId, repository.unresolvedConflicts(userId).getFirst().id());
+
+        // The index is partial for this reason: a book the reader has
+        // already settled once can diverge again. A plain unique constraint
+        // on (user_id, book_id) would forbid it.
+        repository.recordConflict(userId, "book-1", payload, payload);
+
+        assertThat(repository.unresolvedConflicts(userId)).hasSize(1);
+    }
+
+    private void insertConflictDirectly(UUID userId, String bookId) {
+        jdbc.sql("""
+                insert into position_conflicts (user_id, book_id, ours, theirs)
+                values (:userId, :bookId, cast('{}' as jsonb),
+                        cast('{}' as jsonb))
+                """)
+                .param("userId", userId)
+                .param("bookId", bookId)
+                .update();
+    }
 
     // recordConflict's own `where not exists` is a check-then-insert that
     // races under read committed. Sequential calls, as above, cannot show
     // that: this drives real concurrent transactions at
-    // position_conflicts_one_unresolved_per_book (V5) so the guarantee is
-    // the one the database enforces, not the one that happens not to race
-    // in a single-threaded test.
+    // position_conflicts_one_unresolved_per_book (V5). It is deliberately
+    // kept alongside the deterministic test above rather than instead of
+    // it — eight threads may or may not interleave badly on a given run,
+    // so it can pass against a schema the test above proves is wrong.
     @Test
     void concurrentConflictsForTheSameBookLeaveExactlyOneUnresolvedRow()
             throws Exception {
@@ -429,7 +476,10 @@ class SyncControllerIntegrationTest {
 
     // -- payload size ----------------------------------------------------
 
-    private static String payloadPush(String value, String hlc) {
+    /// [rawJsonValue] is spliced in unquoted, so a case can send a string or
+    /// an array and put `Map.toString()` and the encoded JSON on either side
+    /// of the cap.
+    private static String payloadPush(String rawJsonValue, String hlc) {
         return """
                 {
                   "deviceId": "laptop",
@@ -437,21 +487,25 @@ class SyncControllerIntegrationTest {
                     "idempotencyKey": "k1",
                     "entityType": "PREFERENCE",
                     "entityId": "note",
-                    "payload": {"value": "%s"},
+                    "payload": {"value": %s},
                     "hlc": "%s",
                     "deleted": false
                   }]
                 }
-                """.formatted(value, hlc);
+                """.formatted(rawJsonValue, hlc);
+    }
+
+    private static String jsonString(String value) {
+        return '"' + value.replace("\"", "\\\"") + '"';
     }
 
     @Test
-    void aPayloadOverTheEncodedCharacterCapIsRejected() throws Exception {
-        // Encoded JSON, not Map.toString(), is what SyncService measures:
-        // this single-key string payload puts the two well past
-        // MAX_PAYLOAD_CHARS either way, so the rejection is about the
-        // encoded length rather than the measure used to reach it.
-        var body = payloadPush("a".repeat(9_000), stamp(0, "laptop"));
+    void aPayloadIsMeasuredAsEncodedJsonRatherThanAsToString() throws Exception {
+        // 4,200 quote characters. Map.toString() writes them as themselves,
+        // reaching 4,208 characters and passing the 8,192 cap; JSON escapes
+        // every one of them to \", reaching 8,412 and failing it. A cap
+        // measuring toString() accepts this payload, which is the bug.
+        var body = payloadPush(jsonString("\"".repeat(4_200)), stamp(0, "laptop"));
 
         mvc.perform(post("/sync/events")
                         .header("Authorization", auth)
@@ -461,8 +515,21 @@ class SyncControllerIntegrationTest {
     }
 
     @Test
+    void aPayloadOverTheCapOnlyByToStringIsAccepted() throws Exception {
+        // The same divergence in the other direction, which is the half a
+        // one-sided test misses: 3,000 single-digit numbers render as
+        // "[1, 1, ...]" under toString() for 9,008 characters, over the cap,
+        // and as "[1,1,...]" in JSON for 6,011, under it. A cap measuring
+        // toString() rejects a payload the wire format has room for.
+        var array = "[" + "1,".repeat(2_999) + "1]";
+
+        pushExpectingOk(payloadPush(array, stamp(0, "laptop")));
+    }
+
+    @Test
     void aPayloadUnderTheEncodedCharacterCapIsAccepted() throws Exception {
-        pushExpectingOk(payloadPush("a".repeat(100), stamp(0, "laptop")));
+        pushExpectingOk(payloadPush(jsonString("a".repeat(100)),
+                stamp(0, "laptop")));
     }
 
     // -- deletions -----------------------------------------------------
