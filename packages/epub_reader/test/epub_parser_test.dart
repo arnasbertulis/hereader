@@ -56,6 +56,37 @@ String _opf({
   <spine>$spine</spine>
 </package>''';
 
+/// A zip of [count] one-byte entries, for the entry-count guard.
+///
+/// Not an EPUB: it carries no `META-INF/container.xml`, so an archive that
+/// gets past the guard fails a few lines later for that reason instead.
+/// Which of the two happened is the assertion, so the tests below match on
+/// the message rather than on `EpubException` alone.
+Uint8List _entries(int count) {
+  final archive = Archive();
+  for (var i = 0; i < count; i++) {
+    archive.addFile(ArchiveFile('f$i', 1, [0]));
+  }
+  return Uint8List.fromList(ZipEncoder().encode(archive));
+}
+
+/// A zip with one entry declaring [bytes] uncompressed, holding one byte.
+///
+/// The central directory's declared size is what the guard reads, and
+/// `ZipEncoder` writes the declared value through rather than recomputing
+/// it from the content — which is the same gap the root README records as
+/// a known limitation.
+Uint8List _declaringSize(int bytes) {
+  final archive = Archive()..addFile(ArchiveFile('big.bin', bytes, [0]));
+  return Uint8List.fromList(ZipEncoder().encode(archive));
+}
+
+/// Every failure in this parser is an `EpubException`, so the type alone
+/// says nothing about which check fired.
+Matcher _throwsEpubMessage(String fragment) => throwsA(
+  isA<EpubException>().having((e) => e.message, 'message', contains(fragment)),
+);
+
 void main() {
   group('a minimal book', () {
     late EpubBook book;
@@ -347,31 +378,38 @@ void main() {
     });
 
     test('rejects an archive with too many entries', () {
-      final archive = Archive();
-      for (var i = 0; i <= 10000; i++) {
-        archive.addFile(ArchiveFile('f$i', 1, [0]));
-      }
-      final bytes = Uint8List.fromList(ZipEncoder().encode(archive));
-
       expect(
-        () => const EpubParser().parse(bytes),
-        throwsA(isA<EpubException>()),
+        () => const EpubParser().parse(_entries(10001)),
+        _throwsEpubMessage('too many entries'),
+      );
+    });
+
+    test('accepts an archive at exactly the entry cap', () {
+      // Pins the cap's boundary, and is the test that would fail if the
+      // guard were dropped: without it, both cases reach the same
+      // missing-container error and no assertion could tell them apart.
+      expect(
+        () => const EpubParser().parse(_entries(10000)),
+        _throwsEpubMessage('META-INF/container.xml'),
       );
     });
 
     test(
       'rejects an archive whose declared uncompressed size is too large',
       () {
-        final archive = Archive()
-          ..addFile(ArchiveFile('big.bin', 512 * 1024 * 1024 + 1, [0]));
-        final bytes = Uint8List.fromList(ZipEncoder().encode(archive));
-
         expect(
-          () => const EpubParser().parse(bytes),
-          throwsA(isA<EpubException>()),
+          () => const EpubParser().parse(_declaringSize(512 * 1024 * 1024 + 1)),
+          _throwsEpubMessage('too much uncompressed content'),
         );
       },
     );
+
+    test('accepts an archive at exactly the declared-size cap', () {
+      expect(
+        () => const EpubParser().parse(_declaringSize(512 * 1024 * 1024)),
+        _throwsEpubMessage('META-INF/container.xml'),
+      );
+    });
 
     test('rejects a book with no readable documents', () {
       expect(
