@@ -2,6 +2,10 @@
     header {
         Cross-Origin-Opener-Policy same-origin
         Cross-Origin-Embedder-Policy require-corp
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy no-referrer
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
     }
 
     handle /api/* {
