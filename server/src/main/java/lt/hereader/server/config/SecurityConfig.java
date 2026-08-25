@@ -1,6 +1,5 @@
 package lt.hereader.server.config;
 
-import lt.hereader.server.auth.AuthRateLimitFilter;
 import lt.hereader.server.auth.JwtAuthFilter;
 import lt.hereader.server.sync.SyncRequestSizeFilter;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,9 +30,16 @@ class SecurityConfig {
     private String allowedOrigins;
 
     @Bean
+    List<RateLimitFilter.PathBudget> rateLimitBudgets(
+            @Value("${hereader.auth-rate-limit.requests-per-minute:10}")
+            int authRequestsPerMinute) {
+        return List.of(new RateLimitFilter.PathBudget("/auth", authRequestsPerMinute));
+    }
+
+    @Bean
     SecurityFilterChain filterChain(
             HttpSecurity http,
-            AuthRateLimitFilter rateLimit,
+            RateLimitFilter rateLimit,
             JwtAuthFilter jwt,
             SyncRequestSizeFilter sizeLimit)
             throws Exception {
@@ -54,7 +60,7 @@ class SecurityConfig {
                 // same reason PR4 anchors rateLimit to jwt: a custom filter
                 // class only works as an anchor once it is already in the
                 // chain, and rateLimit was added last above.
-                .addFilterBefore(sizeLimit, AuthRateLimitFilter.class)
+                .addFilterBefore(sizeLimit, RateLimitFilter.class)
                 .build();
     }
 
