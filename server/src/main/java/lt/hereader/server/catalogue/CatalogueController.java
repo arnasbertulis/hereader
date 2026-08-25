@@ -1,12 +1,16 @@
 package lt.hereader.server.catalogue;
 
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Locale;
 
@@ -17,10 +21,18 @@ import java.util.Locale;
 @RequestMapping("/catalogue")
 class CatalogueController {
 
-    private final CatalogueService service;
+    // A cover is immutable for a given Gutenberg book number (ADR 0029), so
+    // the client is told to hold on to it indefinitely rather than
+    // revalidating on every Library/Free-books render.
+    private static final CacheControl COVER_CACHE_CONTROL =
+            CacheControl.maxAge(Duration.ofDays(365)).cachePublic();
 
-    CatalogueController(CatalogueService service) {
+    private final CatalogueService service;
+    private final CatalogueProxyService proxy;
+
+    CatalogueController(CatalogueService service, CatalogueProxyService proxy) {
         this.service = service;
+        this.proxy = proxy;
     }
 
     /// Matches [q] against title or authors. A blank or absent [q] returns
@@ -55,6 +67,29 @@ class CatalogueController {
     @GetMapping("/categories")
     List<CatalogueDtos.CategoryCount> categories() {
         return service.categories();
+    }
+
+    /// Streams a Catalogue Entry's cover through the service — Gutenberg
+    /// sends no CORS header the deployed web build's origin restrictions
+    /// would accept a direct fetch under (ADR 0029).
+    @GetMapping("/cover/{gutenbergId}")
+    ResponseEntity<byte[]> cover(@PathVariable int gutenbergId) {
+        var file = proxy.fetchCover(gutenbergId);
+        return ResponseEntity.ok()
+                .contentType(file.contentType())
+                .cacheControl(COVER_CACHE_CONTROL)
+                .body(file.bytes());
+    }
+
+    /// The no-images edition where Gutenberg has one, the advertised
+    /// (illustrated) edition otherwise — CatalogueProxyService picks between
+    /// them so the app never has to.
+    @GetMapping("/download/{gutenbergId}")
+    ResponseEntity<byte[]> download(@PathVariable int gutenbergId) {
+        var file = proxy.fetchBookFile(gutenbergId);
+        return ResponseEntity.ok()
+                .contentType(file.contentType())
+                .body(file.bytes());
     }
 
     private static CatalogueDtos.Sort parseSort(String sort) {

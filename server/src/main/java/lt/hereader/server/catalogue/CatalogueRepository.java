@@ -73,6 +73,18 @@ public class CatalogueRepository {
                 .single());
     }
 
+    /// The check CatalogueProxyService uses to reject a book number that was
+    /// never ingested, before it is ever used to build a Gutenberg URL — what
+    /// keeps the cover and download endpoints from being pointed anywhere
+    /// that has not already been ingested (ADR 0029).
+    public boolean existsByGutenbergId(int gutenbergId) {
+        return Boolean.TRUE.equals(jdbc.sql(
+                        "select exists(select 1 from catalogue_entries where gutenberg_id = :id)")
+                .param("id", gutenbergId)
+                .query(Boolean.class)
+                .single());
+    }
+
     /// Matches [query] against title or authors, case-insensitively, when
     /// non-blank; otherwise every entry. [category] and [language], each
     /// blank for "no filter", narrow that further and combine with it and

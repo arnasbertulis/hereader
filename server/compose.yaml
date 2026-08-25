@@ -93,6 +93,9 @@ services:
       DATABASE_PASSWORD: ${DATABASE_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://204-168-240-12.sslip.io}
+      CATALOGUE_COVER_CACHE_DIR: /var/lib/hereader/catalogue-covers
+    volumes:
+      - catalogue-covers:/var/lib/hereader/catalogue-covers
 
   # Caddy plus the compiled web bundle, built by CI from app/web.Dockerfile.
   # It has no `build` stanza because building it needs a `flutter build web`
@@ -119,3 +122,4 @@ volumes:
   db-backups:
   caddy-data:
   caddy-config:
+  catalogue-covers:
