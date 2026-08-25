@@ -34,7 +34,17 @@ class SecurityConfig {
             @Value("${hereader.auth-rate-limit.requests-per-minute:10}")
             int authRequestsPerMinute,
             @Value("${hereader.catalogue-search-rate-limit.requests-per-minute:60}")
-            int catalogueSearchRequestsPerMinute) {
+            int catalogueSearchRequestsPerMinute,
+            // One flick of a browse grid is dozens of cover requests at
+            // once, so this budget sits well above search's (ADR 0029's
+            // amendment to ADR 0026).
+            @Value("${hereader.catalogue-cover-rate-limit.requests-per-minute:300}")
+            int catalogueCoverRequestsPerMinute,
+            // Ten downloads a minute is already generous for one reader
+            // (ADR 0029) — this is the tightest of the four budgets, since
+            // every hit is a full Gutenberg fetch rather than a local query.
+            @Value("${hereader.catalogue-download-rate-limit.requests-per-minute:10}")
+            int catalogueDownloadRequestsPerMinute) {
         return List.of(
                 new RateLimitFilter.PathBudget("/auth", authRequestsPerMinute),
                 // Its own budget, scoped to /catalogue/search rather than
@@ -42,7 +52,11 @@ class SecurityConfig {
                 // a different one later without colliding with this one
                 // (ADR 0029's amendment to ADR 0026).
                 new RateLimitFilter.PathBudget(
-                        "/catalogue/search", catalogueSearchRequestsPerMinute));
+                        "/catalogue/search", catalogueSearchRequestsPerMinute),
+                new RateLimitFilter.PathBudget(
+                        "/catalogue/cover", catalogueCoverRequestsPerMinute),
+                new RateLimitFilter.PathBudget(
+                        "/catalogue/download", catalogueDownloadRequestsPerMinute));
     }
 
     @Bean
