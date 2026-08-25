@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -136,18 +137,40 @@ class CataloguePopularityIngestionIntegrationTest {
 
             for (var fileName : rdfFileNames) {
                 var id = fileName.substring("pg".length(), fileName.length() - ".rdf".length());
-                var content = readRdfFixture(fileName);
-
-                var entry = new TarArchiveEntry("cache/epub/" + id + "/" + fileName);
-                entry.setSize(content.length);
-                tar.putArchiveEntry(entry);
-                tar.write(content);
-                tar.closeArchiveEntry();
+                writeEntry(tar, "cache/epub/" + id + "/" + fileName, readRdfFixture(fileName));
             }
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
         return bytes.toByteArray();
+    }
+
+    /// Same shape as buildArchive, but the entry between pg11.rdf and
+    /// pg15.rdf is XML that never closes its root element — proving
+    /// GutenbergRdfEntryReader's documented "skip this one, keep streaming"
+    /// contract rather than just asserting it in a comment.
+    private static byte[] buildArchiveWithOneMalformedEntry() {
+        var bytes = new ByteArrayOutputStream();
+        try (var bzip2 = new BZip2CompressorOutputStream(bytes);
+             var tar = new TarArchiveOutputStream(bzip2)) {
+
+            writeEntry(tar, "cache/epub/11/pg11.rdf", readRdfFixture("pg11.rdf"));
+            writeEntry(tar, "cache/epub/9999/pg9999.rdf",
+                    "<rdf:RDF><pgterms:ebook rdf:about=\"ebooks/9999\">"
+                            .getBytes(StandardCharsets.UTF_8));
+            writeEntry(tar, "cache/epub/15/pg15.rdf", readRdfFixture("pg15.rdf"));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return bytes.toByteArray();
+    }
+
+    private static void writeEntry(TarArchiveOutputStream tar, String name, byte[] content) throws IOException {
+        var entry = new TarArchiveEntry(name);
+        entry.setSize(content.length);
+        tar.putArchiveEntry(entry);
+        tar.write(content);
+        tar.closeArchiveEntry();
     }
 
     private static byte[] readRdfFixture(String fileName) {
@@ -224,6 +247,19 @@ class CataloguePopularityIngestionIntegrationTest {
                 .andExpect(jsonPath("$.results[9].gutenbergId").value(12));
     }
 
+    @Test
+    void anEntryWithMalformedXmlIsSkippedWithoutAbortingTheRefresh() throws Exception {
+        rdfArchiveBody = buildArchiveWithOneMalformedEntry();
+
+        popularityIngestion.refresh();
+
+        // Both real entries either side of the malformed one still applied —
+        // the archive kept streaming past it rather than aborting.
+        mvc.perform(get("/catalogue/search?sort=popularity"))
+                .andExpect(jsonPath("$.results[0].gutenbergId").value(11))
+                .andExpect(jsonPath("$.results[1].gutenbergId").value(15));
+    }
+
     // -- failure isolation -------------------------------------------------
 
     @Test
@@ -232,6 +268,21 @@ class CataloguePopularityIngestionIntegrationTest {
         // connection dropped mid-download takes.
         var full = rdfArchiveBody;
         rdfArchiveBody = java.util.Arrays.copyOf(full, full.length / 2);
+
+        assertThatThrownBy(popularityIngestion::refresh)
+                .isInstanceOf(CatalogueIngestionException.class);
+
+        mvc.perform(get("/catalogue/search"))
+                .andExpect(jsonPath("$.catalogueReady").value(true))
+                .andExpect(jsonPath("$.results", hasSize(10)));
+    }
+
+    @Test
+    void aMalformedArchiveAbortsThePopularityRefreshButLeavesTheCatalogueIntact() throws Exception {
+        // Not bzip2 at all, from the first byte — distinct from the
+        // mid-download truncation above, which is valid framing that just
+        // stops.
+        rdfArchiveBody = "not a bzip2 archive".getBytes(StandardCharsets.UTF_8);
 
         assertThatThrownBy(popularityIngestion::refresh)
                 .isInstanceOf(CatalogueIngestionException.class);

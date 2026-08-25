@@ -48,3 +48,9 @@ fuzzy matching.
 committing a binary archive fixture that would not be diff-reviewable; its
 "archive truncated mid-download" scenario cuts that constructed byte array,
 the same technique `CatalogueControllerIntegrationTest` uses on the CSV text.
+Two more archives are built the same way, in memory, for the other failure
+shapes the archive can take: one splices an unclosed-XML entry between real
+`pg11.rdf` and `pg15.rdf` entries to prove a malformed *entry* is skipped
+without aborting the stream, the other replaces the whole body with bytes
+that are not bzip2 at all, to prove a malformed *archive* is a distinct
+failure from a truncated one and is caught just as cleanly.
