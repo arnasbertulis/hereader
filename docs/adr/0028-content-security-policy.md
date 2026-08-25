@@ -16,19 +16,21 @@ deferred CSP on purpose: this is a CanvasKit Flutter build, which needs
 be checked against a real build rather than assumed (#152).
 
 Checked by running `flutter build web --release` in `app/` and reading the
-output rather than guessing:
+output rather than guessing, at the time this ADR was first written (#159):
 
 - `build/web/flutter_bootstrap.js`'s own URL-resolution function —
   `n.canvasKitBaseUrl ? n.canvasKitBaseUrl : e.engineRevision &&
   !e.useLocalCanvasKit ? gstatic-CDN-URL : "canvaskit"` — and the emitted
-  `_flutter.buildConfig` sets `engineRevision` with no `useLocalCanvasKit`.
-  That resolves to `https://www.gstatic.com/flutter-canvaskit/<revision>/`,
-  not the local `canvaskit/` directory the same build also writes to
-  `build/web/` unused. `.github/workflows/cd.yml:83` builds with plain
-  `flutter build web --dart-define=...`, no `--no-web-resources-cdn`, so the
-  live deployment fetches CanvasKit's JS and `.wasm` from Google's CDN on
-  every cold load today, confirmed against the actual build config rather
-  than assumed from the flag's default.
+  `_flutter.buildConfig` set `engineRevision` with no `useLocalCanvasKit`.
+  That resolved to `https://www.gstatic.com/flutter-canvaskit/<revision>/`,
+  not the local `canvaskit/` directory the same build also wrote to
+  `build/web/` unused. `.github/workflows/cd.yml:83` built with plain
+  `flutter build web --dart-define=...` back then, no `--no-web-resources-cdn`,
+  so the live deployment fetched CanvasKit's JS and `.wasm` from Google's CDN
+  on every cold load, confirmed against the actual build config rather than
+  assumed from the flag's default. **This is no longer true as of #160** —
+  see *Decision* and the trailing *Verification* paragraph below for the
+  current state.
 - `main.dart.js` calls `URL.createObjectURL` three times — genuine `blob:`
   URLs get created at runtime (file picker preview), not a hypothetical.
 - `main.dart.js` references `drift_worker.js` by plain relative path — a
@@ -55,14 +57,18 @@ Add one `Content-Security-Policy` value to `server/Caddyfile`'s `header`
 block:
 
 ```
-Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://www.gstatic.com; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://www.gstatic.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; manifest-src 'self'"
+Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; manifest-src 'self'"
 ```
 
-`https://www.gstatic.com` is allowed in `script-src` (the dynamic `import()`
-of `canvaskit.js`) and `connect-src` (the `fetch()` behind
-`WebAssembly.instantiateStreaming` for `canvaskit.wasm`) because the current
-build genuinely depends on it, not by default trust in a third party.
-`frame-ancestors 'none'` restates `X-Frame-Options: DENY` in the modern
+`https://www.gstatic.com` no longer appears in `script-src` or `connect-src`.
+#160 built with `--no-web-resources-cdn`, which sets `useLocalCanvasKit:
+true` in the emitted `_flutter.buildConfig`. That makes
+`flutter_bootstrap.js`'s URL-resolution function above fail its
+`e.engineRevision && !e.useLocalCanvasKit` check and fall through to the
+final `"canvaskit"` branch — the bundle's own relative directory — instead
+of the gstatic-CDN branch, so nothing in the running app reaches that host
+anymore. See that PR's Testing section for the build-and-grep that confirmed
+it. `frame-ancestors 'none'` restates `X-Frame-Options: DENY` in the modern
 directive browsers actually prefer.
 
 ## Alternatives considered
@@ -78,16 +84,14 @@ only once the pass has actually been made; it is not a reason to enforce
 before it.
 
 **Bundle CanvasKit locally and drop the gstatic dependency**
-(`--no-web-resources-cdn` in the build). Rejected as out of scope here: it
-is a build/CD change (`.github/workflows/cd.yml`), not a Caddyfile change,
-and changes what ships in every build, not just what headers wrap it. Worth
-its own issue — an accessibility tool importing a third-party CDN fetch into
-its critical rendering path is a real dependency, not a hypothetical one,
-and removing it stops working the moment gstatic is unreachable or blocked
-by the reader's own network. Tracked as #160 rather than folded in here;
-that issue also carries the CSP narrowing back to `'self'` that has to land
-in the same change, since dropping the CDN without narrowing the policy
-leaves a permission nothing uses.
+(`--no-web-resources-cdn` in the build). Rejected as out of scope in this
+ADR's original PR (#159): it is a build/CD change
+(`.github/workflows/cd.yml`), not a Caddyfile change, and changes what ships
+in every build, not just what headers wrap it. Tracked as #160 instead, and
+done there — the flag is now set in both `cd.yml` and `ci-flutter.yml`, and
+the CSP above is the narrowing that PR carries in the same change, since
+dropping the CDN without narrowing the policy would have left a permission
+nothing uses.
 
 **`style-src` without `'unsafe-inline'`, using a hash.** Rejected: the
 static inline `<style>` in `app/web/index.html` could be hashed, but the
@@ -139,3 +143,20 @@ An earlier revision of this section claimed the browser walk as done; it
 was not, and the claim is corrected here rather than quietly dropped,
 because a rejected alternative above (report-only first) was rejected
 partly on the strength of it.
+
+#160 (dropping the gstatic dependency and narrowing the policy to the value
+above) built `app/` with `--no-web-resources-cdn` and grepped every emitted
+`.js` file under `build/web/` for `www.gstatic.com`. Two hits remain, both
+inside the same URL-resolution ternary quoted in *Context* above, identically
+present in `flutter.js` and `flutter_bootstrap.js` — that function ships as
+part of Flutter's own bootstrap loader regardless of the flag, and the
+gstatic branch is unreachable rather than absent. What the flag changes is
+the emitted `_flutter.buildConfig`, which now carries `"useLocalCanvasKit":
+true`; the ternary's condition is `e.engineRevision && !e.useLocalCanvasKit`,
+so with that flag `true` the whole branch evaluates false and the function
+returns `"canvaskit"`, the relative path, on every call. No fetch, `import()`
+or `XMLHttpRequest` in any emitted file targets `www.gstatic.com` — confirmed
+by reading the two call sites, not by the string match alone, the same
+standard *Context* above already held itself to. The interactive pass this
+section already calls for still has to cover the narrowed policy too, and
+still has not been made against the deployed site.

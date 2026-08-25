@@ -6,11 +6,12 @@
         X-Frame-Options DENY
         Referrer-Policy no-referrer
         Strict-Transport-Security "max-age=31536000; includeSubDomains"
-        # gstatic.com is load-bearing: the release build fetches CanvasKit's
-        # JS and .wasm from Google's CDN rather than the local copy it also
-        # ships (docs/adr/0028-content-security-policy.md has the trace
-        # through flutter_bootstrap.js's buildConfig that established this).
-        Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://www.gstatic.com; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://www.gstatic.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; manifest-src 'self'"
+        # The release build serves CanvasKit's JS and .wasm from its own
+        # origin (--no-web-resources-cdn, #160), so script-src and
+        # connect-src no longer need Google's gstatic.com CDN host
+        # (docs/adr/0028-content-security-policy.md has the trace through
+        # flutter_bootstrap.js's buildConfig that first found the dependency).
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; manifest-src 'self'"
     }
 
     handle /api/* {

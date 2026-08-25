@@ -106,8 +106,8 @@ jobs:
       # failed here, not in a test, because web compilers reject integer
       # literals they cannot represent exactly.
       #
-      # The define matches cd.yml's, so this builds what a deploy builds
-      # rather than a localhost variant of it. Without it the check would
-      # pass on a bundle nobody ever ships.
+      # The define and the --no-web-resources-cdn flag match cd.yml's, so
+      # this builds what a deploy builds rather than a localhost variant of
+      # it. Without it the check would pass on a bundle nobody ever ships.
       - name: Build web
-        run: flutter build web --dart-define=HEREADER_API=https://204-168-240-12.sslip.io/api
+        run: flutter build web --no-web-resources-cdn --dart-define=HEREADER_API=https://204-168-240-12.sslip.io/api
