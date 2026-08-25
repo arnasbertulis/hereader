@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
@@ -39,10 +40,17 @@ public class CatalogueIngestionService {
     private static final int LANGUAGE_COLUMN = 4;
     private static final int AUTHORS_COLUMN = 5;
     private static final int SUBJECTS_COLUMN = 6;
+    private static final int BOOKSHELVES_COLUMN = 8;
+
+    /// The Bookshelves column mixes curated Categories with looser,
+    /// uncurated shelf names in one `; `-separated list — only the tokens
+    /// carrying this prefix are the 72 curated shelves the browse screen
+    /// filters by (CONTEXT.md's "Category" entry); the rest is discarded.
+    private static final String CATEGORY_PREFIX = "Category: ";
 
     private record ParsedEntry(
-            int gutenbergId, String title, String authors,
-            String language, String subjects, LocalDate issued) {}
+            int gutenbergId, String title, String authors, String language,
+            String subjects, LocalDate issued, List<String> categories) {}
 
     private final CatalogueRepository repository;
     private final HttpClient http;
@@ -129,6 +137,7 @@ public class CatalogueIngestionService {
             repository.upsert(
                     entry.gutenbergId(), entry.title(), entry.authors(),
                     entry.language(), entry.subjects(), entry.issued(), run);
+            repository.replaceCategories(entry.gutenbergId(), entry.categories());
         }
         repository.deleteNotWrittenBy(run);
     }
@@ -159,6 +168,19 @@ public class CatalogueIngestionService {
                 row.get(AUTHORS_COLUMN),
                 row.get(LANGUAGE_COLUMN),
                 row.get(SUBJECTS_COLUMN),
-                issued);
+                issued,
+                parseCategories(row.get(BOOKSHELVES_COLUMN)));
+    }
+
+    private static List<String> parseCategories(String bookshelves) {
+        if (bookshelves == null || bookshelves.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(bookshelves.split("; "))
+                .map(String::trim)
+                .filter(shelf -> shelf.startsWith(CATEGORY_PREFIX))
+                .map(shelf -> shelf.substring(CATEGORY_PREFIX.length()))
+                .distinct()
+                .toList();
     }
 }

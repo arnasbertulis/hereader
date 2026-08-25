@@ -14,12 +14,16 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
+import tools.jackson.databind.ObjectMapper;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.HashSet;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
@@ -56,6 +60,7 @@ class CatalogueControllerIntegrationTest {
     @Autowired private WebApplicationContext context;
     @Autowired private CatalogueIngestionService ingestion;
     @Autowired private JdbcClient jdbc;
+    @Autowired private ObjectMapper json;
 
     private MockMvc mvc;
 
@@ -196,6 +201,171 @@ class CatalogueControllerIntegrationTest {
                 .andExpect(jsonPath("$.hasMore").value(false));
     }
 
+    // -- category filter ---------------------------------------------------
+
+    @Test
+    void resultsCanBeFilteredByCategory() throws Exception {
+        ingestion.refresh();
+
+        // Novels: Alice (11), Looking-Glass (12), Moby-Dick (15),
+        // From the Earth to the Moon (83), Frankenstein (84).
+        mvc.perform(get("/catalogue/search").param("category", "Novels"))
+                .andExpect(jsonPath("$.results", hasSize(5)));
+    }
+
+    @Test
+    void categoryFilterCombinesWithSearchText() throws Exception {
+        ingestion.refresh();
+
+        // Both Carroll books carry Novels; only these two also match "carroll".
+        mvc.perform(get("/catalogue/search")
+                        .param("q", "carroll")
+                        .param("category", "Novels"))
+                .andExpect(jsonPath("$.results", hasSize(2)));
+    }
+
+    @Test
+    void anUnknownCategoryYieldsACleanEmptyResult() throws Exception {
+        ingestion.refresh();
+
+        mvc.perform(get("/catalogue/search").param("category", "Nonexistent Shelf"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.catalogueReady").value(true))
+                .andExpect(jsonPath("$.results", hasSize(0)));
+    }
+
+    // -- language filter -----------------------------------------------------
+
+    @Test
+    void noLanguageFilterAppliedByDefaultReturnsEveryLanguage() throws Exception {
+        ingestion.refresh();
+
+        // Ten Text entries: nine en, one fr (79438) — none excluded absent
+        // an explicit language filter.
+        mvc.perform(get("/catalogue/search"))
+                .andExpect(jsonPath("$.results", hasSize(10)));
+    }
+
+    @Test
+    void resultsCanBeFilteredByLanguage() throws Exception {
+        ingestion.refresh();
+
+        mvc.perform(get("/catalogue/search").param("language", "fr"))
+                .andExpect(jsonPath("$.results", hasSize(1)))
+                .andExpect(jsonPath("$.results[0].gutenbergId").value(79438));
+    }
+
+    @Test
+    void anUnknownLanguageYieldsACleanEmptyResult() throws Exception {
+        ingestion.refresh();
+
+        mvc.perform(get("/catalogue/search").param("language", "xx"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.catalogueReady").value(true))
+                .andExpect(jsonPath("$.results", hasSize(0)));
+    }
+
+    @Test
+    void categoryAndLanguageFiltersCombine() throws Exception {
+        ingestion.refresh();
+
+        // British Literature: Alice (11, en), Looking-Glass (12, en),
+        // Frankenstein (84, en) — all en, so an fr filter leaves none.
+        mvc.perform(get("/catalogue/search")
+                        .param("category", "British Literature")
+                        .param("language", "fr"))
+                .andExpect(jsonPath("$.results", hasSize(0)));
+
+        mvc.perform(get("/catalogue/search")
+                        .param("category", "British Literature")
+                        .param("language", "en"))
+                .andExpect(jsonPath("$.results", hasSize(3)));
+    }
+
+    // -- additional sort orders ---------------------------------------------
+
+    @Test
+    void resultsCanBeSortedByAuthor() throws Exception {
+        ingestion.refresh();
+
+        // The Mayflower Compact (id 7) carries a blank Authors field, which
+        // sorts first ascending.
+        mvc.perform(get("/catalogue/search?sort=author"))
+                .andExpect(jsonPath("$.results[0].gutenbergId").value(7));
+    }
+
+    @Test
+    void resultsCanBeSortedByIssueDate() throws Exception {
+        ingestion.refresh();
+
+        // The Declaration of Independence (id 1, issued 1971-12-01) is the
+        // oldest Issued date in the fixture.
+        mvc.perform(get("/catalogue/search?sort=issued"))
+                .andExpect(jsonPath("$.results[0].gutenbergId").value(1));
+    }
+
+    @Test
+    void sortMustBeARecognizedValue() throws Exception {
+        ingestion.refresh();
+
+        mvc.perform(get("/catalogue/search?sort=nonsense"))
+                .andExpect(status().isBadRequest());
+    }
+
+    // -- paging stays consistent under a filter and sort combination --------
+
+    @Test
+    void pagingThroughAFilteredAndSortedResultNeverRepeatsOrSkips() throws Exception {
+        ingestion.refresh();
+
+        var seen = new HashSet<Integer>();
+        var page = 0;
+        while (true) {
+            var body = mvc.perform(get("/catalogue/search")
+                            .param("category", "Novels")
+                            .param("sort", "author")
+                            .param("size", "2")
+                            .param("page", String.valueOf(page)))
+                    .andReturn().getResponse().getContentAsString();
+            var response = json.readValue(body, CatalogueDtos.SearchResponse.class);
+
+            for (var entry : response.results()) {
+                assertThat(seen.add(entry.gutenbergId()))
+                        .as("gutenbergId %d repeated on page %d", entry.gutenbergId(), page)
+                        .isTrue();
+            }
+            if (!response.hasMore()) {
+                break;
+            }
+            page++;
+        }
+
+        // Novels: 11, 12, 15, 83, 84.
+        assertThat(seen).containsExactlyInAnyOrder(11, 12, 15, 83, 84);
+    }
+
+    // -- category counts endpoint --------------------------------------------
+
+    @Test
+    void categoriesListsEveryCategoryWithItsEntryCount() throws Exception {
+        ingestion.refresh();
+
+        mvc.perform(get("/catalogue/categories"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.category=='Novels')].count").value(5));
+    }
+
+    @Test
+    void categoriesIsUnaffectedByAnEntryCarryingNoCategory() throws Exception {
+        ingestion.refresh();
+
+        // The brat (79435) and Les morts qui parlent (79438) carry no
+        // Bookshelves at all, so they contribute no category rows.
+        mvc.perform(get("/catalogue/categories"))
+                .andExpect(jsonPath("$[?(@.category=='Novels')].count").value(5))
+                .andExpect(jsonPath("$[?(@.category=='French Literature')].count").value(1));
+    }
+
     // -- refresh: upsert and delete ---------------------------------------
 
     @Test
@@ -213,6 +383,21 @@ class CatalogueControllerIntegrationTest {
                 .andExpect(jsonPath("$.results", hasSize(0)));
         mvc.perform(get("/catalogue/search"))
                 .andExpect(jsonPath("$.results", hasSize(9)));
+    }
+
+    @Test
+    void aRecordThatVanishesUpstreamAlsoDropsFromItsCategoryCounts() throws Exception {
+        ingestion.refresh();
+        mvc.perform(get("/catalogue/categories"))
+                .andExpect(jsonPath("$[?(@.category=='British Literature')].count").value(3));
+
+        // Alice's Adventures in Wonderland (id 11) carries British Literature
+        // — its category rows must go with it, via the FK's cascade delete.
+        csvBody = withoutRow(readFixture(), "11,Text,");
+        ingestion.refresh();
+
+        mvc.perform(get("/catalogue/categories"))
+                .andExpect(jsonPath("$[?(@.category=='British Literature')].count").value(2));
     }
 
     @Test

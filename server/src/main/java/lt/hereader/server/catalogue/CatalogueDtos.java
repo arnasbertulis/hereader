@@ -18,10 +18,12 @@ public final class CatalogueDtos {
             String subjects,
             LocalDate issued) {}
 
-    /// TITLE is alphabetical; POPULARITY orders by download count, most
-    /// downloaded first, with an Entry carrying no count sorting last
-    /// (CatalogueRepository.search) rather than dropping out of the page.
-    public enum Sort { TITLE, POPULARITY }
+    /// TITLE and AUTHOR are alphabetical; ISSUED is oldest first; POPULARITY
+    /// orders by download count, most downloaded first. Under POPULARITY an
+    /// Entry carrying no count sorts last, and under ISSUED an Entry with no
+    /// date sorts last too (CatalogueRepository.search), rather than either
+    /// dropping out of the page.
+    public enum Sort { TITLE, AUTHOR, ISSUED, POPULARITY }
 
     /// [catalogueReady] is false only when no Ingestion has ever completed —
     /// see CatalogueRepository.hasAnyEntries. A caller uses it to tell "the
@@ -31,4 +33,10 @@ public final class CatalogueDtos {
             List<Entry> results,
             int page,
             boolean hasMore) {}
+
+    /// One row of the Category browse list — see CatalogueRepository
+    /// .categoryCounts. [count] is how many Catalogue Entries carry
+    /// [category], so a reader can judge whether it's worth opening before
+    /// they do.
+    public record CategoryCount(String category, long count) {}
 }
