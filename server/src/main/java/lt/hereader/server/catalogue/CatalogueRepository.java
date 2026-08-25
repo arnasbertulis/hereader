@@ -74,36 +74,51 @@ public class CatalogueRepository {
     }
 
     /// Matches [query] against title or authors, case-insensitively, when
-    /// non-blank; otherwise every entry. Ordered by title, or by download
-    /// count under [sort] POPULARITY — either way [gutenberg_id] breaks ties
-    /// so paging is stable.
+    /// non-blank; otherwise every entry. [category] and [language], each
+    /// blank for "no filter", narrow that further and combine with it and
+    /// with each other. Ordered by title, authors or issue date, or by
+    /// download count under [sort] POPULARITY — every case breaks ties on
+    /// [gutenberg_id] so paging is stable no matter which filters are set.
     ///
     /// Asks for one more row than the caller wants, so hasMore is known
     /// without a second, count-only query.
     ///
     /// [sort] is never caller-supplied text — CatalogueController parses it
     /// into the enum before this is called — so building the order-by clause
-    /// from it here is safe.
+    /// from it here is safe. [category] and [language] stay caller-supplied
+    /// text throughout and are only ever bound as parameters, never
+    /// concatenated into the SQL.
     public List<CatalogueDtos.Entry> search(
-            String query, int offset, int limit, CatalogueDtos.Sort sort) {
+            String query, String category, String language,
+            int offset, int limit, CatalogueDtos.Sort sort) {
 
         var pattern = "%" + escapeLike(query) + "%";
-        var orderBy = sort == CatalogueDtos.Sort.POPULARITY
-                ? "downloads desc nulls last, title, gutenberg_id"
-                : "title, gutenberg_id";
+        var orderBy = switch (sort) {
+            case POPULARITY -> "downloads desc nulls last, title, gutenberg_id";
+            case AUTHOR -> "authors, title, gutenberg_id";
+            case ISSUED -> "issued, title, gutenberg_id";
+            case TITLE -> "title, gutenberg_id";
+        };
 
         return jdbc.sql("""
                 select gutenberg_id, title, authors, language, subjects, issued
-                from catalogue_entries
-                where :query = ''
+                from catalogue_entries e
+                where (:query = ''
                    or title ilike :pattern escape '\\'
-                   or authors ilike :pattern escape '\\'
+                   or authors ilike :pattern escape '\\')
+                  and (:language = '' or language = :language)
+                  and (:category = '' or exists (
+                        select 1 from catalogue_entry_categories c
+                        where c.gutenberg_id = e.gutenberg_id
+                          and c.category = :category))
                 order by\s""" + orderBy + """
 
                 limit :limit offset :offset
                 """)
                 .param("query", query)
                 .param("pattern", pattern)
+                .param("category", category)
+                .param("language", language)
                 .param("limit", limit)
                 .param("offset", offset)
                 .query((rs, _) -> new CatalogueDtos.Entry(
@@ -113,6 +128,43 @@ public class CatalogueRepository {
                         rs.getString("language"),
                         rs.getString("subjects"),
                         rs.getObject("issued", LocalDate.class)))
+                .list();
+    }
+
+    /// Replaces every Category this Catalogue Entry carries with [categories]
+    /// — delete-then-insert rather than a diff, since ingestion always has
+    /// the full fresh set for the entry and there is nothing else to
+    /// preserve. Cheap at this catalogue's size, and consistent with upsert
+    /// above, which is also called once per entry rather than batched.
+    public void replaceCategories(int gutenbergId, List<String> categories) {
+        jdbc.sql("delete from catalogue_entry_categories where gutenberg_id = :id")
+                .param("id", gutenbergId)
+                .update();
+        for (var category : categories) {
+            jdbc.sql("""
+                    insert into catalogue_entry_categories (gutenberg_id, category)
+                    values (:id, :category)
+                    """)
+                    .param("id", gutenbergId)
+                    .param("category", category)
+                    .update();
+        }
+    }
+
+    /// Every Category currently carried by at least one Catalogue Entry,
+    /// alphabetical, with how many Entries carry it — the browse screen's
+    /// list of filters, so a reader can judge whether one is worth opening
+    /// before they do.
+    public List<CatalogueDtos.CategoryCount> categoryCounts() {
+        return jdbc.sql("""
+                select category, count(*) as entry_count
+                from catalogue_entry_categories
+                group by category
+                order by category
+                """)
+                .query((rs, _) -> new CatalogueDtos.CategoryCount(
+                        rs.getString("category"),
+                        rs.getLong("entry_count")))
                 .list();
     }
 
