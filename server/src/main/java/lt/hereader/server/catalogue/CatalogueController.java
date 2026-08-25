@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.List;
 import java.util.Locale;
 
 /// Public — browsing free public-domain books does not need an account
@@ -23,12 +24,21 @@ class CatalogueController {
     }
 
     /// Matches [q] against title or authors. A blank or absent [q] returns
-    /// the whole Catalogue, paged. [sort] is "title" or "popularity",
+    /// the whole Catalogue, paged. [category] and [language] each narrow the
+    /// result further and combine with [q] and with each other; either left
+    /// blank or absent applies no filter — in particular, no language is
+    /// ever assumed, so a reader whose language holds few books does not
+    /// open Free books to an empty screen on the strength of a device
+    /// setting. An unrecognized [category] or [language] is not an error:
+    /// CatalogueService treats it as an ordinary filter that happens to
+    /// match nothing. [sort] is "title", "author", "issued" or "popularity",
     /// case-insensitive; left absent, CatalogueService picks a default from
     /// whether [q] is blank.
     @GetMapping("/search")
     CatalogueDtos.SearchResponse search(
             @RequestParam(required = false, defaultValue = "") String q,
+            @RequestParam(required = false, defaultValue = "") String category,
+            @RequestParam(required = false, defaultValue = "") String language,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(required = false) Integer size,
             @RequestParam(required = false) String sort) {
@@ -37,7 +47,14 @@ class CatalogueController {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "page cannot be negative.");
         }
-        return service.search(q, page, size, parseSort(sort));
+        return service.search(q, category, language, page, size, parseSort(sort));
+    }
+
+    /// Every Category at least one Catalogue Entry carries, with how many —
+    /// the browse screen's own filter list, not a page of results.
+    @GetMapping("/categories")
+    List<CatalogueDtos.CategoryCount> categories() {
+        return service.categories();
     }
 
     private static CatalogueDtos.Sort parseSort(String sort) {
@@ -47,8 +64,8 @@ class CatalogueController {
         try {
             return CatalogueDtos.Sort.valueOf(sort.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST, "sort must be 'title' or 'popularity'.");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "sort must be 'title', 'author', 'issued' or 'popularity'.");
         }
     }
 }

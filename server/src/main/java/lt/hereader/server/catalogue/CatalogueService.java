@@ -25,10 +25,20 @@ public class CatalogueService {
     /// unset, a blank query defaults to POPULARITY (so opening the Catalogue
     /// with no search text is a shelf of what's actually being read, not an
     /// alphabetical database dump) and a non-blank one defaults to TITLE.
+    ///
+    /// [category] and [language] are trimmed here and left blank for "no
+    /// filter" — an unrecognized value of either narrows the result to
+    /// nothing rather than failing, since CatalogueRepository.search treats
+    /// them as ordinary equality/existence conditions, never as a fixed
+    /// vocabulary. No language is applied unless the caller names one, so a
+    /// reader is never defaulted into a language they didn't ask for.
     public CatalogueDtos.SearchResponse search(
-            String query, int page, Integer size, CatalogueDtos.Sort requestedSort) {
+            String query, String category, String language,
+            int page, Integer size, CatalogueDtos.Sort requestedSort) {
 
-        var normalizedQuery = query == null ? "" : query.trim();
+        var normalizedQuery = normalize(query);
+        var normalizedCategory = normalize(category);
+        var normalizedLanguage = normalize(language);
         var cappedSize = Math.min(Math.max(size == null ? DEFAULT_PAGE_SIZE : size, 1), MAX_PAGE_SIZE);
         var sort = requestedSort != null
                 ? requestedSort
@@ -40,10 +50,23 @@ public class CatalogueService {
 
         // One extra row, so hasMore is known without a second, count-only
         // query — the same trick SyncRepository.eventsSince uses.
-        var fetched = repository.search(normalizedQuery, page * cappedSize, cappedSize + 1, sort);
+        var fetched = repository.search(
+                normalizedQuery, normalizedCategory, normalizedLanguage,
+                page * cappedSize, cappedSize + 1, sort);
         var hasMore = fetched.size() > cappedSize;
         var results = hasMore ? fetched.subList(0, cappedSize) : fetched;
 
         return new CatalogueDtos.SearchResponse(true, results, page, hasMore);
+    }
+
+    /// Every Category at least one Catalogue Entry carries, with its count —
+    /// unaffected by search text or the filters above, since this is the
+    /// list a reader picks a filter *from*, not a summary of a filtered page.
+    public List<CatalogueDtos.CategoryCount> categories() {
+        return repository.categoryCounts();
+    }
+
+    private static String normalize(String value) {
+        return value == null ? "" : value.trim();
     }
 }
