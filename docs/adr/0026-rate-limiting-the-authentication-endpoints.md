@@ -52,6 +52,16 @@ process answers. That is noted here so scaling past one instance is the
 trigger to revisit this ADR, not something that silently stops enforcing
 while looking unchanged.
 
+**Amended by ADR 0029.** The *Alternatives considered* section below named
+Caddy-layer rate limiting as the better answer "once the app is proxying to
+more than that one filter's concern." That second concern arrived — the
+Catalogue's public search, cover and download endpoints — before a second
+`app` instance did. Rather than standing up a proxy-layer limiter early, ADR
+0029 extends this same filter with per-path budgets. The trigger for moving to
+Caddy-layer limiting stays a second `app` instance, unchanged by this
+amendment; only the fact that the predicted second concern has now arrived,
+and was absorbed here rather than triggering the move, is new.
+
 ## Alternatives considered
 
 **Caddy-layer rate limiting.** Not available in the standard `caddy:2`
@@ -112,3 +122,7 @@ wiring this ADR called load-bearing, not just the counter.
 `./mvnw --batch-mode verify` passes with the new filter and test in place; CI
 (`app`, `server`, `test (rsvp_engine)`, `test (epub_reader)`) is green on the
 PR.
+
+The per-path budgets ADR 0029 adds for the Catalogue's search, cover and
+download endpoints are not built by this verification — that extension is not
+yet built at all, and its own PR fills in what was run.

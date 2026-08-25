@@ -78,6 +78,15 @@ the server. Relaying book files would make this project a service that
 transmits copyrighted content, which is exactly what storing them on-device
 avoids.
 
+**Amended by ADR 0029.** That reasoning is about relaying a reader's own
+library — not this project's to redistribute, and frequently still under
+copyright — and continues to hold for that case unchanged. It does not extend
+to streaming a public-domain text from a third-party source with nothing
+retained at any point: the service is a pipe there, not a host, and the file
+was never the reader's to begin with. ADR 0029 is where that distinction is
+put to work, streaming a Project Gutenberg import through the service with no
+stored copy on either side of the request.
+
 Deleting a book cascades to its position, which requires
 `PRAGMA foreign_keys = ON`. SQLite disables foreign keys by default, so this
 is set in `beforeOpen` rather than assumed.
