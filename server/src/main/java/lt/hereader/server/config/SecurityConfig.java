@@ -32,8 +32,17 @@ class SecurityConfig {
     @Bean
     List<RateLimitFilter.PathBudget> rateLimitBudgets(
             @Value("${hereader.auth-rate-limit.requests-per-minute:10}")
-            int authRequestsPerMinute) {
-        return List.of(new RateLimitFilter.PathBudget("/auth", authRequestsPerMinute));
+            int authRequestsPerMinute,
+            @Value("${hereader.catalogue-search-rate-limit.requests-per-minute:60}")
+            int catalogueSearchRequestsPerMinute) {
+        return List.of(
+                new RateLimitFilter.PathBudget("/auth", authRequestsPerMinute),
+                // Its own budget, scoped to /catalogue/search rather than
+                // /catalogue, so covers and downloads (#179) can each carry
+                // a different one later without colliding with this one
+                // (ADR 0029's amendment to ADR 0026).
+                new RateLimitFilter.PathBudget(
+                        "/catalogue/search", catalogueSearchRequestsPerMinute));
     }
 
     @Bean
@@ -52,7 +61,7 @@ class SecurityConfig {
                         .authenticationEntryPoint(
                                 new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/health", "/auth/**").permitAll()
+                        .requestMatchers("/health", "/auth/**", "/catalogue/**").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwt, AuthorizationFilter.class)
                 .addFilterBefore(rateLimit, JwtAuthFilter.class)
