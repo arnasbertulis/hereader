@@ -79,8 +79,13 @@ jobs:
       # Without the define, HEREADER_API falls back to localhost:8080 and the
       # bundle builds, deploys and serves perfectly while every sync request
       # from it goes to the reader's own machine.
+      #
+      # --no-web-resources-cdn keeps CanvasKit's JS and .wasm in the bundle
+      # this build already writes to build/web/canvaskit/, instead of
+      # resolving flutter_bootstrap.js's buildConfig to Google's CDN at
+      # runtime (docs/adr/0028-content-security-policy.md, #160).
       - name: Build web
-        run: flutter build web --dart-define=HEREADER_API=$HEREADER_API
+        run: flutter build web --no-web-resources-cdn --dart-define=HEREADER_API=$HEREADER_API
         working-directory: app
 
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
