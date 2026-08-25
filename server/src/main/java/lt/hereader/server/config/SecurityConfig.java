@@ -52,7 +52,7 @@ class SecurityConfig {
                         .authenticationEntryPoint(
                                 new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/health", "/auth/**").permitAll()
+                        .requestMatchers("/health", "/auth/**", "/catalogue/**").permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwt, AuthorizationFilter.class)
                 .addFilterBefore(rateLimit, JwtAuthFilter.class)
