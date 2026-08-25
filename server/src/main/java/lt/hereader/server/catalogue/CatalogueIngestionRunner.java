@@ -30,26 +30,40 @@ class CatalogueIngestionRunner implements ApplicationRunner {
             LoggerFactory.getLogger(CatalogueIngestionRunner.class);
 
     private final CatalogueIngestionService ingestion;
+    private final CataloguePopularityIngestionService popularity;
     private final ConfigurableApplicationContext context;
 
     CatalogueIngestionRunner(
-            CatalogueIngestionService ingestion, ConfigurableApplicationContext context) {
+            CatalogueIngestionService ingestion,
+            CataloguePopularityIngestionService popularity,
+            ConfigurableApplicationContext context) {
         this.ingestion = ingestion;
+        this.popularity = popularity;
         this.context = context;
     }
 
     @Override
     public void run(ApplicationArguments args) {
         log.info("Running catalogue ingestion by hand.");
-        var exitCode = 1;
+        var success = true;
+
         try {
             ingestion.refresh();
             log.info("Catalogue ingestion finished.");
-            exitCode = 0;
         } catch (RuntimeException e) {
             log.error("Catalogue ingestion failed.", e);
+            success = false;
         }
-        final var code = exitCode;
+
+        try {
+            popularity.refresh();
+            log.info("Catalogue popularity ingestion finished.");
+        } catch (RuntimeException e) {
+            log.error("Catalogue popularity ingestion failed.", e);
+            success = false;
+        }
+
+        final var code = success ? 0 : 1;
         System.exit(SpringApplication.exit(context, () -> code));
     }
 }

@@ -19,9 +19,20 @@ public class CatalogueService {
         this.repository = repository;
     }
 
-    public CatalogueDtos.SearchResponse search(String query, int page, Integer size) {
+    /// [requestedSort] is null when the caller named no explicit sort —
+    /// CatalogueController is where "sort=popularity" text becomes the enum
+    /// or a 400, so by the time it reaches here it is already valid. Left
+    /// unset, a blank query defaults to POPULARITY (so opening the Catalogue
+    /// with no search text is a shelf of what's actually being read, not an
+    /// alphabetical database dump) and a non-blank one defaults to TITLE.
+    public CatalogueDtos.SearchResponse search(
+            String query, int page, Integer size, CatalogueDtos.Sort requestedSort) {
+
         var normalizedQuery = query == null ? "" : query.trim();
         var cappedSize = Math.min(Math.max(size == null ? DEFAULT_PAGE_SIZE : size, 1), MAX_PAGE_SIZE);
+        var sort = requestedSort != null
+                ? requestedSort
+                : normalizedQuery.isEmpty() ? CatalogueDtos.Sort.POPULARITY : CatalogueDtos.Sort.TITLE;
 
         if (!repository.hasAnyEntries()) {
             return new CatalogueDtos.SearchResponse(false, List.of(), page, false);
@@ -29,7 +40,7 @@ public class CatalogueService {
 
         // One extra row, so hasMore is known without a second, count-only
         // query — the same trick SyncRepository.eventsSince uses.
-        var fetched = repository.search(normalizedQuery, page * cappedSize, cappedSize + 1);
+        var fetched = repository.search(normalizedQuery, page * cappedSize, cappedSize + 1, sort);
         var hasMore = fetched.size() > cappedSize;
         var results = hasMore ? fetched.subList(0, cappedSize) : fetched;
 

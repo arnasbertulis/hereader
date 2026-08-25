@@ -22,3 +22,35 @@ non-Text types Ingestion must discard.
 and "the export was truncated mid-download" scenarios by slicing this same
 file's rows in memory rather than committing second and third fixture files
 for states that are not really a second upstream snapshot.
+
+## rdf/pg11.rdf, rdf/pg15.rdf, rdf/pg98.rdf
+
+One real per-book record each, captured 2026-08-25 from
+`https://www.gutenberg.org/cache/epub/<id>/pg<id>.rdf` — the same per-book
+file Gutenberg's bulk `rdf-files.tar.bz2` archive packs one of per book
+(ADR 0029, #177). Trimmed to the elements `GutenbergRdfEntryReader` actually
+reads (`pgterms:ebook`'s `rdf:about`, `pgterms:downloads`) plus enough
+surrounding structure — creator, title, type — to stand in for a real entry
+rather than a synthetic one; the `dcterms:hasFormat` blocks real records carry
+one of per file format are omitted since nothing here parses them.
+
+`id 11` (Alice's Adventures in Wonderland, 94,492 downloads) and `id 15`
+(Moby-Dick, 2,826 downloads) are both in `pg_catalog_sample.csv`, so a
+popularity refresh has an existing Catalogue Entry to join each to. `id 98`
+(A Tale of Two Cities, 29,682 downloads) is deliberately **not** in that CSV
+sample — it exercises "the archive names a book the Catalogue doesn't have",
+which `CatalogueRepository.updateDownloads` treats as a no-op rather than an
+insert, since the two exports join on the Gutenberg book number with no
+fuzzy matching.
+
+`CataloguePopularityIngestionIntegrationTest` packs these three into a
+`tar.bz2` in memory with commons-compress at test setup, rather than
+committing a binary archive fixture that would not be diff-reviewable; its
+"archive truncated mid-download" scenario cuts that constructed byte array,
+the same technique `CatalogueControllerIntegrationTest` uses on the CSV text.
+Two more archives are built the same way, in memory, for the other failure
+shapes the archive can take: one splices an unclosed-XML entry between real
+`pg11.rdf` and `pg15.rdf` entries to prove a malformed *entry* is skipped
+without aborting the stream, the other replaces the whole body with bytes
+that are not bzip2 at all, to prove a malformed *archive* is a distinct
+failure from a truncated one and is caught just as cleanly.

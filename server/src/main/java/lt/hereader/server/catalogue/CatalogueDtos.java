@@ -18,6 +18,11 @@ public final class CatalogueDtos {
             String subjects,
             LocalDate issued) {}
 
+    /// TITLE is alphabetical; POPULARITY orders by download count, most
+    /// downloaded first, with an Entry carrying no count sorting last
+    /// (CatalogueRepository.search) rather than dropping out of the page.
+    public enum Sort { TITLE, POPULARITY }
+
     /// [catalogueReady] is false only when no Ingestion has ever completed —
     /// see CatalogueRepository.hasAnyEntries. A caller uses it to tell "the
     /// Catalogue is not available yet" apart from "nothing matched".

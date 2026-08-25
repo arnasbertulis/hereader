@@ -7,6 +7,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Locale;
+
 /// Public — browsing free public-domain books does not need an account
 /// (ADR 0029). Permitted through SecurityConfig and rate limited on its own
 /// path budget, independent of every other budget.
@@ -21,17 +23,32 @@ class CatalogueController {
     }
 
     /// Matches [q] against title or authors. A blank or absent [q] returns
-    /// the whole Catalogue, paged.
+    /// the whole Catalogue, paged. [sort] is "title" or "popularity",
+    /// case-insensitive; left absent, CatalogueService picks a default from
+    /// whether [q] is blank.
     @GetMapping("/search")
     CatalogueDtos.SearchResponse search(
             @RequestParam(required = false, defaultValue = "") String q,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(required = false) Integer size) {
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String sort) {
 
         if (page < 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "page cannot be negative.");
         }
-        return service.search(q, page, size);
+        return service.search(q, page, size, parseSort(sort));
+    }
+
+    private static CatalogueDtos.Sort parseSort(String sort) {
+        if (sort == null || sort.isBlank()) {
+            return null;
+        }
+        try {
+            return CatalogueDtos.Sort.valueOf(sort.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "sort must be 'title' or 'popularity'.");
+        }
     }
 }

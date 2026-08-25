@@ -74,13 +74,23 @@ public class CatalogueRepository {
     }
 
     /// Matches [query] against title or authors, case-insensitively, when
-    /// non-blank; otherwise every entry. Ordered by title so paging is
-    /// stable — popularity ordering is a later layer (#177).
+    /// non-blank; otherwise every entry. Ordered by title, or by download
+    /// count under [sort] POPULARITY — either way [gutenberg_id] breaks ties
+    /// so paging is stable.
     ///
     /// Asks for one more row than the caller wants, so hasMore is known
     /// without a second, count-only query.
-    public List<CatalogueDtos.Entry> search(String query, int offset, int limit) {
+    ///
+    /// [sort] is never caller-supplied text — CatalogueController parses it
+    /// into the enum before this is called — so building the order-by clause
+    /// from it here is safe.
+    public List<CatalogueDtos.Entry> search(
+            String query, int offset, int limit, CatalogueDtos.Sort sort) {
+
         var pattern = "%" + escapeLike(query) + "%";
+        var orderBy = sort == CatalogueDtos.Sort.POPULARITY
+                ? "downloads desc nulls last, title, gutenberg_id"
+                : "title, gutenberg_id";
 
         return jdbc.sql("""
                 select gutenberg_id, title, authors, language, subjects, issued
@@ -88,7 +98,8 @@ public class CatalogueRepository {
                 where :query = ''
                    or title ilike :pattern escape '\\'
                    or authors ilike :pattern escape '\\'
-                order by title, gutenberg_id
+                order by\s""" + orderBy + """
+
                 limit :limit offset :offset
                 """)
                 .param("query", query)
@@ -103,6 +114,18 @@ public class CatalogueRepository {
                         rs.getString("subjects"),
                         rs.getObject("issued", LocalDate.class)))
                 .list();
+    }
+
+    /// Updates the download count for an existing row only. A book number
+    /// present in the RDF archive but absent from catalogue_entries — the CSV
+    /// hasn't been ingested yet, or Gutenberg withdrew the book — has nothing
+    /// to join to, and this is a no-op: no fuzzy matching, and popularity
+    /// Ingestion never inserts a Catalogue Entry (ADR 0029, #177).
+    public void updateDownloads(int gutenbergId, int downloads) {
+        jdbc.sql("update catalogue_entries set downloads = :downloads where gutenberg_id = :id")
+                .param("downloads", downloads)
+                .param("id", gutenbergId)
+                .update();
     }
 
     /// Escapes ILIKE's own wildcard characters out of caller input, so a
