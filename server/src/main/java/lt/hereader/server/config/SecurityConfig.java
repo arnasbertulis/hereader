@@ -35,6 +35,13 @@ class SecurityConfig {
             int authRequestsPerMinute,
             @Value("${hereader.catalogue-search-rate-limit.requests-per-minute:60}")
             int catalogueSearchRequestsPerMinute,
+            // The browse screen's filter list, not a page of results — one
+            // request per screen open rather than one per search keystroke,
+            // and the result set changes only on a weekly ingestion refresh.
+            // Sits above search's budget for that reason, but below cover's,
+            // since it is one call per browse rather than one per book.
+            @Value("${hereader.catalogue-categories-rate-limit.requests-per-minute:120}")
+            int catalogueCategoriesRequestsPerMinute,
             // One flick of a browse grid is dozens of cover requests at
             // once, so this budget sits well above search's (ADR 0029's
             // amendment to ADR 0026).
@@ -53,6 +60,8 @@ class SecurityConfig {
                 // (ADR 0029's amendment to ADR 0026).
                 new RateLimitFilter.PathBudget(
                         "/catalogue/search", catalogueSearchRequestsPerMinute),
+                new RateLimitFilter.PathBudget(
+                        "/catalogue/categories", catalogueCategoriesRequestsPerMinute),
                 new RateLimitFilter.PathBudget(
                         "/catalogue/cover", catalogueCoverRequestsPerMinute),
                 new RateLimitFilter.PathBudget(
