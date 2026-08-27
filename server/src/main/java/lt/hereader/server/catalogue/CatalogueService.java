@@ -66,6 +66,13 @@ public class CatalogueService {
         return repository.categoryCounts();
     }
 
+    /// Every Language at least one Catalogue Entry carries, with its count —
+    /// unaffected by search text or the filters above, since this is the
+    /// list a reader picks a filter *from*, not a summary of a filtered page.
+    public List<CatalogueDtos.LanguageCount> languages() {
+        return repository.languageCounts();
+    }
+
     private static String normalize(String value) {
         return value == null ? "" : value.trim();
     }
