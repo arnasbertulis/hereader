@@ -180,6 +180,25 @@ public class CatalogueRepository {
                 .list();
     }
 
+    /// Every Language currently carried by at least one Catalogue Entry,
+    /// alphabetical, with how many Entries carry it — the browse screen's
+    /// list of filters, so a reader can judge whether one is worth opening
+    /// before they do. Unlike categoryCounts, this reads catalogue_entries
+    /// directly rather than a join table: language is a single column on the
+    /// row itself, not a many-valued relationship.
+    public List<CatalogueDtos.LanguageCount> languageCounts() {
+        return jdbc.sql("""
+                select language, count(*) as entry_count
+                from catalogue_entries
+                group by language
+                order by language
+                """)
+                .query((rs, _) -> new CatalogueDtos.LanguageCount(
+                        rs.getString("language"),
+                        rs.getLong("entry_count")))
+                .list();
+    }
+
     /// Updates the download count for an existing row only. A book number
     /// present in the RDF archive but absent from catalogue_entries — the CSV
     /// hasn't been ingested yet, or Gutenberg withdrew the book — has nothing
