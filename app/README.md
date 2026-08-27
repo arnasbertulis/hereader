@@ -46,9 +46,14 @@ lib/
 │  │                             outbox, conflicts
 │  ├─ database.g.dart           Generated. See build_runner below
 │  └─ library_repository.dart   The only file that knows drift exists
+├─ net/
+│  └─ http_transport.dart       The shared HTTP transport: error mapping,
+│                                timeout, and JSON body decoding, called by
+│                                both api_client.dart and catalogue_client.dart
 ├─ sync/
 │  ├─ sync_engine.dart          Drains the outbox, applies remote events
-│  ├─ api_client.dart           Calls the sync service, refreshes tokens
+│  ├─ api_client.dart           Calls the sync service, refreshes tokens,
+│                                layering auth and 401-retry over net/http_transport.dart
 │  ├─ auth_store.dart           Session storage: keystore on native, local
 │  │                             storage on web
 │  ├─ last_synced.dart          How long ago a sync finished, in words rather

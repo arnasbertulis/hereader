@@ -1,10 +1,8 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
-import '../sync/api_client.dart'
-    show ApiException, NetworkException, apiErrorMessage;
+import '../net/http_transport.dart';
 
 /// Order the Catalogue is searched in.
 ///
@@ -109,18 +107,16 @@ class CatalogueSearchResult {
 /// Every route is `permitAll` (`CatalogueController`), so unlike [ApiClient]
 /// this carries no session and refreshes no token.
 ///
-/// Reuses [ApiException] and [NetworkException] from `sync/api_client.dart`
+/// Reuses [ApiException] and [NetworkException] from `net/http_transport.dart`
 /// rather than a second pair of its own: "the API said no" and "the network
 /// was unreachable" are the same two facts there and here, and a caller
 /// already knows how to tell them apart from one.
 class CatalogueClient {
   final Uri baseUrl;
-  final http.Client _http;
-
-  static const _timeout = Duration(seconds: 15);
+  final HttpTransport _transport;
 
   CatalogueClient({required this.baseUrl, http.Client? httpClient})
-    : _http = httpClient ?? http.Client();
+    : _transport = HttpTransport(httpClient ?? http.Client());
 
   Future<CatalogueSearchResult> search({
     String q = '',
@@ -166,15 +162,7 @@ class CatalogueClient {
     bool expectList = false,
   }) async {
     final response = await _get(path, query: query);
-
-    if (response.body.isEmpty) return const {};
-    final decoded = jsonDecode(response.body);
-
-    // /catalogue/categories answers with a bare array. Wrapping it keeps one
-    // return type here rather than making every caller handle both.
-    if (expectList) return {'items': decoded};
-
-    return decoded as Map<String, dynamic>;
+    return _transport.readJson(response, expectList: expectList);
   }
 
   Future<Uint8List> _getBytes(String path) async {
@@ -188,20 +176,9 @@ class CatalogueClient {
       queryParameters: query,
     );
 
-    final http.Response response;
-    try {
-      response = await _http.get(uri).timeout(_timeout);
-    } catch (e) {
-      // Unreachable, refused, timed out: all offline to a caller.
-      throw const NetworkException('Could not reach the server.');
-    }
-
-    if (response.statusCode >= 400) {
-      throw ApiException(response.statusCode, apiErrorMessage(response));
-    }
-
-    return response;
+    final response = await _transport.send('GET', uri);
+    return _transport.checkStatus(response);
   }
 
-  void dispose() => _http.close();
+  void dispose() => _transport.dispose();
 }
