@@ -66,6 +66,20 @@ class CategoryCount {
   );
 }
 
+/// One language and how many Catalogue Entries carry it.
+/// Mirrors `CatalogueDtos.LanguageCount` on the server.
+class LanguageCount {
+  final String language;
+  final int count;
+
+  const LanguageCount({required this.language, required this.count});
+
+  factory LanguageCount.fromJson(Map<String, dynamic> json) => LanguageCount(
+    language: json['language'] as String,
+    count: (json['count'] as num).toInt(),
+  );
+}
+
 /// A page of Catalogue search results. Mirrors `CatalogueDtos.SearchResponse`
 /// on the server.
 class CatalogueSearchResult {
@@ -147,6 +161,15 @@ class CatalogueClient {
     return (body['items'] as List)
         .cast<Map<String, dynamic>>()
         .map(CategoryCount.fromJson)
+        .toList();
+  }
+
+  Future<List<LanguageCount>> languages() async {
+    final body = await _getJson('/catalogue/languages', expectList: true);
+
+    return (body['items'] as List)
+        .cast<Map<String, dynamic>>()
+        .map(LanguageCount.fromJson)
         .toList();
   }
 

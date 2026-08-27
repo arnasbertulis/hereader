@@ -197,6 +197,7 @@ class FakeCatalogueClient implements CatalogueClient {
   final List<CatalogueSearchResult> searchResponses = [];
 
   List<CategoryCount> categoryResponse = const [];
+  List<LanguageCount> languageResponse = const [];
   Uint8List coverBytes = Uint8List(0);
   Uint8List downloadBytes = Uint8List(0);
 
@@ -236,6 +237,12 @@ class FakeCatalogueClient implements CatalogueClient {
   Future<List<CategoryCount>> categories() async {
     _maybeThrow();
     return categoryResponse;
+  }
+
+  @override
+  Future<List<LanguageCount>> languages() async {
+    _maybeThrow();
+    return languageResponse;
   }
 
   @override
