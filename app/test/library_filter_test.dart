@@ -12,6 +12,7 @@ import 'package:app/sync/sync_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'fakes.dart';
 import 'test_database.dart';
 
 /// Drift schedules a zero-duration timer when a query stream is cancelled.
@@ -28,6 +29,7 @@ void main() {
   late AuthStore auth;
   late ApiClient api;
   late SyncEngine sync;
+  late FakeCatalogueClient catalogue;
 
   setUp(() {
     db = AppDatabase(testExecutor());
@@ -40,6 +42,7 @@ void main() {
       auth: auth,
       database: db,
     );
+    catalogue = FakeCatalogueClient();
   });
 
   tearDown(() async {
@@ -82,6 +85,7 @@ void main() {
             repository: repository,
             issueStamp: () async => '0000000000001-00000-test',
           ),
+          catalogue: catalogue,
         ),
       ),
     );
