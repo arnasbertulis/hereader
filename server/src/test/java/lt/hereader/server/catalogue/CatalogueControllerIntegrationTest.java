@@ -366,6 +366,19 @@ class CatalogueControllerIntegrationTest {
                 .andExpect(jsonPath("$[?(@.category=='French Literature')].count").value(1));
     }
 
+    // -- language counts endpoint --------------------------------------------
+
+    @Test
+    void languagesListsEveryLanguageWithItsEntryCount() throws Exception {
+        ingestion.refresh();
+
+        // Ten Text entries: nine en, one fr (79438).
+        mvc.perform(get("/catalogue/languages"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.language=='en')].count").value(9))
+                .andExpect(jsonPath("$[?(@.language=='fr')].count").value(1));
+    }
+
     // -- refresh: upsert and delete ---------------------------------------
 
     @Test
@@ -398,6 +411,20 @@ class CatalogueControllerIntegrationTest {
 
         mvc.perform(get("/catalogue/categories"))
                 .andExpect(jsonPath("$[?(@.category=='British Literature')].count").value(2));
+    }
+
+    @Test
+    void aRecordThatVanishesUpstreamAlsoDropsFromItsLanguageCounts() throws Exception {
+        ingestion.refresh();
+        mvc.perform(get("/catalogue/languages"))
+                .andExpect(jsonPath("$[?(@.language=='fr')].count").value(1));
+
+        // Les morts qui parlent (79438) is the fixture's only fr entry.
+        csvBody = withoutRow(readFixture(), "79438,Text,");
+        ingestion.refresh();
+
+        mvc.perform(get("/catalogue/languages"))
+                .andExpect(jsonPath("$[?(@.language=='fr')]").isEmpty());
     }
 
     @Test
