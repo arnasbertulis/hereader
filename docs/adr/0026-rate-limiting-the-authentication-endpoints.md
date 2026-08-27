@@ -123,6 +123,21 @@ wiring this ADR called load-bearing, not just the counter.
 (`app`, `server`, `test (rsvp_engine)`, `test (epub_reader)`) is green on the
 PR.
 
-The per-path budgets ADR 0029 adds for the Catalogue's search, cover and
-download endpoints are not built by this verification — that extension is not
-yet built at all, and its own PR fills in what was run.
+The per-path budgets ADR 0029 adds for the Catalogue's search, categories,
+languages and proxy (cover and download) endpoints are now built too,
+extending the same `RateLimitFilter` this record verified with a `PathBudget`
+per path rather than moving to a Caddy-layer limiter. `CatalogueSearchRateLimitFilterTest`,
+`CatalogueCategoriesRateLimitFilterTest`, `CatalogueLanguagesRateLimitFilterTest`
+and `CatalogueProxyRateLimitFilterTest` (2, 2, 2 and 3 tests, part of the 67
+passing in `./mvnw --batch-mode -Dtest='lt.hereader.server.catalogue.**'
+test`) each prove their own path is wired to its own budget end to end. The
+cross-budget independence this amendment is really adding — that exhausting
+one path's budget leaves every other configured path's untouched — is
+`RateLimitFilterTest`, generic against the filter itself rather than any one
+path:
+`exhaustingOnePathsBudgetLeavesAnotherConfiguredPathUnaffected` and
+`aPathWithNoConfiguredBudgetPassesThroughUnlimited`
+(`server/src/test/java/lt/hereader/server/config/RateLimitFilterTest.java`).
+`./mvnw --batch-mode -Dtest='lt.hereader.server.config.RateLimitFilterTest'
+test` — 2 tests, both passing. See ADR 0029's own Verification section for
+the full catalogue run.

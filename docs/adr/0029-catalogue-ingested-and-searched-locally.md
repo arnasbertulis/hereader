@@ -159,10 +159,54 @@ rather than as a generic error.
 
 ## Verification
 
-Not yet built. This record opens the implementation stack tracked in #173
-(#175–#182); the last item in that stack, #183, fills in this section with the
-commands that were actually run once the Catalogue exists to run them
-against.
+Built across #186 (schema, ingestion from the CSV export, paged search), #187
+(popularity from the streamed RDF export), #189 (category and language
+filters, sort and counts), #190 and #191 (cover and book file proxies, and
+their rate limits), then #195–#200 and #204–#208 on the app side (catalogue
+client and importer, the Free books screen and its add-menu entry, and its
+filter, sort and search controls).
+
+`./mvnw --batch-mode -Dtest='lt.hereader.server.catalogue.**' test` — 67
+tests across seven classes, all passing:
+
+- `CatalogueControllerIntegrationTest` (37) — search by title and author,
+  category and language filters combining with search text and with each
+  other, sort by title, author, issued date and popularity in both
+  directions with each field's own null-handling and default direction,
+  paging that neither repeats nor skips, an unready Catalogue distinguished
+  from a real no-match, only Text records surviving ingestion, and a record
+  removed upstream disappearing from results and from both count listings on
+  the next refresh.
+- `CataloguePopularityIngestionIntegrationTest` (10) — the streamed RDF join.
+- `CatalogueProxyIntegrationTest` (11) — a book number rejected on both
+  proxies unless already ingested, the no-images edition served with a
+  fallback to the illustrated one, a cover served from Gutenberg on first
+  request and from the on-disk cache on the second, and a truncated upstream
+  response on either proxy never reaching the caller as a 200.
+- `CatalogueCategoriesRateLimitFilterTest`, `CatalogueLanguagesRateLimitFilterTest`,
+  `CatalogueProxyRateLimitFilterTest` and `CatalogueSearchRateLimitFilterTest`
+  (2, 2, 3, 2) — the per-path budgets this record and the ADR 0026 amendment
+  below add.
+
+`flutter test test/catalogue_client_test.dart test/catalogue_importer_test.dart
+test/free_books_screen_test.dart` — 26 tests, all passing: debounced search,
+empty versus offline versus not-yet-ingested states, already-imported
+marking, import progress, and the imported Book landing in the Library,
+against the app's existing fake API-client seam.
+
+Read directly rather than through a test: `CatalogueProxyService.fetchBookFile`
+(`server/src/main/java/lt/hereader/server/catalogue/CatalogueProxyService.java:105`)
+never calls the cache-writing path — only `fetchCover` (line 87) does — so a
+downloaded book file is streamed into the response and touches no disk on the
+service. That asymmetry is deliberate: a cover is immutable for a given book
+and worth caching, a book file is not retained at all.
+
+Not verified here: that the deployed Caddy CSP actually blocks a direct
+browser fetch to Gutenberg. That is ADR 0028's configuration, not this
+record's code, and what this stack's own tests cover is the consequence —
+every book file and cover the app displays arrives through `/catalogue/**` —
+not the browser policy that makes a direct fetch impossible in the first
+place.
 
 ## Amendments to existing records
 

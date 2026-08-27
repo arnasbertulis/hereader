@@ -75,6 +75,7 @@ This is an accessibility tool. It does not diagnose, treat, manage, or improve a
 - [x] A sheet asking the reader which position they meant when two devices diverge
 - [x] Positions synced for a book not yet imported on this device are held locally and applied the moment the book is imported, rather than crashing sync or being lost
 - [x] A startup failure is shown rather than rendering nothing. Everything the app needs before its first write is awaited before the first frame, so a failure there used to leave a blank page indistinguishable from a hang
+- [x] Free books: search roughly 78,000 public-domain Project Gutenberg titles by title or author, browse by category or language with results defaulting to the most downloaded first, sort by title, author, issue date or popularity in either direction, and import with one tap — no account needed. Search runs against the service's own ingested copy of the catalogue, refreshed weekly, rather than against Gutenberg itself. Book files stream through the service and are never retained there; covers are proxied the same way but cached on disk, since a cover is immutable for a given book. A catalogue import gets the same id on every device it is imported on, so its reading position syncs without a file ever moving. Recorded in [`docs/adr/0029-catalogue-ingested-and-searched-locally.md`](docs/adr/0029-catalogue-ingested-and-searched-locally.md)
 - [x] Test suite across all of the above, including a real Project Gutenberg book as a golden fixture, effective words per minute over real prose, virtual-clock playback timing, sync ordering and divergence against a real Postgres, and the sync client against a fake service
 - [x] CI running analyzer and tests on every push, across every package, the app, and the service, with the pure packages also run through `dart2js` in a browser, the app's own suite run under DDC in a real Chrome, and the web build compiled on every change
 - [x] Deployed: containerised service and web build behind Caddy on a Hetzner VPS, automatic HTTPS via an sslip.io hostname, with reading positions and profiles both verified syncing between Windows and web against the live service
@@ -107,7 +108,7 @@ Recorded in [`docs/adr/0005-sync-event-log.md`](docs/adr/0005-sync-event-log.md)
 
 ## Design decisions worth knowing
 
-Every substantial decision has an ADR carrying the alternatives that were rejected and why; the [index below](#architecture-decision-records) lists all twenty-seven. These are the ones that shape the most code.
+Every substantial decision has an ADR carrying the alternatives that were rejected and why; the [index below](#architecture-decision-records) lists all twenty-nine. These are the ones that shape the most code.
 
 **Reading positions are character offsets, never word indices.** A word index shifts the moment the tokenizer changes, which would silently move every saved position in every book — and nobody reports "my bookmark is forty words off", they quietly lose their place. Character offsets index into the text the tokenizer *reads*, not the text it produces, and locators carry a `parserVersion` so future changes can be migrated deliberately. Recorded in [`docs/adr/0002-locator-format.md`](docs/adr/0002-locator-format.md).
 
@@ -170,6 +171,8 @@ Every substantial decision has an ADR carrying the alternatives that were reject
 | [0025](docs/adr/0025-continuous-scroll.md) | Sliding text is a second reading surface, driven by a ticker and dragged with a finger |
 | [0026](docs/adr/0026-rate-limiting-the-authentication-endpoints.md) | The authentication endpoints are rate-limited by an in-process, IP-keyed filter |
 | [0027](docs/adr/0027-refresh-token-revocation.md) | Refresh-token revocation is a `token_version` column, checked at refresh |
+| [0028](docs/adr/0028-content-security-policy.md) | The web bundle ships a Content-Security-Policy restricting it to its own origin |
+| [0029](docs/adr/0029-catalogue-ingested-and-searched-locally.md) | The Free books catalogue is ingested from Gutenberg's bulk exports and searched locally, never proxied live |
 
 ---
 
@@ -305,7 +308,7 @@ start: the browser database drift uses needs a secure context. Use `https://`,
 
 ## Known limitations
 
-- Books do not transfer between devices. Reading positions sync, but the file itself has to be imported on each device. Notes do not transfer either: a note is a book row, and book rows stay local.
+- Books do not transfer between devices. Reading positions sync, but the file itself has to be imported on each device — for a Free books import this is a second tap rather than a transfer, since both devices derive the same id from the same Gutenberg identifier and so share a position the moment each has imported it; for a book added from a file the limitation is unchanged, and there is still no way to move that file from one device to the other. Notes do not transfer either: a note is a book row, and book rows stay local.
 - A different edition of the same book produces different block identifiers, so a position saved against one edition will not resolve against another. The app says the place could not be found and opens from the start rather than guessing. A content fingerprint on the book record would let it say which of the two it was, and is not implemented.
 - Opening a book waits on a sync attempt so the reader never starts from a position that is about to change. A slow connection therefore delays opening, bounded by a fifteen second request timeout.
 - A rejected batch counts the attempt against every event in it, not just the one the service objected to. Coarse, but the alternative is pushing events one at a time.
@@ -368,7 +371,7 @@ start: the browser database drift uses needs a secure context. Use `https://`,
 1. Bookmarks and highlights over the same sync event log
 2. Exporting and importing a profile as a file, so one can be shared with someone who does not share an account
 3. Book transfer between devices, either over the local network or through the platform share sheet. Relaying files through the service is deliberately excluded: it would make this a system that transmits copyrighted content, which storing books on-device exists to avoid.
-4. Public domain catalogue via OPDS feeds, with server-side ingestion
+4. A second Catalogue source alongside the Free books screen's Project Gutenberg one — Standard Ebooks is the obvious candidate, gated for now by its feed requiring an account. The catalogue itself shipped ingesting Gutenberg's bulk exports rather than the OPDS feed this entry originally named: the best available search for Gutenberg turned out to be a bulk export, not a feed, and an account-gated feed would have been the wrong shape for a second source too. Recorded in [ADR 0029](docs/adr/0029-catalogue-ingested-and-searched-locally.md)
 5. Google sign-in as an additional identity source
 6. PDF support, which needs column detection, header and footer stripping, and reading-order reconstruction
 7. A frame measurement of sliding text on a physical Android phone, and a pass with a screen reader over the sliding surface's step actions. Both are named as not-run in [ADR 0025](docs/adr/0025-continuous-scroll.md)
