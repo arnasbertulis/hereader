@@ -3,6 +3,19 @@ import 'dart:typed_data';
 import '../reading/library_book.dart';
 import 'catalogue_client.dart';
 
+/// A parsed [LibraryBook] plus the bytes it was parsed from.
+///
+/// `LibraryRepository.addBook` stores the raw bytes alongside what
+/// [BookImporter] read out of them, the same way a hand-picked file's bytes
+/// survive next to its parse — so a caller needs both back, not just the
+/// book.
+class CatalogueImport {
+  final LibraryBook book;
+  final Uint8List bytes;
+
+  const CatalogueImport({required this.book, required this.bytes});
+}
+
 /// Turns a Catalogue Entry into a [LibraryBook], the way [BookImporter]
 /// already turns a hand-picked file into one — this only adds where the
 /// bytes come from.
@@ -27,8 +40,9 @@ class CatalogueImporter {
   /// Throws [NetworkException] when the service is unreachable,
   /// [ApiException] when it refuses the request, and [EpubException] when
   /// the downloaded bytes do not parse as a book.
-  Future<LibraryBook> import(int gutenbergId) async {
+  Future<CatalogueImport> import(int gutenbergId) async {
     final Uint8List bytes = await client.download(gutenbergId);
-    return bookImporter.import(bytes);
+    final book = await bookImporter.import(bytes);
+    return CatalogueImport(book: book, bytes: bytes);
   }
 }
