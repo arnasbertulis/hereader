@@ -59,8 +59,16 @@ jobs:
       # OPFS drift setup; the browser test run needs its own copy because
       # flutter_tools serves `<cwd>/test` at the test server's root, not
       # `<cwd>/web`. Gitignored — see app/.gitignore.
-      - name: Copy sqlite3.wasm for the browser run
-        run: cp web/sqlite3.wasm test/sqlite3.wasm
+      #
+      # A script rather than the `cp` this used to be, because it is not the
+      # only thing that has to be staged: on Windows the engine's CanvasKit
+      # build has to be copied into `test/` as well, or the run hangs after
+      # Chrome launches. That half is invisible here — ubuntu-latest does not
+      # need it and the script skips it — which is precisely why it belongs in
+      # a file this step also runs. Written in two places, only one of them
+      # learned about CanvasKit. See app/README.md's Testing section.
+      - name: Stage the browser run's assets
+        run: dart run tool/stage_chrome_test_assets.dart
 
       # Runs the same suite again, this time compiled with DDC and executed
       # in a real Chrome instead of the Dart VM — the gap that let
