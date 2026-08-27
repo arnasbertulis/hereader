@@ -104,3 +104,26 @@ evidence yet that 240 ms is a problem worth that complexity.
 
 **Files on disk with a path column.** Rejected: breaks on iOS container
 moves, impossible on web, and leaves orphans when deletion half-fails.
+
+## Verification
+
+The core decision — bytes stored, re-parsed on open — has held since the
+app's original import work and is exercised by every Library and reader test
+that opens a book; nothing here changed it.
+
+The amendment's own claim, added by ADR 0029, is that streaming an unretained
+Gutenberg file through the service is not the relaying this record's
+*Consequences* section rejected. Read directly:
+`CatalogueProxyService.fetchBookFile`
+(`server/src/main/java/lt/hereader/server/catalogue/CatalogueProxyService.java:105`)
+streams the response through with no call into the cache-writing path that
+`fetchCover` (line 87) uses — a downloaded book file touches no disk on the
+service. `CatalogueProxyIntegrationTest` (11 tests, part of the 67 in
+`./mvnw --batch-mode -Dtest='lt.hereader.server.catalogue.**' test`, all
+passing) exercises the endpoint this streams through, including that a book
+number not already in the ingested Catalogue is rejected rather than
+proxying an arbitrary URL. Once imported, the resulting Book writes through
+the same blob column and re-parse path this record decided on, proven by
+`app/test/catalogue_importer_test.dart`, part of the 26 passing tests in
+`flutter test test/catalogue_client_test.dart test/catalogue_importer_test.dart
+test/free_books_screen_test.dart`.
