@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:app/catalogue/catalogue_client.dart';
 import 'package:app/sync/api_client.dart';
 import 'package:app/sync/auth_store.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -154,6 +157,100 @@ class FakeApi implements ApiClient {
   @override
   Future<void> logOut() =>
       throw UnimplementedError('The sync engine does not sign out.');
+
+  @override
+  void dispose() {}
+
+  void _maybeThrow() {
+    final error = nextError;
+    if (error != null) {
+      nextError = null;
+      throw error;
+    }
+  }
+}
+
+/// A Catalogue that records what it was asked and answers what it was told
+/// to. Standing in for `CatalogueClient` the same way [FakeApi] stands in
+/// for `ApiClient`: no test reaches the network.
+class FakeCatalogueClient implements CatalogueClient {
+  @override
+  final Uri baseUrl = Uri.parse('http://localhost');
+
+  /// Every search made, in order.
+  final List<
+    ({
+      String q,
+      String category,
+      String language,
+      int page,
+      int? size,
+      CatalogueSort? sort,
+    })
+  >
+  searches = [];
+
+  final List<int> coverRequests = [];
+  final List<int> downloadRequests = [];
+
+  /// Queued responses, taken in order. Empty defaults to a ready, empty page.
+  final List<CatalogueSearchResult> searchResponses = [];
+
+  List<CategoryCount> categoryResponse = const [];
+  Uint8List coverBytes = Uint8List(0);
+  Uint8List downloadBytes = Uint8List(0);
+
+  /// Thrown by the next call, then cleared.
+  Object? nextError;
+
+  @override
+  Future<CatalogueSearchResult> search({
+    String q = '',
+    String category = '',
+    String language = '',
+    int page = 0,
+    int? size,
+    CatalogueSort? sort,
+  }) async {
+    _maybeThrow();
+    searches.add((
+      q: q,
+      category: category,
+      language: language,
+      page: page,
+      size: size,
+      sort: sort,
+    ));
+
+    if (searchResponses.isNotEmpty) return searchResponses.removeAt(0);
+
+    return CatalogueSearchResult(
+      catalogueReady: true,
+      results: const [],
+      page: page,
+      hasMore: false,
+    );
+  }
+
+  @override
+  Future<List<CategoryCount>> categories() async {
+    _maybeThrow();
+    return categoryResponse;
+  }
+
+  @override
+  Future<Uint8List> cover(int gutenbergId) async {
+    _maybeThrow();
+    coverRequests.add(gutenbergId);
+    return coverBytes;
+  }
+
+  @override
+  Future<Uint8List> download(int gutenbergId) async {
+    _maybeThrow();
+    downloadRequests.add(gutenbergId);
+    return downloadBytes;
+  }
 
   @override
   void dispose() {}

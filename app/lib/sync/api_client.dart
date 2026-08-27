@@ -229,7 +229,7 @@ class ApiClient {
     }
 
     if (response.statusCode >= 400) {
-      throw ApiException(response.statusCode, _messageFrom(response));
+      throw ApiException(response.statusCode, apiErrorMessage(response));
     }
 
     if (response.body.isEmpty) return const {};
@@ -291,19 +291,24 @@ class ApiClient {
     }
   }
 
-  static String _messageFrom(http.Response response) {
-    try {
-      final decoded = jsonDecode(response.body);
-      if (decoded is Map && decoded['detail'] is String) {
-        return decoded['detail'] as String;
-      }
-    } catch (_) {
-      // Not JSON, or not a problem detail. Fall through.
-    }
-    return 'The server returned ${response.statusCode}.';
-  }
-
   void dispose() => _http.close();
+}
+
+/// The RFC 9457 problem-detail message on [response], or a fallback naming
+/// its status code.
+///
+/// Shared by [ApiClient] and `CatalogueClient` — both talk to the same
+/// server, which reports errors the same way regardless of which route.
+String apiErrorMessage(http.Response response) {
+  try {
+    final decoded = jsonDecode(response.body);
+    if (decoded is Map && decoded['detail'] is String) {
+      return decoded['detail'] as String;
+    }
+  } catch (_) {
+    // Not JSON, or not a problem detail. Fall through.
+  }
+  return 'The server returned ${response.statusCode}.';
 }
 
 // -- results -----------------------------------------------------------
