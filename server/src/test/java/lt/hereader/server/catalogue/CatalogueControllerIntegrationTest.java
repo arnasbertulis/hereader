@@ -11,6 +11,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
@@ -21,7 +22,10 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -312,6 +316,103 @@ class CatalogueControllerIntegrationTest {
                 .andExpect(status().isBadRequest());
     }
 
+    // -- direction toggle -----------------------------------------------------
+
+    @Test
+    void directionReversesTitleOrder() throws Exception {
+        ingestion.refresh();
+
+        var ascending = idsOf(mvc.perform(get("/catalogue/search?sort=title&direction=ascending")));
+        var descending = idsOf(mvc.perform(get("/catalogue/search?sort=title&direction=descending")));
+
+        assertThat(descending).isEqualTo(reversed(ascending));
+    }
+
+    @Test
+    void directionReversesAuthorOrder() throws Exception {
+        ingestion.refresh();
+
+        // The Mayflower Compact (id 7) carries a blank Authors field: first
+        // ascending (resultsCanBeSortedByAuthor above), so last descending.
+        // The fixture's only untied Authors value, unlike "Carroll, Lewis"
+        // (ids 11, 12) — checking a tied value here would really be
+        // checking the tiebreak (title), which direction leaves unchanged.
+        var descending = idsOf(mvc.perform(get("/catalogue/search?sort=author&direction=descending")));
+
+        assertThat(descending.get(descending.size() - 1)).isEqualTo(7);
+    }
+
+    @Test
+    void directionReversesIssuedOrder() throws Exception {
+        ingestion.refresh();
+
+        // The Declaration of Independence (id 1, issued 1971-12-01) is the
+        // fixture's unique oldest date: first ascending
+        // (resultsCanBeSortedByIssueDate above), so last descending.
+        var descending = idsOf(mvc.perform(get("/catalogue/search?sort=issued&direction=descending")));
+
+        assertThat(descending.get(descending.size() - 1)).isEqualTo(1);
+    }
+
+    @Test
+    void omittingDirectionKeepsTodaysDefaultForEverySort() throws Exception {
+        ingestion.refresh();
+
+        // POPULARITY's own default is descending (most downloaded first);
+        // every other field's is ascending — CatalogueService.search.
+        assertThat(idsOf(mvc.perform(get("/catalogue/search?sort=popularity"))))
+                .isEqualTo(idsOf(mvc.perform(get("/catalogue/search?sort=popularity&direction=descending"))));
+        assertThat(idsOf(mvc.perform(get("/catalogue/search?sort=title"))))
+                .isEqualTo(idsOf(mvc.perform(get("/catalogue/search?sort=title&direction=ascending"))));
+        assertThat(idsOf(mvc.perform(get("/catalogue/search?sort=author"))))
+                .isEqualTo(idsOf(mvc.perform(get("/catalogue/search?sort=author&direction=ascending"))));
+        assertThat(idsOf(mvc.perform(get("/catalogue/search?sort=issued"))))
+                .isEqualTo(idsOf(mvc.perform(get("/catalogue/search?sort=issued&direction=ascending"))));
+    }
+
+    @Test
+    void directionMustBeARecognizedValue() throws Exception {
+        ingestion.refresh();
+
+        mvc.perform(get("/catalogue/search?direction=sideways"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void popularityNullsSortLastRegardlessOfDirection() throws Exception {
+        ingestion.refresh();
+
+        // Every entry starts with downloads null (no popularity refresh has
+        // run); give two of them a real count so the rest stay "no value"
+        // rather than "zero" — the distinction CatalogueDtos.Sort documents.
+        jdbc.sql("update catalogue_entries set downloads = 5 where gutenberg_id = 12").update();
+        jdbc.sql("update catalogue_entries set downloads = 100 where gutenberg_id = 11").update();
+
+        var ascending = idsOf(mvc.perform(get("/catalogue/search?sort=popularity&direction=ascending")));
+        var descending = idsOf(mvc.perform(get("/catalogue/search?sort=popularity&direction=descending")));
+
+        assertThat(ascending.subList(0, 2)).containsExactly(12, 11);
+        assertThat(descending.subList(0, 2)).containsExactly(11, 12);
+        // The other eight, all still null, fill out both directions' tails.
+        assertThat(ascending.subList(2, ascending.size()))
+                .isEqualTo(descending.subList(2, descending.size()));
+    }
+
+    @Test
+    void issuedNullsSortLastRegardlessOfDirection() throws Exception {
+        ingestion.refresh();
+
+        // Every fixture row carries an Issued date; null one out so "no
+        // value" is exercised rather than only "the oldest/newest date".
+        jdbc.sql("update catalogue_entries set issued = null where gutenberg_id = 1").update();
+
+        var ascending = idsOf(mvc.perform(get("/catalogue/search?sort=issued&direction=ascending")));
+        var descending = idsOf(mvc.perform(get("/catalogue/search?sort=issued&direction=descending")));
+
+        assertThat(ascending.get(ascending.size() - 1)).isEqualTo(1);
+        assertThat(descending.get(descending.size() - 1)).isEqualTo(1);
+    }
+
     // -- paging stays consistent under a filter and sort combination --------
 
     @Test
@@ -481,6 +582,21 @@ class CatalogueControllerIntegrationTest {
     }
 
     // -- helpers ---------------------------------------------------------
+
+    /// gutenbergId of every result, in response order — the direction tests
+    /// compare this rather than individual jsonPath assertions, since the
+    /// property under test is the whole ordering, not one row of it.
+    private List<Integer> idsOf(ResultActions result) throws Exception {
+        var body = result.andReturn().getResponse().getContentAsString();
+        var response = json.readValue(body, CatalogueDtos.SearchResponse.class);
+        return response.results().stream().map(CatalogueDtos.Entry::gutenbergId).toList();
+    }
+
+    private static <T> List<T> reversed(List<T> list) {
+        var copy = new ArrayList<>(list);
+        Collections.reverse(copy);
+        return copy;
+    }
 
     /// Removes the one-line row starting with [rowPrefix]. None of the ids
     /// used this way in this file (11, 50) are the multi-line title (id 2),
