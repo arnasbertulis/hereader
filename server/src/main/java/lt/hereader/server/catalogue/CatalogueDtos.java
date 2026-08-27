@@ -19,11 +19,19 @@ public final class CatalogueDtos {
             LocalDate issued) {}
 
     /// TITLE and AUTHOR are alphabetical; ISSUED is oldest first; POPULARITY
-    /// orders by download count, most downloaded first. Under POPULARITY an
-    /// Entry carrying no count sorts last, and under ISSUED an Entry with no
-    /// date sorts last too (CatalogueRepository.search), rather than either
-    /// dropping out of the page.
+    /// orders by download count, most downloaded first — each field's default
+    /// [Direction], applied when a caller names no explicit one (see
+    /// CatalogueService.search). Under POPULARITY an Entry carrying no count
+    /// sorts last, and under ISSUED an Entry with no date sorts last too
+    /// (CatalogueRepository.search), rather than either dropping out of the
+    /// page — in both directions, since "no value" and "the lowest actual
+    /// value" are distinct facts no direction toggle should conflate.
     public enum Sort { TITLE, AUTHOR, ISSUED, POPULARITY }
+
+    /// Reverses the order of whichever [Sort] field is active, tiebreak
+    /// columns unchanged (CatalogueRepository.search) — only the primary
+    /// field's own order flips.
+    public enum Direction { ASCENDING, DESCENDING }
 
     /// [catalogueReady] is false only when no Ingestion has ever completed —
     /// see CatalogueRepository.hasAnyEntries. A caller uses it to tell "the
