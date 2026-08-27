@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../catalogue/catalogue_client.dart';
 import '../catalogue/catalogue_importer.dart';
+import '../catalogue/language_names.dart';
 import '../data/library_repository.dart';
 import '../net/http_transport.dart';
 import '../sync/sync_engine.dart';
@@ -584,11 +585,15 @@ class _FiltersRow extends StatelessWidget {
               for (final l in languages)
                 PopupMenuItem(
                   value: l.language,
-                  child: Text('${l.language} (${l.count})'),
+                  child: Text(
+                    '${languageDisplayName(l.language)} (${l.count})',
+                  ),
                 ),
             ],
             child: _FilterChip(
-              label: language.isEmpty ? 'All languages' : language,
+              label: language.isEmpty
+                  ? 'All languages'
+                  : languageDisplayName(language),
               theme: theme,
             ),
           ),

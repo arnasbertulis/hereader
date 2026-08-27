@@ -316,11 +316,12 @@ void main() {
 
     await tester.tap(find.text('All languages'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('lt (2)').last);
+    expect(find.text('English (40)'), findsOneWidget);
+    await tester.tap(find.text('Lithuanian (2)').last);
     await tester.pumpAndSettle();
 
     expect(catalogue.searches.last.language, 'lt');
-    expect(find.text('lt'), findsOneWidget);
+    expect(find.text('Lithuanian'), findsOneWidget);
 
     await _disposeTree(tester);
   });
