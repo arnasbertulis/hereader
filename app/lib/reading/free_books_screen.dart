@@ -9,6 +9,7 @@ import '../catalogue/catalogue_importer.dart';
 import '../data/library_repository.dart';
 import '../net/http_transport.dart';
 import '../sync/sync_engine.dart';
+import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import 'book_cover.dart';
 import 'book_opener.dart';
@@ -56,8 +57,15 @@ const double _loadMoreThreshold = 300;
 const double _textBlockHeight = 96;
 
 enum _FreeBooksProblem {
-  /// The search or listing ran and matched nothing.
+  /// A search, a Category or a Language narrowed the Catalogue to nothing —
+  /// distinct from [catalogueEmpty], which is what the reader sees with none
+  /// of those active, so the two read differently rather than sharing one
+  /// generic "nothing here" message.
   nothingMatched,
+
+  /// The Catalogue is ready but holds no Entry at all, with no search and no
+  /// filter narrowing it.
+  catalogueEmpty,
 
   /// The device could not reach the server at all.
   noConnection,
@@ -65,6 +73,16 @@ enum _FreeBooksProblem {
   /// The server answered, but the Catalogue itself is not ready — ADR 0029:
   /// ingestion can be mid-run or have never completed.
   catalogueUnavailable,
+}
+
+/// The sort control's own words, rather than [CatalogueSort]'s wire names.
+extension on CatalogueSort {
+  String get label => switch (this) {
+    CatalogueSort.popularity => 'Most popular',
+    CatalogueSort.title => 'Title',
+    CatalogueSort.author => 'Author',
+    CatalogueSort.issued => 'Date added',
+  };
 }
 
 /// Browsing and importing from the Gutenberg Catalogue.
@@ -121,6 +139,16 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
   bool _loadingMore = false;
   _FreeBooksProblem? _problem;
 
+  String _category = '';
+  String _language = '';
+  CatalogueSort _sort = CatalogueSort.popularity;
+
+  /// The Category and Language browse lists, with their counts — fetched
+  /// once and independent of [_load]: a failure here costs the reader the
+  /// counts beside "All", not the screen itself.
+  List<CategoryCount> _categories = const [];
+  List<LanguageCount> _languages = const [];
+
   /// Ids the reader has just imported this sitting, painted as "in your
   /// library" without waiting on a fresh [LibraryRepository.hasBook] read —
   /// the write that would answer it has barely reached the database.
@@ -163,6 +191,24 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
   void initState() {
     super.initState();
     _load(reset: true);
+    _loadFilters();
+  }
+
+  Future<void> _loadFilters() async {
+    try {
+      final categories = await widget.client.categories();
+      final languages = await widget.client.languages();
+      if (!mounted) return;
+      setState(() {
+        _categories = categories;
+        _languages = languages;
+      });
+    } on NetworkException {
+      // Counts beside "All" are a convenience; browsing still works with
+      // just "All" showing.
+    } on ApiException {
+      // Same.
+    }
   }
 
   @override
@@ -175,6 +221,24 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
   void _onQueryChanged(String _) {
     _debounce?.cancel();
     _debounce = Timer(_debounceDelay, () => _load(reset: true));
+  }
+
+  void _onCategoryChanged(String category) {
+    if (category == _category) return;
+    setState(() => _category = category);
+    _load(reset: true);
+  }
+
+  void _onLanguageChanged(String language) {
+    if (language == _language) return;
+    setState(() => _language = language);
+    _load(reset: true);
+  }
+
+  void _onSortChanged(CatalogueSort sort) {
+    if (sort == _sort) return;
+    setState(() => _sort = sort);
+    _load(reset: true);
   }
 
   Future<bool> _checkInLibrary(String bookId) =>
@@ -201,12 +265,16 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
     // outcome the search field's debounce exists to prevent.
     final generation = _loadGeneration;
     final query = _searchController.text.trim();
+    final filtered =
+        query.isNotEmpty || _category.isNotEmpty || _language.isNotEmpty;
 
     try {
       final result = await widget.client.search(
         q: query,
+        category: _category,
+        language: _language,
         page: _page,
-        sort: query.isEmpty ? CatalogueSort.popularity : null,
+        sort: _sort,
       );
 
       if (!mounted || generation != _loadGeneration) return;
@@ -224,7 +292,11 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
         _entries.addAll(result.results);
         _hasMore = result.hasMore;
         _page += 1;
-        _problem = _entries.isEmpty ? _FreeBooksProblem.nothingMatched : null;
+        _problem = _entries.isEmpty
+            ? (filtered
+                  ? _FreeBooksProblem.nothingMatched
+                  : _FreeBooksProblem.catalogueEmpty)
+            : null;
         _loading = false;
         _loadingMore = false;
       });
@@ -326,6 +398,16 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
                 ),
               ),
             ),
+            _FiltersRow(
+              category: _category,
+              categories: _categories,
+              onCategory: _onCategoryChanged,
+              language: _language,
+              languages: _languages,
+              onLanguage: _onLanguageChanged,
+              sort: _sort,
+              onSort: _onSortChanged,
+            ),
             Expanded(child: _body(context)),
           ],
         ),
@@ -386,12 +468,18 @@ class _ProblemView extends StatelessWidget {
   const _ProblemView({required this.problem, required this.onRetry});
 
   String get _message => switch (problem) {
-    _FreeBooksProblem.nothingMatched => 'Nothing matched your search.',
+    _FreeBooksProblem.nothingMatched =>
+      'Nothing matched your search or filters.',
+    _FreeBooksProblem.catalogueEmpty => 'The catalogue has no books yet.',
     _FreeBooksProblem.noConnection =>
       'No internet connection. Check your connection and try again.',
     _FreeBooksProblem.catalogueUnavailable =>
       'The catalogue is not available right now. Try again later.',
   };
+
+  bool get _showsRetry =>
+      problem == _FreeBooksProblem.noConnection ||
+      problem == _FreeBooksProblem.catalogueUnavailable;
 
   @override
   Widget build(BuildContext context) {
@@ -409,7 +497,7 @@ class _ProblemView extends StatelessWidget {
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyLarge,
             ),
-            if (problem != _FreeBooksProblem.nothingMatched) ...[
+            if (_showsRetry) ...[
               const SizedBox(height: AppSpacing.lg),
               FilledButton(
                 key: freeBooksRetryButtonKey,
@@ -419,6 +507,128 @@ class _ProblemView extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Category, Language and Sort, in one `Wrap` the way Library's own
+/// `_ControlsRow` wraps its filter and sort — at a wide text scale the three
+/// menus do not fit one line, and this wraps the third onto its own line
+/// rather than clipping or overlapping it.
+///
+/// Stays mounted through every [_FreeBooksProblem]: it is a sibling of
+/// `_body` in [FreeBooksScreen.build], not inside it, so a reader who
+/// filtered to nothing keeps the menus that got them there rather than
+/// having to back out to change them.
+class _FiltersRow extends StatelessWidget {
+  final String category;
+  final List<CategoryCount> categories;
+  final ValueChanged<String> onCategory;
+  final String language;
+  final List<LanguageCount> languages;
+  final ValueChanged<String> onLanguage;
+  final CatalogueSort sort;
+  final ValueChanged<CatalogueSort> onSort;
+
+  const _FiltersRow({
+    required this.category,
+    required this.categories,
+    required this.onCategory,
+    required this.language,
+    required this.languages,
+    required this.onLanguage,
+    required this.sort,
+    required this.onSort,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        0,
+        AppSpacing.lg,
+        AppSpacing.sm,
+      ),
+      child: Wrap(
+        spacing: AppSpacing.xs,
+        runSpacing: AppSpacing.xs,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          PopupMenuButton<String>(
+            tooltip: 'Category',
+            initialValue: category,
+            onSelected: onCategory,
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: '', child: Text('All categories')),
+              for (final c in categories)
+                PopupMenuItem(
+                  value: c.category,
+                  child: Text('${c.category} (${c.count})'),
+                ),
+            ],
+            child: _FilterChip(
+              label: category.isEmpty ? 'All categories' : category,
+              theme: theme,
+            ),
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Language',
+            initialValue: language,
+            onSelected: onLanguage,
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: '', child: Text('All languages')),
+              for (final l in languages)
+                PopupMenuItem(
+                  value: l.language,
+                  child: Text('${l.language} (${l.count})'),
+                ),
+            ],
+            child: _FilterChip(
+              label: language.isEmpty ? 'All languages' : language,
+              theme: theme,
+            ),
+          ),
+          PopupMenuButton<CatalogueSort>(
+            tooltip: 'Sort by',
+            initialValue: sort,
+            onSelected: onSort,
+            itemBuilder: (context) => [
+              for (final option in CatalogueSort.values)
+                PopupMenuItem(value: option, child: Text(option.label)),
+            ],
+            child: _FilterChip(label: sort.label, theme: theme),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One menu's closed-state label plus its opening chevron, shared by all
+/// three of [_FiltersRow]'s menus so they read as one control family.
+class _FilterChip extends StatelessWidget {
+  final String label;
+  final ThemeData theme;
+
+  const _FilterChip({required this.label, required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xs,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: theme.textTheme.labelLarge),
+          const Icon(AppIcons.openMenu, size: 20),
+        ],
       ),
     );
   }
