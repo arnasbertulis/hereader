@@ -361,6 +361,40 @@ void main() {
     await _disposeTree(tester);
   });
 
+  testWidgets('reversing sort direction changes what is requested', (
+    tester,
+  ) async {
+    await pump(tester);
+    await tester.pumpAndSettle();
+    expect(catalogue.searches.single.direction, isNull);
+
+    await tester.tap(find.byKey(freeBooksReverseSortButtonKey));
+    await tester.pumpAndSettle();
+
+    expect(catalogue.searches.last.direction, CatalogueDirection.ascending);
+
+    await _disposeTree(tester);
+  });
+
+  testWidgets('changing sort resets a reversed direction', (tester) async {
+    await pump(tester);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(freeBooksReverseSortButtonKey));
+    await tester.pumpAndSettle();
+    expect(catalogue.searches.last.direction, CatalogueDirection.ascending);
+
+    await tester.tap(find.text('Most popular'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Title').last);
+    await tester.pumpAndSettle();
+
+    expect(catalogue.searches.last.sort, CatalogueSort.title);
+    expect(catalogue.searches.last.direction, isNull);
+
+    await _disposeTree(tester);
+  });
+
   testWidgets('no network reachable says so distinctly, with a retry', (
     tester,
   ) async {

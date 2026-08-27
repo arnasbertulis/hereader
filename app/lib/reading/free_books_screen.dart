@@ -37,6 +37,9 @@ const Key freeBooksMessageKey = Key('free-books-message');
 /// Identifies the button that repeats the last search.
 const Key freeBooksRetryButtonKey = Key('free-books-retry-button');
 
+/// Identifies the button that reverses the current sort's direction.
+const Key freeBooksReverseSortButtonKey = Key('free-books-reverse-sort-button');
+
 /// One tile's key, so a test can find a specific book by id rather than by
 /// the title it happens to carry this week.
 Key freeBooksTileKey(int gutenbergId) => Key('free-books-tile-$gutenbergId');
@@ -84,6 +87,24 @@ extension on CatalogueSort {
     CatalogueSort.author => 'Author',
     CatalogueSort.issued => 'Date added',
   };
+
+  /// The direction this field searches in when the reader has not flipped
+  /// it — matches `CatalogueService`'s own default (descending for
+  /// popularity, ascending otherwise), so the reverse toggle below has
+  /// something to invert.
+  CatalogueDirection get defaultDirection => this == CatalogueSort.popularity
+      ? CatalogueDirection.descending
+      : CatalogueDirection.ascending;
+
+  /// [defaultDirection], flipped when the reader has reversed this sort.
+  CatalogueDirection direction({required bool reversed}) =>
+      reversed ? defaultDirection.opposite : defaultDirection;
+}
+
+extension on CatalogueDirection {
+  CatalogueDirection get opposite => this == CatalogueDirection.ascending
+      ? CatalogueDirection.descending
+      : CatalogueDirection.ascending;
 }
 
 /// Browsing and importing from the Gutenberg Catalogue.
@@ -143,6 +164,12 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
   String _category = '';
   String _language = '';
   CatalogueSort _sort = CatalogueSort.popularity;
+
+  /// Flips [CatalogueSort.defaultDirection] for the active [_sort]. Resets
+  /// with the field, the same reasoning `library_screen.dart`'s own
+  /// `_chooseSort` gives: "Oldest first" carried over onto Title is not the
+  /// request the reader made by picking Title.
+  bool _reversed = false;
 
   /// The Category and Language browse lists, with their counts — fetched
   /// once and independent of [_load]: a failure here costs the reader the
@@ -238,7 +265,15 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
 
   void _onSortChanged(CatalogueSort sort) {
     if (sort == _sort) return;
-    setState(() => _sort = sort);
+    setState(() {
+      _sort = sort;
+      _reversed = false;
+    });
+    _load(reset: true);
+  }
+
+  void _onFlipDirection() {
+    setState(() => _reversed = !_reversed);
     _load(reset: true);
   }
 
@@ -276,6 +311,7 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
         language: _language,
         page: _page,
         sort: _sort,
+        direction: _reversed ? _sort.direction(reversed: true) : null,
       );
 
       if (!mounted || generation != _loadGeneration) return;
@@ -402,6 +438,8 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
               onLanguage: _onLanguageChanged,
               sort: _sort,
               onSort: _onSortChanged,
+              reversed: _reversed,
+              onFlip: _onFlipDirection,
             ),
             Expanded(child: _body(context)),
           ],
@@ -525,6 +563,8 @@ class _FiltersRow extends StatelessWidget {
   final ValueChanged<String> onLanguage;
   final CatalogueSort sort;
   final ValueChanged<CatalogueSort> onSort;
+  final bool reversed;
+  final VoidCallback onFlip;
 
   const _FiltersRow({
     required this.category,
@@ -535,6 +575,8 @@ class _FiltersRow extends StatelessWidget {
     required this.onLanguage,
     required this.sort,
     required this.onSort,
+    required this.reversed,
+    required this.onFlip,
   });
 
   @override
@@ -600,6 +642,20 @@ class _FiltersRow extends StatelessWidget {
                 PopupMenuItem(value: option, child: Text(option.label)),
             ],
             child: _FilterChip(label: sort.label, theme: theme),
+          ),
+          // Reflects direction with `isSelected` rather than a word label:
+          // unlike Library's `LibrarySort`, `CatalogueSort` names one end
+          // per field, not two, so there is no "Oldest first" to swap in.
+          IconButton(
+            key: freeBooksReverseSortButtonKey,
+            tooltip:
+                sort.direction(reversed: reversed) ==
+                    CatalogueDirection.ascending
+                ? 'Ascending'
+                : 'Descending',
+            isSelected: reversed,
+            icon: const Icon(AppIcons.flipSortDirection, size: 20),
+            onPressed: onFlip,
           ),
         ],
       ),
