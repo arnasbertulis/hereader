@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
+import 'fakes.dart';
 import 'test_database.dart';
 
 /// Drift schedules a zero-duration timer when a query stream is cancelled.
@@ -31,6 +32,7 @@ void main() {
   late AuthStore auth;
   late ApiClient api;
   late SyncEngine sync;
+  late FakeCatalogueClient catalogue;
 
   setUp(() {
     db = AppDatabase(testExecutor());
@@ -43,6 +45,7 @@ void main() {
       auth: auth,
       database: db,
     );
+    catalogue = FakeCatalogueClient();
   });
 
   tearDown(() async {
@@ -90,6 +93,7 @@ void main() {
             repository: repository,
             issueStamp: _stamp,
           ),
+          catalogue: catalogue,
         ),
       ),
     );
@@ -329,6 +333,9 @@ void main() {
 
       await tester.tap(find.byKey(libraryAddButtonKey));
       await tester.pumpAndSettle();
+      // Free books now sits above it in the menu, pushing this option below
+      // the dialog's own viewport at this window size.
+      await tester.ensureVisible(find.text('Paste text'));
       await tester.tap(find.text('Paste text'));
       await tester.pumpAndSettle();
 

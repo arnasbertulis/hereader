@@ -94,9 +94,13 @@ lib/
    │                             and BookSourceFormat — an EPUB parses
    │                             through EpubParser, a note through
    │                             HtmlNormalizer directly
-   ├─ add_menu.dart             The three-way add dialog (EPUB/note/paste),
-   │                             shared by the library's add button, the
-   │                             library's empty state and Home's
+   ├─ add_menu.dart             The four-way add dialog (Free books/EPUB/
+   │                             note/paste), shared by the library's add
+   │                             button, the library's empty state and Home's
+   ├─ free_books_screen.dart    Full-screen Gutenberg Catalogue search and
+   │                             browse, opened from AddMenu. Debounced live
+   │                             search, most-downloaded default, import
+   │                             straight into the Library
    ├─ note_editor_screen.dart   Write a note, or edit one already stored
    ├─ book_cover.dart           Covers, and the generated face for a book
    │                             that declares none

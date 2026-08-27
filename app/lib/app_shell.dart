@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'catalogue/catalogue_client.dart';
 import 'data/library_repository.dart';
 import 'reading/home_screen.dart';
 import 'reading/library_screen.dart';
@@ -112,9 +113,21 @@ class _AppShellState extends State<AppShell> {
 
   late int _index = widget.initialTab;
 
+  /// One client for the whole app, not one per tab that happens to open the
+  /// Free books screen.
+  late final CatalogueClient _catalogue = CatalogueClient(
+    baseUrl: widget.api.baseUrl,
+  );
+
   void _select(int index) {
     if (index == _index) return;
     setState(() => _index = index);
+  }
+
+  @override
+  void dispose() {
+    _catalogue.dispose();
+    super.dispose();
   }
 
   @override
@@ -131,12 +144,14 @@ class _AppShellState extends State<AppShell> {
           onSeeAll: () => _select(AppShell.libraryTab),
           issueStamp: widget.sync.issueStamp,
           display: widget.display,
+          catalogue: _catalogue,
         ),
         LibraryScreen(
           repository: widget.repository,
           sync: widget.sync,
           issueStamp: widget.sync.issueStamp,
           display: widget.display,
+          catalogue: _catalogue,
         ),
         SettingsScreen(
           repository: widget.repository,

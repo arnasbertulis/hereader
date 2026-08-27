@@ -6,11 +6,11 @@ import '../theme/app_tokens.dart';
 /// What the add menu came back with.
 ///
 /// Shared between the library and Home rather than declared once per screen:
-/// both open the same dialog and act on the same three answers, and a second
+/// both open the same dialog and act on the same four answers, and a second
 /// enum meaning the same thing would only invite the two to drift.
-enum AddChoice { epub, paste, note }
+enum AddChoice { freeBooks, epub, paste, note }
 
-/// Three ways to start reading, stacked.
+/// Four ways to start reading, stacked.
 ///
 /// The library's own add button opens this, and so does Home's empty state —
 /// one dialog, asked from two places, rather than Home keeping a shorter,
@@ -23,9 +23,9 @@ enum AddChoice { epub, paste, note }
 /// tap target: a reader who cannot reliably hit a small target gets a box the
 /// size of a hand instead of a 48dp row.
 ///
-/// Each block says what it does and what happens to it afterwards. EPUB and
-/// note both stay in the library; paste does not, and a reader finding that
-/// out later is a reader who lost something.
+/// Each block says what it does and what happens to it afterwards. Free
+/// books, EPUB and note all stay in the library; paste does not, and a
+/// reader finding that out later is a reader who lost something.
 class AddMenu extends StatelessWidget {
   const AddMenu({super.key});
 
@@ -70,6 +70,17 @@ class AddMenu extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                _AddMenuOption(
+                  choice: AddChoice.freeBooks,
+                  icon: AppIcons.tabLibrary,
+                  title: 'Free books',
+                  detail:
+                      'Free books from a public catalogue. Pick one to '
+                      'download it to this device; it stays in your library '
+                      'like any other book.',
+                  minHeight: _minOptionHeight,
+                ),
+                const Divider(),
                 _AddMenuOption(
                   choice: AddChoice.epub,
                   icon: AppIcons.importFile,

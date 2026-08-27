@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
+import '../catalogue/catalogue_client.dart';
 import '../data/library_repository.dart';
 import '../sync/sync_engine.dart';
 import '../theme/app_icons.dart';
@@ -15,6 +16,7 @@ import 'add_menu.dart';
 import 'book_cover.dart';
 import 'book_opener.dart';
 import 'book_progress.dart';
+import 'free_books_screen.dart';
 import 'library_book.dart';
 import 'note_editor_screen.dart';
 import 'paste_reader_screen.dart';
@@ -97,12 +99,18 @@ class LibraryScreen extends StatefulWidget {
   /// sibling tab kept alive beside this one.
   final ReadingDisplayController display;
 
+  /// Reaches the Catalogue for the Free books screen. Owned by [AppShell],
+  /// not here — one client per app, not one per tab it happens to be opened
+  /// from.
+  final CatalogueClient catalogue;
+
   const LibraryScreen({
     super.key,
     required this.repository,
     required this.sync,
     required this.issueStamp,
     required this.display,
+    required this.catalogue,
   });
 
   @override
@@ -236,6 +244,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
     if (choice == null || !mounted) return;
 
     switch (choice) {
+      case AddChoice.freeBooks:
+        _openFreeBooks();
       case AddChoice.epub:
         await _import();
       case AddChoice.paste:
@@ -243,6 +253,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
       case AddChoice.note:
         await _openNote();
     }
+  }
+
+  void _openFreeBooks() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FreeBooksScreen(
+          client: widget.catalogue,
+          repository: _repo,
+          sync: widget.sync,
+        ),
+      ),
+    );
   }
 
   Future<void> _import() async {

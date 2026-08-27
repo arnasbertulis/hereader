@@ -434,6 +434,9 @@ void main() {
     // offstage behind Home.
     await tester.tap(find.text('Add something to read'));
     await tester.pumpAndSettle();
+    // Free books now sits above it in the menu, pushing this option below
+    // the dialog's own viewport at this window size.
+    await tester.ensureVisible(find.text('Paste text'));
     await tester.tap(find.text('Paste text'));
     await tester.pumpAndSettle();
 
