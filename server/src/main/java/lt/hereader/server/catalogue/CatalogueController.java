@@ -45,7 +45,9 @@ class CatalogueController {
     /// CatalogueService treats it as an ordinary filter that happens to
     /// match nothing. [sort] is "title", "author", "issued" or "popularity",
     /// case-insensitive; left absent, CatalogueService picks a default from
-    /// whether [q] is blank.
+    /// whether [q] is blank. [direction] is "ascending" or "descending",
+    /// case-insensitive; left absent, CatalogueService picks the resolved
+    /// [sort] field's own existing default direction.
     @GetMapping("/search")
     CatalogueDtos.SearchResponse search(
             @RequestParam(required = false, defaultValue = "") String q,
@@ -53,13 +55,15 @@ class CatalogueController {
             @RequestParam(required = false, defaultValue = "") String language,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(required = false) Integer size,
-            @RequestParam(required = false) String sort) {
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false) String direction) {
 
         if (page < 0) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "page cannot be negative.");
         }
-        return service.search(q, category, language, page, size, parseSort(sort));
+        return service.search(
+                q, category, language, page, size, parseSort(sort), parseDirection(direction));
     }
 
     /// Every Category at least one Catalogue Entry carries, with how many —
@@ -108,6 +112,18 @@ class CatalogueController {
         } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "sort must be 'title', 'author', 'issued' or 'popularity'.");
+        }
+    }
+
+    private static CatalogueDtos.Direction parseDirection(String direction) {
+        if (direction == null || direction.isBlank()) {
+            return null;
+        }
+        try {
+            return CatalogueDtos.Direction.valueOf(direction.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "direction must be 'ascending' or 'descending'.");
         }
     }
 }

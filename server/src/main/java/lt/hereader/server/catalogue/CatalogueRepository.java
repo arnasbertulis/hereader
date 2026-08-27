@@ -88,29 +88,39 @@ public class CatalogueRepository {
     /// Matches [query] against title or authors, case-insensitively, when
     /// non-blank; otherwise every entry. [category] and [language], each
     /// blank for "no filter", narrow that further and combine with it and
-    /// with each other. Ordered by title, authors or issue date, or by
-    /// download count under [sort] POPULARITY — every case breaks ties on
-    /// [gutenberg_id] so paging is stable no matter which filters are set.
+    /// with each other. Ordered by title, authors, issue date or download
+    /// count per [sort], in [direction] — every case breaks ties on title
+    /// then [gutenberg_id] (title alone for [sort] TITLE), unaffected by
+    /// [direction], so paging is stable no matter which filters or direction
+    /// are set.
     ///
     /// Asks for one more row than the caller wants, so hasMore is known
     /// without a second, count-only query.
     ///
-    /// [sort] is never caller-supplied text — CatalogueController parses it
-    /// into the enum before this is called — so building the order-by clause
-    /// from it here is safe. [category] and [language] stay caller-supplied
-    /// text throughout and are only ever bound as parameters, never
-    /// concatenated into the SQL.
+    /// [sort] and [direction] are never caller-supplied text — CatalogueController
+    /// parses them into the enums before this is called — so building the
+    /// order-by clause from them here is safe. [category] and [language] stay
+    /// caller-supplied text throughout and are only ever bound as parameters,
+    /// never concatenated into the SQL.
     public List<CatalogueDtos.Entry> search(
             String query, String category, String language,
-            int offset, int limit, CatalogueDtos.Sort sort) {
+            int offset, int limit, CatalogueDtos.Sort sort, CatalogueDtos.Direction direction) {
 
         var pattern = "%" + escapeLike(query) + "%";
-        var orderBy = switch (sort) {
-            case POPULARITY -> "downloads desc nulls last, title, gutenberg_id";
-            case AUTHOR -> "authors, title, gutenberg_id";
-            case ISSUED -> "issued, title, gutenberg_id";
-            case TITLE -> "title, gutenberg_id";
+        var primaryColumn = switch (sort) {
+            case POPULARITY -> "downloads";
+            case AUTHOR -> "authors";
+            case ISSUED -> "issued";
+            case TITLE -> "title";
         };
+        var directionSql = direction == CatalogueDtos.Direction.DESCENDING ? "desc" : "asc";
+        var tiebreak = sort == CatalogueDtos.Sort.TITLE ? "gutenberg_id" : "title, gutenberg_id";
+        // nulls last unconditionally: default nulls placement flips with
+        // direction (ascending nulls last, descending nulls first), and only
+        // downloads/issued can ever be null, so this pins the "no value
+        // sorts last" rule to hold in both directions without depending on
+        // which column is active.
+        var orderBy = primaryColumn + " " + directionSql + " nulls last, " + tiebreak;
 
         return jdbc.sql("""
                 select gutenberg_id, title, authors, language, subjects, issued

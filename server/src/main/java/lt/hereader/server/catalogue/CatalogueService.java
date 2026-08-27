@@ -26,6 +26,12 @@ public class CatalogueService {
     /// with no search text is a shelf of what's actually being read, not an
     /// alphabetical database dump) and a non-blank one defaults to TITLE.
     ///
+    /// [requestedDirection] is likewise null when the caller named no
+    /// explicit direction, and defaults per the resolved [sort]: DESCENDING
+    /// for POPULARITY (most downloaded first), ASCENDING otherwise
+    /// (alphabetical, oldest first) — each field's existing default,
+    /// unchanged for every caller that predates the direction parameter.
+    ///
     /// [category] and [language] are trimmed here and left blank for "no
     /// filter" — an unrecognized value of either narrows the result to
     /// nothing rather than failing, since CatalogueRepository.search treats
@@ -34,7 +40,8 @@ public class CatalogueService {
     /// reader is never defaulted into a language they didn't ask for.
     public CatalogueDtos.SearchResponse search(
             String query, String category, String language,
-            int page, Integer size, CatalogueDtos.Sort requestedSort) {
+            int page, Integer size, CatalogueDtos.Sort requestedSort,
+            CatalogueDtos.Direction requestedDirection) {
 
         var normalizedQuery = normalize(query);
         var normalizedCategory = normalize(category);
@@ -43,6 +50,11 @@ public class CatalogueService {
         var sort = requestedSort != null
                 ? requestedSort
                 : normalizedQuery.isEmpty() ? CatalogueDtos.Sort.POPULARITY : CatalogueDtos.Sort.TITLE;
+        var direction = requestedDirection != null
+                ? requestedDirection
+                : sort == CatalogueDtos.Sort.POPULARITY
+                        ? CatalogueDtos.Direction.DESCENDING
+                        : CatalogueDtos.Direction.ASCENDING;
 
         if (!repository.hasAnyEntries()) {
             return new CatalogueDtos.SearchResponse(false, List.of(), page, false);
@@ -52,7 +64,7 @@ public class CatalogueService {
         // query — the same trick SyncRepository.eventsSince uses.
         var fetched = repository.search(
                 normalizedQuery, normalizedCategory, normalizedLanguage,
-                page * cappedSize, cappedSize + 1, sort);
+                page * cappedSize, cappedSize + 1, sort, direction);
         var hasMore = fetched.size() > cappedSize;
         var results = hasMore ? fetched.subList(0, cappedSize) : fetched;
 
