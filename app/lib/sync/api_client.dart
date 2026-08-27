@@ -1,39 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../net/http_transport.dart';
 import 'auth_store.dart';
 
-/// Something the API said no to.
-class ApiException implements Exception {
-  final int statusCode;
-
-  /// Safe to show a reader: the service returns RFC 9457 problem details
-  /// with a human-readable message.
-  final String message;
-
-  const ApiException(this.statusCode, this.message);
-
-  bool get isUnauthorized => statusCode == 401;
-  bool get isConflict => statusCode == 409;
-
-  @override
-  String toString() => 'ApiException($statusCode): $message';
-}
-
-/// The network was unreachable, rather than the service refusing.
-///
-/// Distinct from [ApiException] because the responses differ: a network
-/// failure means leave the outbox alone and try later, while a rejection
-/// means this event will never succeed and should be parked.
-class NetworkException implements Exception {
-  final String message;
-  const NetworkException(this.message);
-
-  @override
-  String toString() => 'NetworkException: $message';
-}
+export '../net/http_transport.dart' show ApiException, NetworkException;
 
 /// Calls the sync service.
 ///
@@ -43,9 +15,7 @@ class NetworkException implements Exception {
 class ApiClient {
   final Uri baseUrl;
   final AuthStore auth;
-  final http.Client _http;
-
-  static const _timeout = Duration(seconds: 15);
+  final HttpTransport _transport;
 
   /// Guards against a burst of parallel requests each triggering their own
   /// refresh. The first one refreshes; the rest wait for it.
@@ -55,7 +25,7 @@ class ApiClient {
     required this.baseUrl,
     required this.auth,
     http.Client? httpClient,
-  }) : _http = httpClient ?? http.Client();
+  }) : _transport = HttpTransport(httpClient ?? http.Client());
 
   // -- auth ----------------------------------------------------------
 
@@ -185,10 +155,7 @@ class ApiClient {
       queryParameters: query,
     );
 
-    final headers = <String, String>{
-      if (body != null) 'Content-Type': 'application/json',
-    };
-
+    final headers = <String, String>{};
     if (authenticated) {
       final token = auth.current?.accessToken;
       if (token == null) {
@@ -197,19 +164,12 @@ class ApiClient {
       headers['Authorization'] = 'Bearer $token';
     }
 
-    final http.Response response;
-    try {
-      final request = http.Request(method, uri)..headers.addAll(headers);
-      if (body != null) request.body = jsonEncode(body);
-
-      response = await http.Response.fromStream(
-        await _http.send(request).timeout(_timeout),
-      );
-    } catch (e) {
-      // Unreachable, refused, timed out: all the same to a caller, which
-      // should leave its work queued and try later.
-      throw NetworkException('Could not reach the server.');
-    }
+    final response = await _transport.send(
+      method,
+      uri,
+      headers: headers,
+      jsonBody: body,
+    );
 
     // An expired access token. Refresh once and retry; a second 401 means
     // the refresh token is gone too.
@@ -228,19 +188,7 @@ class ApiClient {
       }
     }
 
-    if (response.statusCode >= 400) {
-      throw ApiException(response.statusCode, apiErrorMessage(response));
-    }
-
-    if (response.body.isEmpty) return const {};
-
-    final decoded = jsonDecode(response.body);
-
-    // Some endpoints answer with a bare array. Wrapping it keeps one return
-    // type rather than making every caller handle both.
-    if (expectList) return {'items': decoded};
-
-    return decoded as Map<String, dynamic>;
+    return _transport.readJson(response, expectList: expectList);
   }
 
   /// Trades the refresh token for a new pair.
@@ -291,24 +239,7 @@ class ApiClient {
     }
   }
 
-  void dispose() => _http.close();
-}
-
-/// The RFC 9457 problem-detail message on [response], or a fallback naming
-/// its status code.
-///
-/// Shared by [ApiClient] and `CatalogueClient` — both talk to the same
-/// server, which reports errors the same way regardless of which route.
-String apiErrorMessage(http.Response response) {
-  try {
-    final decoded = jsonDecode(response.body);
-    if (decoded is Map && decoded['detail'] is String) {
-      return decoded['detail'] as String;
-    }
-  } catch (_) {
-    // Not JSON, or not a problem detail. Fall through.
-  }
-  return 'The server returned ${response.statusCode}.';
+  void dispose() => _transport.dispose();
 }
 
 // -- results -----------------------------------------------------------
