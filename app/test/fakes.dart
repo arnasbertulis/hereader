@@ -186,6 +186,7 @@ class FakeCatalogueClient implements CatalogueClient {
       int page,
       int? size,
       CatalogueSort? sort,
+      CatalogueDirection? direction,
     })
   >
   searches = [];
@@ -212,6 +213,7 @@ class FakeCatalogueClient implements CatalogueClient {
     int page = 0,
     int? size,
     CatalogueSort? sort,
+    CatalogueDirection? direction,
   }) async {
     _maybeThrow();
     searches.add((
@@ -221,6 +223,7 @@ class FakeCatalogueClient implements CatalogueClient {
       page: page,
       size: size,
       sort: sort,
+      direction: direction,
     ));
 
     if (searchResponses.isNotEmpty) return searchResponses.removeAt(0);

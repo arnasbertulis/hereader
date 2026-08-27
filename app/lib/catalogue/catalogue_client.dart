@@ -10,6 +10,16 @@ import '../net/http_transport.dart';
 /// value the `/catalogue/search` endpoint accepts.
 enum CatalogueSort { title, author, issued, popularity }
 
+/// Which end of [CatalogueSort] the search starts from.
+///
+/// Matches `CatalogueDtos.Direction` on the server; `.name` is the literal
+/// query value (`ascending`/`descending`) the `/catalogue/search` endpoint
+/// accepts, case-insensitively. Omitting it entirely (`null`) preserves each
+/// [CatalogueSort]'s own default — descending for popularity, ascending for
+/// everything else — which is why [search] takes this as nullable rather than
+/// defaulting it client-side.
+enum CatalogueDirection { ascending, descending }
+
 /// One book as the Catalogue knows it — enough to list, search and offer it.
 /// Mirrors `CatalogueDtos.Entry` on the server.
 class CatalogueEntry {
@@ -139,6 +149,7 @@ class CatalogueClient {
     int page = 0,
     int? size,
     CatalogueSort? sort,
+    CatalogueDirection? direction,
   }) async {
     final body = await _getJson(
       '/catalogue/search',
@@ -149,6 +160,7 @@ class CatalogueClient {
         'page': '$page',
         if (size != null) 'size': '$size',
         if (sort != null) 'sort': sort.name,
+        if (direction != null) 'direction': direction.name,
       },
     );
 
