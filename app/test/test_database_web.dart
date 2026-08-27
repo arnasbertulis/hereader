@@ -20,9 +20,9 @@ Future<void> initTestDatabase() async {
     loaded = await WasmSqlite3.loadFromUrl(Uri.parse('/sqlite3.wasm'));
   } catch (error) {
     throw StateError(
-      'Failed to fetch /sqlite3.wasm. Run `cp web/sqlite3.wasm '
-      'test/sqlite3.wasm` in app/ before running `flutter test --platform '
-      'chrome`.\n$error',
+      'Failed to fetch /sqlite3.wasm. Run `dart run '
+      'tool/stage_chrome_test_assets.dart` in app/ before running '
+      '`flutter test --platform chrome`.\n$error',
     );
   }
   loaded.registerVirtualFileSystem(InMemoryFileSystem(), makeDefault: true);

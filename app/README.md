@@ -499,13 +499,15 @@ runs the suite on the Dart VM. A second command runs the same suite in a real
 Chrome instead:
 
 ```bash
-cp web/sqlite3.wasm test/sqlite3.wasm
+dart run tool/stage_chrome_test_assets.dart
 flutter test --platform chrome --timeout 60s $(grep -L "@TestOn('vm')" test/*_test.dart)
 ```
 
-The copy is gitignored and made fresh each time from the one tracked
-`web/sqlite3.wasm`, because `flutter_tools` serves `<cwd>/test` at the test
-server's root rather than `<cwd>/web`. The file list leaves out the
+The staged copies are gitignored and made fresh each time, because
+`flutter_tools` serves `<cwd>/test` at the test server's root rather than
+`<cwd>/web` — `test/` is the only directory the in-browser runner can reach.
+`ci-flutter.yml` runs the same script rather than its own copy step, so
+staging is written down once. The file list leaves out the
 `@TestOn('vm')` suites rather than relying on the annotation to skip them:
 `flutter test --platform chrome` compiles every discovered test file into
 one shared bundle before `@TestOn` filtering ever runs, so a suite that
@@ -522,13 +524,8 @@ executor hangs there until the runner's timeout rather than failing. This is
 also why `testExecutor()` is synchronous — if the warm-up is ever skipped it
 throws and says so.
 
-**On Windows, one extra step before the Chrome run:**
-
-```bash
-cp -r "$(dirname $(dirname $(which flutter)))/bin/cache/flutter_web_sdk/canvaskit" test/canvaskit
-```
-
-Without it the run compiles, launches Chrome and then hangs at zero CPU with
+**The second staged copy is CanvasKit, and only Windows needs it.** Without
+it the run compiles, launches Chrome and then hangs at zero CPU with
 no output. `flutter_tools`' `_localCanvasKitHandler`
 (`flutter_web_platform.dart:518`) builds its path with
 `_fileSystem.path.fromUri` and then guards on `startsWith('canvaskit/')` —
@@ -539,7 +536,13 @@ The next handler in the server cascade serves `<cwd>/test` and builds its
 path correctly, so a copy of the SDK's `canvaskit` directory there is what
 gets served instead. It is gitignored, and CI does not need it —
 `ci-flutter.yml` runs on `ubuntu-latest`, where the path context is posix
-and the handler's guard matches.
+and the handler's guard matches, so the script skips this half there.
+
+That asymmetry is why the step is a script rather than a line in this file.
+The Windows copy is invisible to CI by construction, so nothing fails when
+it is forgotten — the run just hangs, with no error naming a cause. #192 was
+filed against exactly that, on a checkout whose README already described the
+fix five hundred lines in.
 
 The Chrome run compiles with DDC, not `dart2js` — the compiler the deployed
 web build actually uses — so it proves app code runs in a browser at all, not
