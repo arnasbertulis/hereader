@@ -169,7 +169,8 @@ void main() {
     await _disposeTree(tester);
   });
 
-  testWidgets('a search that matches nothing says so', (tester) async {
+  testWidgets('an empty catalogue with no filters active says so '
+      'distinctly', (tester) async {
     catalogue.searchResponses.add(
       const CatalogueSearchResult(
         catalogueReady: true,
@@ -183,10 +184,178 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(freeBooksMessageKey), findsOneWidget);
-    expect(find.text('Nothing matched your search.'), findsOneWidget);
+    expect(find.text('The catalogue has no books yet.'), findsOneWidget);
     // Nothing to retry into a different result: the reader would type a
     // different search, not press a button.
     expect(find.byKey(freeBooksRetryButtonKey), findsNothing);
+
+    await _disposeTree(tester);
+  });
+
+  testWidgets('zero matches under an active filter reads differently, and '
+      'leaves the controls on screen', (tester) async {
+    final entry = entryStub();
+    catalogue.searchResponses.add(
+      CatalogueSearchResult(
+        catalogueReady: true,
+        results: [entry.toEntry()],
+        page: 0,
+        hasMore: false,
+      ),
+    );
+
+    await pump(tester);
+    await tester.pumpAndSettle();
+
+    catalogue.searchResponses.add(
+      const CatalogueSearchResult(
+        catalogueReady: true,
+        results: [],
+        page: 0,
+        hasMore: false,
+      ),
+    );
+
+    await tester.enterText(find.byKey(freeBooksSearchFieldKey), 'zzz');
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Nothing matched your search or filters.'),
+      findsOneWidget,
+    );
+    // The search field and the filter menus stay mounted rather than the
+    // problem view replacing the whole screen.
+    expect(find.byKey(freeBooksSearchFieldKey), findsOneWidget);
+    expect(find.text('All categories'), findsOneWidget);
+    expect(find.byKey(freeBooksRetryButtonKey), findsNothing);
+
+    await _disposeTree(tester);
+  });
+
+  testWidgets('choosing a Category filters the search and combines with '
+      'typed text', (tester) async {
+    catalogue.categoryResponse = const [
+      CategoryCount(category: 'Fiction', count: 12),
+      CategoryCount(category: 'Poetry', count: 3),
+    ];
+    catalogue.searchResponses.add(
+      const CatalogueSearchResult(
+        catalogueReady: true,
+        results: [],
+        page: 0,
+        hasMore: false,
+      ),
+    );
+
+    await pump(tester);
+    await tester.pumpAndSettle();
+    expect(catalogue.searches.single.category, '');
+
+    catalogue.searchResponses.add(
+      const CatalogueSearchResult(
+        catalogueReady: true,
+        results: [],
+        page: 0,
+        hasMore: false,
+      ),
+    );
+
+    await tester.tap(find.text('All categories'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Fiction (12)').last);
+    await tester.pumpAndSettle();
+
+    expect(catalogue.searches.last.category, 'Fiction');
+    expect(find.text('Fiction'), findsOneWidget);
+
+    catalogue.searchResponses.add(
+      const CatalogueSearchResult(
+        catalogueReady: true,
+        results: [],
+        page: 0,
+        hasMore: false,
+      ),
+    );
+    await tester.enterText(find.byKey(freeBooksSearchFieldKey), 'twain');
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+
+    expect(catalogue.searches.last.category, 'Fiction');
+    expect(catalogue.searches.last.q, 'twain');
+
+    await _disposeTree(tester);
+  });
+
+  testWidgets('choosing a Language filters the search', (tester) async {
+    catalogue.languageResponse = const [
+      LanguageCount(language: 'en', count: 40),
+      LanguageCount(language: 'lt', count: 2),
+    ];
+    catalogue.searchResponses.add(
+      const CatalogueSearchResult(
+        catalogueReady: true,
+        results: [],
+        page: 0,
+        hasMore: false,
+      ),
+    );
+
+    await pump(tester);
+    await tester.pumpAndSettle();
+    expect(catalogue.searches.single.language, '');
+
+    catalogue.searchResponses.add(
+      const CatalogueSearchResult(
+        catalogueReady: true,
+        results: [],
+        page: 0,
+        hasMore: false,
+      ),
+    );
+
+    await tester.tap(find.text('All languages'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('lt (2)').last);
+    await tester.pumpAndSettle();
+
+    expect(catalogue.searches.last.language, 'lt');
+    expect(find.text('lt'), findsOneWidget);
+
+    await _disposeTree(tester);
+  });
+
+  testWidgets('choosing a sort order changes what is requested', (
+    tester,
+  ) async {
+    catalogue.searchResponses.add(
+      const CatalogueSearchResult(
+        catalogueReady: true,
+        results: [],
+        page: 0,
+        hasMore: false,
+      ),
+    );
+
+    await pump(tester);
+    await tester.pumpAndSettle();
+    expect(catalogue.searches.single.sort, CatalogueSort.popularity);
+
+    catalogue.searchResponses.add(
+      const CatalogueSearchResult(
+        catalogueReady: true,
+        results: [],
+        page: 0,
+        hasMore: false,
+      ),
+    );
+
+    await tester.tap(find.text('Most popular'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Title').last);
+    await tester.pumpAndSettle();
+
+    expect(catalogue.searches.last.sort, CatalogueSort.title);
 
     await _disposeTree(tester);
   });
@@ -336,6 +505,96 @@ void main() {
     expect(catalogue.searches, hasLength(2));
     expect(catalogue.searches.last.page, 1);
     expect(find.text('The Last Book'), findsOneWidget);
+
+    await _disposeTree(tester);
+  });
+
+  testWidgets(
+    'an active category filter carries through a load-more page request',
+    (tester) async {
+      catalogue.categoryResponse = const [
+        CategoryCount(category: 'Fiction', count: 12),
+      ];
+      catalogue.searchResponses.add(
+        const CatalogueSearchResult(
+          catalogueReady: true,
+          results: [],
+          page: 0,
+          hasMore: false,
+        ),
+      );
+
+      await pump(tester);
+      await tester.pumpAndSettle();
+
+      final firstPage = List.generate(
+        12,
+        (i) => entryStub(gutenbergId: i + 1, title: 'Book $i').toEntry(),
+      );
+      catalogue.searchResponses.add(
+        CatalogueSearchResult(
+          catalogueReady: true,
+          results: firstPage,
+          page: 0,
+          hasMore: true,
+        ),
+      );
+      await tester.tap(find.text('All categories'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Fiction (12)').last);
+      await tester.pumpAndSettle();
+
+      expect(catalogue.searches.last.category, 'Fiction');
+
+      final secondEntry = entryStub(gutenbergId: 999, title: 'The Last Book');
+      catalogue.searchResponses.add(
+        CatalogueSearchResult(
+          catalogueReady: true,
+          results: [secondEntry.toEntry()],
+          page: 1,
+          hasMore: false,
+        ),
+      );
+
+      await tester.drag(find.byKey(freeBooksGridKey), const Offset(0, -3000));
+      await tester.pumpAndSettle();
+
+      expect(catalogue.searches.last.page, 1);
+      expect(catalogue.searches.last.category, 'Fiction');
+      expect(find.text('The Last Book'), findsOneWidget);
+
+      await _disposeTree(tester);
+    },
+  );
+
+  testWidgets('the filters row survives doubled text without clipping', (
+    tester,
+  ) async {
+    catalogue.categoryResponse = const [
+      CategoryCount(category: 'Fiction', count: 12),
+    ];
+    catalogue.languageResponse = const [
+      LanguageCount(language: 'en', count: 40),
+    ];
+    catalogue.searchResponses.add(
+      const CatalogueSearchResult(
+        catalogueReady: true,
+        results: [],
+        page: 0,
+        hasMore: false,
+      ),
+    );
+
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    await pump(tester);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('All categories'), findsOneWidget);
+    expect(find.text('All languages'), findsOneWidget);
+    expect(find.text('Most popular'), findsOneWidget);
 
     await _disposeTree(tester);
   });
