@@ -4,5 +4,6 @@ app/macos/** linguist-vendored
 app/ios/** linguist-vendored
 app/android/** linguist-vendored
 app/android/gradlew text eol=lf
+app/windows/flutter/generated_plugin_registrant.h text eol=lf
 app/android/gradle/wrapper/gradle-wrapper.jar binary
 app/web/** linguist-vendored
