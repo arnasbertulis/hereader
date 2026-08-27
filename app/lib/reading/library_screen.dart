@@ -65,9 +65,6 @@ enum _LibraryFilter {
   }
 }
 
-/// Width a tile aims for before the column count is worked out.
-const double _targetTileWidth = 172;
-
 /// Unscaled height of everything under a cover: two lines of title, one of
 /// author, the progress row, the chapter and time line, and the gaps between
 /// them. Scaled with the reader's text size to give the tile its height,
@@ -735,7 +732,7 @@ class _BookShelf extends StatelessWidget {
       builder: (context, constraints) {
         final available = constraints.maxWidth - padding * 2;
         var columns =
-            ((available + AppSpacing.md) / (_targetTileWidth + AppSpacing.md))
+            ((available + AppSpacing.md) / (AppShelf.tileWidth + AppSpacing.md))
                 .floor();
 
         // Large text needs a wider tile for the same number of words, so a

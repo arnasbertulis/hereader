@@ -19,6 +19,14 @@ abstract final class AppSpacing {
   static const double xxxl = 48;
 }
 
+/// Width of a book tile in a cover grid.
+///
+/// Shared between the Library's own shelf and any other grid of book covers,
+/// so a reader moving between them meets one tile size rather than two.
+abstract final class AppShelf {
+  static const double tileWidth = 172;
+}
+
 /// Three radii, and no others. Chips and progress-bar ends use [sm]; cards,
 /// tiles, buttons and rows use [md]; the nav indicator and any FAB use
 /// [stadium] via a `StadiumBorder` rather than a numeric radius.
