@@ -377,27 +377,21 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Free books')),
+      appBar: AppBar(
+        centerTitle: true,
+        title: TextField(
+          key: freeBooksSearchFieldKey,
+          controller: _searchController,
+          onChanged: _onQueryChanged,
+          decoration: const InputDecoration(
+            hintText: 'Search free books',
+            border: OutlineInputBorder(),
+          ),
+        ),
+      ),
       body: SafeArea(
         child: Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg,
-                AppSpacing.md,
-                AppSpacing.lg,
-                AppSpacing.sm,
-              ),
-              child: TextField(
-                key: freeBooksSearchFieldKey,
-                controller: _searchController,
-                onChanged: _onQueryChanged,
-                decoration: const InputDecoration(
-                  hintText: 'Search free books',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ),
             _FiltersRow(
               category: _category,
               categories: _categories,
