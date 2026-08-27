@@ -39,4 +39,10 @@ public final class CatalogueDtos {
     /// [category], so a reader can judge whether it's worth opening before
     /// they do.
     public record CategoryCount(String category, long count) {}
+
+    /// One row of the Language browse list — see CatalogueRepository
+    /// .languageCounts. [count] is how many Catalogue Entries carry
+    /// [language], so a reader can judge whether it's worth opening before
+    /// they do.
+    public record LanguageCount(String language, long count) {}
 }

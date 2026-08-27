@@ -69,6 +69,13 @@ class CatalogueController {
         return service.categories();
     }
 
+    /// Every Language at least one Catalogue Entry carries, with how many —
+    /// the browse screen's own filter list, not a page of results.
+    @GetMapping("/languages")
+    List<CatalogueDtos.LanguageCount> languages() {
+        return service.languages();
+    }
+
     /// Streams a Catalogue Entry's cover through the service — Gutenberg
     /// sends no CORS header the deployed web build's origin restrictions
     /// would accept a direct fetch under (ADR 0029).
