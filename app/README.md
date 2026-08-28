@@ -515,10 +515,11 @@ flutter test --platform chrome --timeout 60s $(grep -L "@TestOn('vm')" test/*_te
 The staged copies are gitignored and made fresh each time, because
 `flutter_tools` serves `<cwd>/test` at the test server's root rather than
 `<cwd>/web` — `test/` is the only directory the in-browser runner can reach.
-`ci-flutter.yml` runs the same script rather than its own copy step, so
-staging is written down once. CI runs this step nightly on `main` and as a
-gate on the release tag rather than on every pull request; see ADR 0009. The
-file list leaves out the
+`flutter-nightly.yml` and `cd.yml`'s `browser-test` job both run the same
+script rather than each keeping its own copy step, so staging is written
+down once. CI runs this step nightly on `main` and as a gate on the release
+tag rather than on every pull request; see ADR 0009. The file list leaves
+out the
 `@TestOn('vm')` suites rather than relying on the annotation to skip them:
 `flutter test --platform chrome` compiles every discovered test file into
 one shared bundle before `@TestOn` filtering ever runs, so a suite that
@@ -546,8 +547,9 @@ canvaskit.js`. Nothing downstream of engine initialization then proceeds.
 The next handler in the server cascade serves `<cwd>/test` and builds its
 path correctly, so a copy of the SDK's `canvaskit` directory there is what
 gets served instead. It is gitignored, and CI does not need it —
-`ci-flutter.yml` runs on `ubuntu-latest`, where the path context is posix
-and the handler's guard matches, so the script skips this half there.
+both `flutter-nightly.yml` and `cd.yml` run on `ubuntu-latest`, where the
+path context is posix and the handler's guard matches, so the script skips
+this half there.
 
 That asymmetry is why the step is a script rather than a line in this file.
 The Windows copy is invisible to CI by construction, so nothing fails when
