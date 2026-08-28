@@ -5,6 +5,7 @@ Date: 2026-08-10
 ## Status
 
 Accepted. Amended 2026-08-21 to add a real browser run for `app/test/`.
+Amended 2026-08-28 to move that run off the pull-request path.
 
 ## Context
 
@@ -84,14 +85,17 @@ a large, permanently ugly artifact for one test.
 against the exact artifact production serves, since deployment is a manual
 copy of that folder.
 
-`flutter test --platform chrome` also runs in CI now, against all 31
-`app/test/` suites not marked `@TestOn('vm')` — every suite in the package
-except `schema_migration_test.dart` and `web_shell_colors_test.dart`. Each
-one's database construction was swapped from `NativeDatabase.memory()` to a
-`testExecutor()` helper (`test_database.dart`, conditionally exporting a VM
-file or a web file, with the module load hoisted into
-`flutter_test_config.dart`). This covers the runtime class of failure for
-app code, in a real browser, for the first time.
+`flutter test --platform chrome` also runs in CI now, against 37 of the
+`app/test/` suites — every one not marked `@TestOn('vm')`:
+`schema_migration_test.dart`, `web_shell_colors_test.dart` and
+`android_device_transfer_backup_test.dart` are the exceptions. That count is
+not maintained by hand; see Consequences for the `grep -L` marker that builds
+the file list, so the number here is a snapshot and drifts with the
+annotation. Each one's database construction was swapped from
+`NativeDatabase.memory()` to a `testExecutor()` helper (`test_database.dart`,
+conditionally exporting a VM file or a web file, with the module load
+hoisted into `flutter_test_config.dart`). This covers the runtime class of
+failure for app code, in a real browser, for the first time.
 
 It is not dart2js coverage, and the distinction is load-bearing rather than
 pedantic. `flutter test --platform chrome` compiles with **DDC**
@@ -155,6 +159,14 @@ Literals rather than a recomputed reference, deliberately: a test that
 recomputes the hash agrees with a wrong implementation as readily as a right
 one.
 
+### The browser run moves off the pull-request path
+
+Amended 2026-08-28. `flutter test --platform chrome` moves from a step on
+every pull request to a nightly run on `main` and a gate on the tag, ahead of
+deploy. The measured basis: 3m47s of the `app` job's wall time, 61% of that
+job's total, and zero failures across the 100 runs since the step was added,
+weighed against a compiler — DDC — that production never executes.
+
 ## Consequences
 
 CI gains roughly a minute on the Dart workflow, and the Flutter workflow
@@ -164,7 +176,7 @@ manual web testing that found the first two bugs.
 
 The browser run is the most expensive step in the workflow: 2m50s on CI
 against the VM run's 46s, for very nearly the same assertions. Most of that
-is per-suite overhead — each of the 31 suites boots a browser, initialises
+is per-suite overhead — each of the 37 suites boots a browser, initialises
 the engine and fetches the sqlite3 module — not test time. The
 step carries `--timeout 60s` and `timeout-minutes: 15` so that a suite which
 stops making progress fails fast and prints what it got through, rather than
@@ -187,17 +199,18 @@ coverage of app code means `integration_test` with chromedriver, which is a
 heavier commitment in setup and flakiness than this project can justify
 before its deadline. Filed as a follow-on issue rather than pretended away.
 
-`app/test/schema_migration_test.dart` and `web_shell_colors_test.dart` stay
-`@TestOn('vm')`, but that annotation only stops them *running* on Chrome —
-it does not stop them being *compiled* for it. `flutter test --platform
-chrome` generates one shared entrypoint that imports every discovered test
-file's `main` before any `@TestOn` filtering happens
-(`generateTestEntrypoint` in `flutter_tools/lib/src/web/bootstrap.dart`), so
-either file's own `dart:ffi` or `dart:io` import breaks the whole run even
-though neither ever executes on this platform. Both files are therefore also
-kept out of the file list `ci-flutter.yml` passes to the Chrome step. That
-list is built by `grep -L "@TestOn('vm')" test/*_test.dart` rather than by
-naming the two files, so the annotation is the single marker and the next
+`app/test/schema_migration_test.dart`, `web_shell_colors_test.dart` and
+`android_device_transfer_backup_test.dart` stay `@TestOn('vm')`, but that
+annotation only stops them *running* on Chrome — it does not stop them
+being *compiled* for it. `flutter test --platform chrome` generates one
+shared entrypoint that imports every discovered test file's `main` before
+any `@TestOn` filtering happens (`generateTestEntrypoint` in
+`flutter_tools/lib/src/web/bootstrap.dart`), so any file's own `dart:ffi`
+or `dart:io` import breaks the whole run even though none of the three
+ever executes on this platform. All three files are therefore also kept
+out of the file list `ci-flutter.yml` passes to the Chrome step. That list
+is built by `grep -L "@TestOn('vm')" test/*_test.dart` rather than by
+naming the files, so the annotation is the single marker and the next
 VM-only suite is excluded without anyone remembering the step exists. This
 is a real difference from `dart test -p chrome`'s handling of
 `epub_golden_test.dart` above, which does exclude at compile time — the two
@@ -215,6 +228,12 @@ A future contributor — including this one, later — will try `flutter test
 --platform chrome` bare, without the file-list exclusion, because it is the
 obvious thing to reach for. The compile-bundling reason it fails is recorded
 here and in a comment on the workflow itself.
+
+**Consequence of the move: per-pull-request attribution.** A failure on the
+nightly run names a day's merges to `main`, not a commit; the usual
+this-PR-broke-it signal is gone for the runtime class of failure this step
+catches, in exchange for removing 61% of the `app` job's wall time from the
+path every pull request waits on. Stated rather than papered over.
 
 ## Alternatives considered
 
@@ -281,6 +300,17 @@ disproportionate; see above.
 Rejected. It is what has been happening, and it caught both bugs — after
 they had already been committed and, in one case, deployed. The check
 belongs before merge, not before deploy.
+
+**Revisited 2026-08-28.** That rejection was written against *manual*
+pre-deploy testing, which had already let two bugs reach production before
+this ADR existed. An automated gate on the tag is a different mechanism, and
+under this project's tag-triggered deploy a merge to `main` is not a
+release — the two are no longer the same event the original rejection
+assumed. This is the third time a rejection in this repository has turned
+out to rest on a reasoning error rather than a constraint, after ADR 0015's
+contrast guard and this document's own `LazyDatabase` correction above,
+which is why rejected options are recorded here at all rather than dropped
+once overturned.
 
 ## Verification
 
