@@ -333,7 +333,7 @@ comparison cannot let an older write win.
 ## Testing
 
 ```bash
-./mvnw verify
+./mvnw test
 ```
 
 Needs a `hereader_test` database:
@@ -342,7 +342,7 @@ Needs a `hereader_test` database:
 docker exec hereader-db psql -U postgres -c "create database hereader_test"
 ```
 
-If nothing is listening on `localhost:5432` when `verify` runs, every
+If nothing is listening on `localhost:5432` when `test` runs, every
 integration test fails with the same `UnsatisfiedDependencyException` chain
 down to `Connection refused` — Flyway cannot open a connection, so the
 Spring context never starts, and every test in that context fails identically
@@ -358,7 +358,10 @@ of which appear without the database enforcing its constraints. An in-memory
 substitute would not do: the schema uses jsonb, uuid and Flyway, and none of
 them behave the same on H2.
 
-CI runs the same suite against a Postgres service container.
+CI runs `./mvnw verify` against the same Postgres service container, not
+`test`: `verify` also packages the fat jar the container image ships, and that
+packaging step is worth proving in CI even though no local run needs the jar
+it produces.
 
 ## Not built yet
 
