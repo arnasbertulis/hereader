@@ -56,6 +56,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
+    # mikepenz/action-junit-report needs checks: write to create the check
+    # run it publishes results to; contents: read replaces what actions/
+    # checkout would otherwise get from the default token.
+    permissions:
+      contents: read
+      checks: write
+
     defaults:
       run:
         working-directory: server
