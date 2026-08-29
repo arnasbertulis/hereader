@@ -22,6 +22,10 @@ import org.springframework.stereotype.Component;
 /// cannot collide with the instance already holding that one. Exits
 /// explicitly once run() returns rather than relying on every remaining
 /// thread being a daemon one, since embedded Tomcat's own threads are not.
+///
+/// The refresh policy itself lives in `CatalogueRefresh`, shared with
+/// `CatalogueIngestionScheduler`'s weekly cron; this class adds only the exit
+/// code the shell command that invoked this JVM needs.
 @Component
 @Profile("catalogue-ingest")
 class CatalogueIngestionRunner implements ApplicationRunner {
@@ -29,41 +33,19 @@ class CatalogueIngestionRunner implements ApplicationRunner {
     private static final Logger log =
             LoggerFactory.getLogger(CatalogueIngestionRunner.class);
 
-    private final CatalogueIngestionService ingestion;
-    private final CataloguePopularityIngestionService popularity;
+    private final CatalogueRefresh refresh;
     private final ConfigurableApplicationContext context;
 
-    CatalogueIngestionRunner(
-            CatalogueIngestionService ingestion,
-            CataloguePopularityIngestionService popularity,
-            ConfigurableApplicationContext context) {
-        this.ingestion = ingestion;
-        this.popularity = popularity;
+    CatalogueIngestionRunner(CatalogueRefresh refresh, ConfigurableApplicationContext context) {
+        this.refresh = refresh;
         this.context = context;
     }
 
     @Override
     public void run(ApplicationArguments args) {
         log.info("Running catalogue ingestion by hand.");
-        var success = true;
-
-        try {
-            ingestion.refresh();
-            log.info("Catalogue ingestion finished.");
-        } catch (RuntimeException e) {
-            log.error("Catalogue ingestion failed.", e);
-            success = false;
-        }
-
-        try {
-            popularity.refresh();
-            log.info("Catalogue popularity ingestion finished.");
-        } catch (RuntimeException e) {
-            log.error("Catalogue popularity ingestion failed.", e);
-            success = false;
-        }
-
-        final var code = success ? 0 : 1;
+        var outcome = refresh.runAll();
+        final var code = outcome.succeeded() ? 0 : 1;
         System.exit(SpringApplication.exit(context, () -> code));
     }
 }
