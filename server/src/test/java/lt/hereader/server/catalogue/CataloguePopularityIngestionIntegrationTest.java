@@ -2,8 +2,10 @@ package lt.hereader.server.catalogue;
 
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -31,10 +33,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /// `rdf/pg11.rdf`, `rdf/pg15.rdf` and `rdf/pg98.rdf` are real per-book
 /// records, trimmed; see `src/test/resources/catalogue/README.md` for
 /// provenance, download counts and why id 98 is deliberately absent from
-/// `pg_catalog_sample.csv`. This class packs them into a tar.bz2 itself at
-/// setup rather than committing a binary archive fixture.
+/// `pg_catalog_sample.csv`. CatalogueStubServerTest packs them into a tar.bz2
+/// once for the JVM rather than committing a binary archive fixture.
+///
+/// Every test here runs against the same ingested catalogue: the ten Text
+/// entries from the CSV fixture, each with a null download count. Building
+/// that is `@BeforeAll` work, not `@BeforeEach` work — the only thing a test
+/// changes about it is the `downloads` column, which the popularity refresh
+/// under test writes, so that column is what gets reset between tests rather
+/// than the whole table (#232).
 @SpringBootTest
 @ActiveProfiles("test")
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class CataloguePopularityIngestionIntegrationTest extends CatalogueStubServerTest {
 
     @Autowired private WebApplicationContext context;
@@ -44,22 +54,35 @@ class CataloguePopularityIngestionIntegrationTest extends CatalogueStubServerTes
 
     private MockMvc mvc;
 
-    @BeforeEach
-    void setUp() {
+    @BeforeAll
+    void ingestTheCatalogueOnce() {
         mvc = MockMvcBuilders.webAppContextSetup(context)
                 .apply(springSecurity())
                 .build();
 
-        csvBody = readCsvFixture();
-        // Reset even though nothing here changes it: the stub's state is
-        // static and shared with the other catalogue classes now, and
-        // CatalogueControllerIntegrationTest has a test that leaves it 503.
-        // The catalogueIngestion.refresh() below reads it.
-        csvStatus = 200;
-        rdfArchiveBody = buildArchive("pg11.rdf", "pg15.rdf", "pg98.rdf");
-        rdfArchiveStatus = 200;
+        resetStub();
         jdbc.sql("delete from catalogue_entries").update();
         catalogueIngestion.refresh();
+    }
+
+    @BeforeEach
+    void resetWhatATestCanChange() {
+        resetStub();
+        // No test here inserts or deletes an entry — CataloguePopularityIngestionService
+        // only ever calls updateDownloads — so restoring that one column is
+        // the whole of this class's per-test isolation.
+        jdbc.sql("update catalogue_entries set downloads = null").update();
+    }
+
+    /// The stub's response state is static and shared with the other
+    /// catalogue classes, and CatalogueControllerIntegrationTest has a test
+    /// that leaves the CSV route on 503, so the CSV side is reset here even
+    /// though nothing in this class changes it.
+    private static void resetStub() {
+        csvBody = csvFixture;
+        csvStatus = 200;
+        rdfArchiveBody = rdfArchiveFixture;
+        rdfArchiveStatus = 200;
     }
 
     /// Same shape as CatalogueStubServerTest.buildArchive, but the entry between pg11.rdf and
