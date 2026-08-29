@@ -98,6 +98,16 @@
 			<artifactId>spring-security-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+		<!-- Surefire already puts this on the runtime classpath; declaring it
+		     makes LauncherSessionListener compilable too. Registered in
+		     META-INF/services, CatalogueStubSessionListener uses it to start
+		     the catalogue stub before the one shared test context is built
+		     (#231). Version comes from the Spring Boot parent's JUnit BOM. -->
+		<dependency>
+			<groupId>org.junit.platform</groupId>
+			<artifactId>junit-platform-launcher</artifactId>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 
 	<build>
