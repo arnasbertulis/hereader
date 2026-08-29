@@ -138,6 +138,17 @@ context pools instead of ten independent ones — one for the five
   mutation seam (a production code change), and the two ingestion classes'
   stub servers merge into one shared fixture (a test-only change). Both are
   out of scope for #229 itself and land as follow-up issues under #228.
+- **Amendment (#230):** blocker 1's mutation seam turned out unnecessary for
+  the `RANDOM_PORT` pool. It was written to let five *separate* classes each
+  dial their own budget mid-test; #230 merged the five into one class instead,
+  with all six budget properties set together in one static
+  `@SpringBootTest(properties = ...)` array. With no class left needing a
+  value another didn't share, the cache key stops forking without a
+  runtime-mutable seam. `RateLimitFilter`'s per-IP state still has no reset
+  hook, and the merged class avoids needing one the same way the original
+  five did — distinct synthetic `X-Forwarded-For` octets per test. Blocker 1
+  remains relevant only if a future `RANDOM_PORT` class needs a budget value
+  the merged class doesn't already set.
 - The two fixture problems #229 sized (per-test CSV re-read, per-test archive
   rebuild) are independent of context sharing and can be fixed on their own
   — moving the rebuild to `@BeforeAll` — for a smaller, safer win regardless
