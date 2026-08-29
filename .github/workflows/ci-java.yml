@@ -24,8 +24,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  server:
+  changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Explicit rather than relying on the default token grant: listing
+    # `permissions:` at all replaces the default set for this job, so
+    # `contents: read` for the checkout step has to be named alongside the
+    # `pull-requests: read` that dorny/paths-filter's pull_request path
+    # needs — it reads the changed-file list from the REST API rather than
+    # git on that trigger.
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      server: ${{ steps.filter.outputs.server }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            server:
+              - 'server/**'
+              - '.github/workflows/ci-java.yml'
+
+  build:
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     defaults:
       run:
@@ -34,6 +63,10 @@ jobs:
     # Integration tests run against a real Postgres rather than an in-memory
     # substitute: the schema uses jsonb, uuid and Flyway migrations, none of
     # which behave the same on H2.
+    #
+    # Declared at job level, so it starts as soon as the job is scheduled,
+    # before any step's `if:` runs — the gate above is what stops the
+    # container being paid for, not a step-level condition inside this job.
     services:
       postgres:
         image: postgres:17
@@ -74,3 +107,33 @@ jobs:
         if: always()
         with:
           report_paths: server/target/surefire-reports/TEST-*.xml
+
+  # The required context on the main ruleset is "server", not "build", so a
+  # documentation-only pull request — where changes.outputs.server is
+  # "false" and build is skipped — still needs something to report that
+  # context. `if: always()` is what lets this job run even though its needs
+  # did not: a plain `needs:` job is itself skipped when anything it depends
+  # on is skipped, which would make "server" a required context that can
+  # never turn green on a documentation-only change.
+  server:
+    needs: [changes, build]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      # `changes` itself is never skipped, so it is held to `success` alone —
+      # otherwise a failed `changes` run would leave `build` skipped as its
+      # dependent and this check would read that as green. For `build`, a
+      # skipped result is success — that is the entire point of gating on
+      # `changes` — and only failure or cancellation fails the gate.
+      - name: Require the build to have succeeded or been skipped
+        run: |
+          if [[ "${{ needs.changes.result }}" != "success" ]]; then
+            echo "::error::changes reported ${{ needs.changes.result }}"
+            exit 1
+          fi
+          if [[ "${{ needs.build.result }}" != "success" && "${{ needs.build.result }}" != "skipped" ]]; then
+            echo "::error::build reported ${{ needs.build.result }}"
+            exit 1
+          fi
