@@ -452,12 +452,26 @@ together is single-digit seconds against a job that used to run 6m47s
 serially; the 3m47s browser step is no longer in this workflow at all,
 having moved to `flutter-nightly.yml` and `cd.yml` under #225.
 
-`ci-java.yml`, `ci-dart.yml` and `codeql.yml`'s skip paths — a
-documentation-only branch, a server-only branch and a packages-only branch
-against this layer's own changes — are not yet in this table. Path filtering
-only resolves against a real push or pull request, the same constraint
-#226's own issue recorded against its three branch shapes and left to be
-read off the actual PR rather than proven locally. The three remaining
-figures get added here, from `gh run view <run-id> --json jobs` against the
-pull request this layer opens, before that pull request is treated as
-verified against its own acceptance criteria.
+`ci-java.yml`, `ci-dart.yml` and `codeql.yml`'s skip paths, measured against
+three throwaway pull requests (#239–#241, closed unmerged once the runs
+completed) rather than against #227's own diff — that diff touches all four
+workflow files at once and so exercises every job in full, telling nothing
+about a branch that only touches one area. All three figures are wall clock
+from the first job's start to the last of the four required contexts
+(`app`, `server`, `test (rsvp_engine)`, `test (epub_reader)`) finishing:
+
+A documentation-only branch (#239, `runs/33236715130`, `.../33236715142`,
+`.../33236715170`) — every job in `ci-flutter.yml` past its `changes` gate
+and the `build` step in `ci-java.yml` skip, leaving only the two gate jobs
+and the two dart package suites: **14s**.
+
+A server-only branch (#240, `runs/33236731399`, `.../33236731409`,
+`.../33236731396`) — `ci-flutter.yml`'s `format-analyze`/`test`/`web-build`
+skip, `ci-java.yml` runs its `build` step (1m10s) in full: **1m23s**.
+
+A packages-only branch (#241, `runs/33236743363`, `.../33236743368`,
+`.../33236743374`) — `packages/rsvp_engine` and `packages/epub_reader` reach
+`app` through ADR 0001's path dependencies with no publish and no version
+bump, so `ci-flutter.yml`'s filter (`ci-flutter.yml:45-48`) treats this the
+same as an app-only change and runs `format-analyze`/`test`/`web-build` in
+full while `ci-java.yml`'s `build` step skips: **1m35s**.
