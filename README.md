@@ -383,3 +383,5 @@ start: the browser database drift uses needs a secure context. Use `https://`,
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+<!-- measurement: docs-only CI timing for ADR 0009 verification, see #224 -->
