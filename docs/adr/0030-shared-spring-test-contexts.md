@@ -156,10 +156,49 @@ context pools instead of ten independent ones — one for the five
 
 ## Verification
 
-Not yet implemented — #229 is measurement only; no production or test code
-changed in it. This ADR records the design the follow-up issues under #228
-build against. Each of those issues verifies its own slice (the mutable
-rate-limit seam, the merged stub server) and re-observes the context count the
-same way #229 did — `size` and `missCount` in
-`org.springframework.test.context.cache`'s `DEBUG` log — to confirm it actually
-dropped from ten toward two.
+Built. Re-measured the way #229 measured it —
+`./mvnw test -DargLine="-Dlogging.level.org.springframework.test.context.cache=DEBUG"`,
+reading `size` and `missCount` off the cache's own final line and `Time
+elapsed` out of `target/surefire-reports/*.txt` — on one machine, in one
+sitting, with the before and after runs in the same working tree so the JVM
+and Postgres are in comparable states.
+
+**Contexts.** #229's line was
+`size = 10, maxSize = 32, hitCount = 1358, missCount = 10, failureCount = 0`.
+With #230, #231 and #232 merged it reads
+`size = 2, maxSize = 32, contextUsageCount = 1, parentContextCount = 0,
+hitCount = 1383, missCount = 2, failureCount = 0`. Ten context builds became
+two, which is the number the *Decision* above set as the target.
+
+**Fixtures (#232).** The two classes #229 sized, and the whole `test` phase,
+two runs each on the commit before #232 and on #232 itself:
+
+| `Time elapsed`, seconds | before | after |
+|---|---|---|
+| `CatalogueControllerIntegrationTest` | 3.348, 3.433 | 1.653, 1.593 |
+| `CataloguePopularityIngestionIntegrationTest` | 1.100, 1.076 | 0.323, 0.338 |
+| whole `test` phase | 14.566, 14.691 | 12.263, 12.092 |
+
+The two classes together fell from ~4.48s to ~1.95s, and the suite from
+~14.63s to ~12.18s — the ~2.5s the two classes gave up is the whole of the
+suite's drop, within run-to-run noise, which is what should happen when
+nothing else changed.
+
+**Against #229's forecast.** #229 did not forecast a saving; it bounded one.
+Its figure was the two classes' combined non-context time, 5.482s, stated as
+an *upper* bound on the fixture cost because it also contains those classes'
+real assertions and the ingestions that are the subject of a test rather than
+setup for one. The realised saving, 2.53s, is 46% of that bound, and the
+remainder is accounted for: twelve of the thirty-seven controller tests stayed
+outside the shared group, ten of them because they ingest or refresh as part
+of what they assert, and all ten popularity tests still run a popularity
+refresh, which is their subject. So the bound held and was not tight — the
+useful correction for next time is that "non-context time in a class with a
+suspicious `@BeforeEach`" is roughly half fixture and half work, not mostly
+fixture.
+
+One thing that did not move: the suite's largest single line item is still
+`AuthControllerIntegrationTest` at ~5.5s, because it runs first and pays for
+building the one shared context plus JVM warm-up. That cost is now paid once
+for the whole suite rather than ten times, which is the point of this ADR,
+but it means the floor under the suite is a context build, not a test.
