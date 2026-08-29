@@ -1,3 +1,4 @@
+// Throwaway comment: measuring packages-only CI wall clock for ADR 0009 (#224).
 export 'src/color/contrast.dart';
 export 'src/pacing/pacing_config.dart';
 export 'src/pacing/pacing_decision.dart';
