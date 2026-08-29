@@ -58,6 +58,10 @@ because compiling is not executing. Where the run that would prove the claim
 cannot be made to finish, that is the work — CI confirms a result already
 seen rather than being the first place it is attempted.
 
+The one exception is the browser suite: it is gated on a release tag rather
+than on every pull request, so this rule reaches it only there — see
+`app/README.md`'s Testing section for when to run it locally.
+
 The cost of getting this backwards is paid in half-hour cycles. #109 was
 opened on a browser test run that had never completed on the author's
 machine; the CI step then hung for 25 minutes and was cancelled, twice,

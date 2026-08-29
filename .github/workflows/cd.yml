@@ -108,10 +108,90 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
 
+  # Gates deploy rather than either image build, so the graph stays parallel
+  # — images build while this runs — and the gate sits immediately before the
+  # only irreversible step in the workflow. This is the same run
+  # flutter-nightly.yml does; the nightly copy is the early warning, this one
+  # is what actually stops a bad run from reaching production.
+  browser-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # sqlite3.wasm is already shipped at web/sqlite3.wasm for the app's own
+      # OPFS drift setup; the browser test run needs its own copy because
+      # flutter_tools serves `<cwd>/test` at the test server's root, not
+      # `<cwd>/web`. Gitignored — see app/.gitignore.
+      #
+      # A script rather than the `cp` this used to be, because it is not the
+      # only thing that has to be staged: on Windows the engine's CanvasKit
+      # build has to be copied into `test/` as well, or the run hangs after
+      # Chrome launches. That half is invisible here — ubuntu-latest does not
+      # need it and the script skips it — which is precisely why it belongs in
+      # a file this step also runs. Written in two places, only one of them
+      # learned about CanvasKit. See app/README.md's Testing section.
+      - name: Stage the browser run's assets
+        run: dart run tool/stage_chrome_test_assets.dart
+
+      # Runs the same suite again, this time compiled with DDC and executed
+      # in a real Chrome instead of the Dart VM — the gap that let
+      # `nextInt(1 << 32)` reach production, since that failure needs a
+      # browser to reproduce and this is the first thing in CI that is one.
+      #
+      # This is not dart2js coverage: DDC and dart2js disagree on some
+      # integer-width edges (JavaScript masks shift counts to five bits, so
+      # `1 << 32` is `1` under DDC and `0` under dart2js), which is why
+      # target-sensitive arithmetic still has to live in rsvp_engine /
+      # epub_reader and be proven under ci-dart.yml's `dart test -p chrome`,
+      # which does use dart2js. See ADR 0009.
+      #
+      # Chrome ships preinstalled on ubuntu-latest and flutter_tools launches
+      # it headless, same as ci-dart.yml already relies on.
+      #
+      # The file list is built by reading the @TestOn('vm') marker rather
+      # than by trusting it: flutter_tools compiles every discovered test
+      # file into one shared DDC bundle before any @TestOn filtering happens
+      # (`generateTestEntrypoint` in flutter_tools/lib/src/web/bootstrap.dart),
+      # so a file's own `dart:ffi` or `dart:io` import breaks the whole run
+      # even though that file would never execute on this platform. The
+      # annotation is therefore necessary but not sufficient, and the file
+      # has to be kept out of the argument list too. `grep -L` states that
+      # intent — run every suite not marked VM-only — so the next VM-only
+      # file is handled without anyone remembering this step exists. Three
+      # files today: android_device_transfer_backup_test.dart,
+      # schema_migration_test.dart and web_shell_colors_test.dart. See ADR
+      # 0009.
+      #
+      # --timeout 60s, against a suite whose slowest test takes about two
+      # seconds. The ten-minute default is why a single hanging test once
+      # cost 25 minutes of runner time and produced no pass/fail list at all;
+      # timeout-minutes is the backstop for a hang outside any test, sized
+      # from a local run of about five minutes.
+      - name: Run tests (Chrome)
+        timeout-minutes: 15
+        run: >-
+          flutter test --platform chrome --timeout 60s
+          $(grep -L "@TestOn('vm')" test/*_test.dart)
+
   deploy:
-    needs: [server-image, web-image]
+    needs: [server-image, web-image, browser-test]
     runs-on: ubuntu-latest
     environment: production
+    timeout-minutes: 10
 
     steps:
       # Written by hand rather than through an ssh-agent action. This is the
