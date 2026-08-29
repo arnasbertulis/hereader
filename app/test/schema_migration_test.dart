@@ -9,9 +9,12 @@ import 'dart:typed_data';
 
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
+import 'package:app/reading/library_book.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
+
+import 'fakes.dart';
 
 /// Every table the database currently holds, as SQLite reports them.
 Future<List<String>> _tableNames(AppDatabase db) async {
@@ -100,12 +103,13 @@ void main() {
       // database proves nothing about the installs that actually run it, and
       // ADR 0007 already flagged that gap without closing it.
       await LibraryRepository(legacy).addBook(
-        id: 'book-1',
-        title: 'Romeo and Juliet',
-        author: 'William Shakespeare',
-        bytes: Uint8List.fromList([1, 2, 3]),
-        wordCount: 25000,
-        sourceFormat: 'epub',
+        fixtureBook(
+          id: 'book-1',
+          title: 'Romeo and Juliet',
+          author: 'William Shakespeare',
+          wordCount: 25000,
+        ),
+        Uint8List.fromList([1, 2, 3]),
       );
 
       await _revertTo(legacy, 4);
@@ -139,12 +143,13 @@ void main() {
       final before = LibraryRepository(legacy);
 
       await before.addBook(
-        id: 'book-1',
-        title: 'Romeo and Juliet',
-        author: 'William Shakespeare',
-        bytes: Uint8List.fromList([1, 2, 3]),
-        wordCount: 25000,
-        sourceFormat: 'epub',
+        fixtureBook(
+          id: 'book-1',
+          title: 'Romeo and Juliet',
+          author: 'William Shakespeare',
+          wordCount: 25000,
+        ),
+        Uint8List.fromList([1, 2, 3]),
       );
 
       // Saved the way a version 5 client saved: a locator and a stamp, with
@@ -190,12 +195,13 @@ void main() {
     final legacy = AppDatabase(NativeDatabase(file));
 
     await LibraryRepository(legacy).addBook(
-      id: 'book-1',
-      title: 'Romeo and Juliet',
-      author: 'William Shakespeare',
-      bytes: Uint8List.fromList([1, 2, 3]),
-      wordCount: 25000,
-      sourceFormat: 'epub',
+      fixtureBook(
+        id: 'book-1',
+        title: 'Romeo and Juliet',
+        author: 'William Shakespeare',
+        wordCount: 25000,
+      ),
+      Uint8List.fromList([1, 2, 3]),
     );
 
     await _revertTo(legacy, 6);
@@ -214,12 +220,13 @@ void main() {
     // Writable, and keyed to a book that exists. A create table that ran
     // against nothing would leave the assertions above true.
     await LibraryRepository(upgraded).addBook(
-      id: 'book-1',
-      title: 'Romeo and Juliet',
-      bytes: Uint8List.fromList([1, 2, 3]),
-      wordCount: 25000,
-      sourceFormat: 'epub',
-      coverBytes: Uint8List.fromList([9, 9, 9]),
+      fixtureBook(
+        id: 'book-1',
+        title: 'Romeo and Juliet',
+        wordCount: 25000,
+        coverBytes: Uint8List.fromList([9, 9, 9]),
+      ),
+      Uint8List.fromList([1, 2, 3]),
     );
 
     final covers = await upgraded.select(upgraded.bookCovers).get();
@@ -231,12 +238,13 @@ void main() {
     final legacy = AppDatabase(NativeDatabase(file));
 
     await LibraryRepository(legacy).addBook(
-      id: 'book-1',
-      title: 'Romeo and Juliet',
-      author: 'William Shakespeare',
-      bytes: Uint8List.fromList([1, 2, 3]),
-      wordCount: 25000,
-      sourceFormat: 'epub',
+      fixtureBook(
+        id: 'book-1',
+        title: 'Romeo and Juliet',
+        author: 'William Shakespeare',
+        wordCount: 25000,
+      ),
+      Uint8List.fromList([1, 2, 3]),
     );
 
     await _revertTo(legacy, 7);
@@ -257,11 +265,13 @@ void main() {
     // to what a later insert can carry, would leave the assertion above
     // true while notes still could not be stored.
     await LibraryRepository(upgraded).addBook(
-      id: 'note-1',
-      title: 'A note',
-      bytes: Uint8List.fromList([4, 5, 6]),
-      wordCount: 10,
-      sourceFormat: 'note',
+      fixtureBook(
+        id: 'note-1',
+        title: 'A note',
+        wordCount: 10,
+        sourceFormat: BookSourceFormat.note,
+      ),
+      Uint8List.fromList([4, 5, 6]),
     );
 
     final note = await (upgraded.select(
@@ -275,11 +285,13 @@ void main() {
     final legacy = AppDatabase(NativeDatabase(file));
 
     await LibraryRepository(legacy).addBook(
-      id: 'note-1',
-      title: 'A note',
-      bytes: Uint8List.fromList([1, 2, 3]),
-      wordCount: 10,
-      sourceFormat: 'note',
+      fixtureBook(
+        id: 'note-1',
+        title: 'A note',
+        wordCount: 10,
+        sourceFormat: BookSourceFormat.note,
+      ),
+      Uint8List.fromList([1, 2, 3]),
     );
 
     await _revertTo(legacy, 8);
@@ -318,11 +330,8 @@ void main() {
       final legacyRepo = LibraryRepository(legacy);
 
       await legacyRepo.addBook(
-        id: 'book-1',
-        title: 'Romeo and Juliet',
-        bytes: Uint8List.fromList([1, 2, 3]),
-        wordCount: 25000,
-        sourceFormat: 'epub',
+        fixtureBook(id: 'book-1', title: 'Romeo and Juliet', wordCount: 25000),
+        Uint8List.fromList([1, 2, 3]),
       );
       await legacyRepo.savePosition(
         bookId: 'book-1',

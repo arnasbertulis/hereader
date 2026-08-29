@@ -285,16 +285,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     try {
       final book = await const BookImporter().import(bytes);
 
-      await _repo.addBook(
-        id: book.id,
-        title: book.title,
-        author: book.author,
-        language: book.language,
-        bytes: bytes,
-        wordCount: book.text.length,
-        sourceFormat: 'epub',
-        coverBytes: book.coverBytes,
-      );
+      await _repo.addBook(book, bytes);
 
       // Re-importing an id already in the library replaces its cover, and a
       // memoized future would keep handing out the old one. Cheaper to drop

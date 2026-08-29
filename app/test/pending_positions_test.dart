@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 import 'package:sqlite3/common.dart';
 
+import 'fakes.dart';
 import 'test_database.dart';
 
 /// A stamp in the wire format: `{millis:013d}-{counter:05d}-{deviceId}`.
@@ -34,11 +35,8 @@ void main() {
   tearDown(() => db.close());
 
   Future<void> importBook({String id = bookId}) => repository.addBook(
-    id: id,
-    title: 'Romeo and Juliet',
-    bytes: Uint8List.fromList([1, 2, 3]),
-    wordCount: 25_000,
-    sourceFormat: 'epub',
+    fixtureBook(id: id, title: 'Romeo and Juliet', wordCount: 25_000),
+    Uint8List.fromList([1, 2, 3]),
   );
 
   group('foreign key enforcement', () {

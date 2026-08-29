@@ -81,6 +81,12 @@ class LibraryBook {
   /// the cover in the same transaction. Nothing draws it yet.
   final Uint8List? coverBytes;
 
+  /// Whether this was parsed as an EPUB archive or a note's raw text. Carried
+  /// on the parsed book itself so a caller writing it to storage — or
+  /// deriving a fixture for a test — has one source for the value rather than
+  /// a literal it has to keep in step with which parse path it called.
+  final BookSourceFormat sourceFormat;
+
   const LibraryBook({
     required this.id,
     required this.title,
@@ -92,6 +98,7 @@ class LibraryBook {
     this.contentStartReason = ContentStartReason.none,
     this.chapters = const [],
     this.coverBytes,
+    this.sourceFormat = BookSourceFormat.epub,
   });
 
   LibraryBook withPosition(Locator? next) => LibraryBook(
@@ -105,6 +112,7 @@ class LibraryBook {
     contentStartReason: contentStartReason,
     chapters: chapters,
     coverBytes: coverBytes,
+    sourceFormat: sourceFormat,
   );
 
   /// True when front matter was skipped on a guess rather than on a marker
@@ -196,6 +204,7 @@ LibraryBook _parseBook(Uint8List bytes) {
         : start.reason,
     chapters: chaptersOf(book, text),
     coverBytes: book.coverBytes,
+    sourceFormat: BookSourceFormat.epub,
   );
 }
 
@@ -262,7 +271,12 @@ LibraryBook _parseNote(({Uint8List bytes, String id, String title}) input) {
     throw const EpubException('The note contains no readable words.');
   }
 
-  return LibraryBook(id: input.id, title: input.title, text: text);
+  return LibraryBook(
+    id: input.id,
+    title: input.title,
+    text: text,
+    sourceFormat: BookSourceFormat.note,
+  );
 }
 
 /// Turns the parsed table of contents into something the reader can jump to.

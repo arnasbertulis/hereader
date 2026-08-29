@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
+import '../reading/library_book.dart';
 import 'database.dart';
 
 /// A stored book's bytes, plus what reopening it needs beyond them.
@@ -335,40 +336,39 @@ class LibraryRepository {
 
   /// Adds a book, or replaces it if the same edition is imported again.
   ///
+  /// Takes the parsed [book] and the [bytes] it was parsed from, rather than
+  /// each field unpacked by hand: `id`, `title`, `author` and `language` come
+  /// straight off [book], `wordCount` is `book.text.length`, and
+  /// `sourceFormat` is `book.sourceFormat.name`. A caller that wants a
+  /// different figure for one of these fixes the parse that produced [book]
+  /// rather than restating the derivation at every import site.
+  ///
   /// One transaction with the pending-position drain: a book that reached
   /// disk while its waiting position stayed behind would open at the start
   /// and then jump the moment the next sync ran.
-  Future<void> addBook({
-    required String id,
-    required String title,
-    required Uint8List bytes,
-    required int wordCount,
-    required String sourceFormat,
-    String? author,
-    String? language,
-    Uint8List? coverBytes,
-  }) async {
+  Future<void> addBook(LibraryBook book, Uint8List bytes) async {
     await _db.transaction(() async {
       await _db
           .into(_db.books)
           .insertOnConflictUpdate(
             BooksCompanion.insert(
-              id: id,
-              title: title,
+              id: book.id,
+              title: book.title,
               bytes: bytes,
               importedAt: DateTime.now().toUtc(),
-              wordCount: Value(wordCount),
-              sourceFormat: Value(sourceFormat),
-              author: Value(author),
-              language: Value(language),
+              wordCount: Value(book.text.length),
+              sourceFormat: Value(book.sourceFormat.name),
+              author: Value(book.author),
+              language: Value(book.language),
             ),
           );
 
+      final coverBytes = book.coverBytes;
       if (coverBytes != null) {
         await _db
             .into(_db.bookCovers)
             .insertOnConflictUpdate(
-              BookCoversCompanion.insert(bookId: id, bytes: coverBytes),
+              BookCoversCompanion.insert(bookId: book.id, bytes: coverBytes),
             );
       } else {
         // Re-importing an edition that no longer declares a cover should not
@@ -376,10 +376,10 @@ class LibraryRepository {
         // cover has no row.
         await (_db.delete(
           _db.bookCovers,
-        )..where((c) => c.bookId.equals(id))).go();
+        )..where((c) => c.bookId.equals(book.id))).go();
       }
 
-      await _drainPendingPosition(id);
+      await _drainPendingPosition(book.id);
     });
   }
 

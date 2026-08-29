@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
+import 'package:app/reading/library_book.dart';
 import 'package:app/reading/library_screen.dart';
 import 'package:app/reading/note_editor_screen.dart';
 import 'package:app/reading/reading_display.dart';
@@ -54,20 +55,19 @@ void main() {
 
   Future<void> addBook(String id, {required String title}) =>
       repository.addBook(
-        id: id,
-        title: title,
-        bytes: Uint8List.fromList([1, 2, 3]),
-        wordCount: 1000,
-        sourceFormat: 'epub',
+        fixtureBook(id: id, title: title, wordCount: 1000),
+        Uint8List.fromList([1, 2, 3]),
       );
 
   Future<void> addNote(String id, {required String title}) =>
       repository.addBook(
-        id: id,
-        title: title,
-        bytes: Uint8List.fromList(utf8.encode('Some note text.')),
-        wordCount: 3,
-        sourceFormat: 'note',
+        fixtureBook(
+          id: id,
+          title: title,
+          wordCount: 3,
+          sourceFormat: BookSourceFormat.note,
+        ),
+        Uint8List.fromList(utf8.encode('Some note text.')),
       );
 
   Future<void> pump(WidgetTester tester) async {

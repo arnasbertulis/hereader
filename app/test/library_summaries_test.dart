@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
+import 'fakes.dart';
 import 'test_database.dart';
 
 /// Records the SQL of every select the database runs.
@@ -44,14 +45,15 @@ void main() {
 
   Future<void> addBook(String id, {String title = 'Romeo and Juliet'}) =>
       repo.addBook(
-        id: id,
-        title: title,
-        author: 'William Shakespeare',
+        fixtureBook(
+          id: id,
+          title: title,
+          author: 'William Shakespeare',
+          wordCount: 25000,
+        ),
         // Large enough that reading it is a real cost rather than a
         // theoretical one, and small enough not to slow the suite.
-        bytes: Uint8List(256 * 1024),
-        wordCount: 25000,
-        sourceFormat: 'epub',
+        Uint8List(256 * 1024),
       );
 
   group('the library list', () {

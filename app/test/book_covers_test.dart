@@ -4,6 +4,7 @@ import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'fakes.dart';
 import 'test_database.dart';
 
 Uint8List _bytes(List<int> values) => Uint8List.fromList(values);
@@ -32,13 +33,14 @@ void main() {
   tearDown(() => db.close());
 
   Future<void> addBook(String id, {Uint8List? cover}) => repository.addBook(
-    id: id,
-    title: 'Romeo and Juliet',
-    author: 'William Shakespeare',
-    bytes: _bytes([1, 2, 3]),
-    wordCount: 25000,
-    sourceFormat: 'epub',
-    coverBytes: cover,
+    fixtureBook(
+      id: id,
+      title: 'Romeo and Juliet',
+      author: 'William Shakespeare',
+      wordCount: 25000,
+      coverBytes: cover,
+    ),
+    _bytes([1, 2, 3]),
   );
 
   test('an imported cover is stored beside its book', () async {
