@@ -62,13 +62,14 @@ void main() {
     int wordCount = 1000,
     Uint8List? cover,
   }) => repository.addBook(
-    id: id,
-    title: title,
-    author: author,
-    bytes: Uint8List.fromList([1, 2, 3]),
-    wordCount: wordCount,
-    sourceFormat: 'epub',
-    coverBytes: cover,
+    fixtureBook(
+      id: id,
+      title: title,
+      author: author,
+      wordCount: wordCount,
+      coverBytes: cover,
+    ),
+    Uint8List.fromList([1, 2, 3]),
   );
 
   Future<void> readTo(String id, int tokenIndex) => repository.savePosition(

@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
+import 'fakes.dart';
 import 'test_database.dart';
 
 Future<String> _stamp() async => '0000000000001-00000-test';
@@ -31,11 +32,8 @@ void main() {
       repo = LibraryRepository(database);
 
       await repo.addBook(
-        id: 'book-1',
-        title: 'A Book',
-        bytes: Uint8List.fromList([1, 2, 3]),
-        wordCount: 100,
-        sourceFormat: 'epub',
+        fixtureBook(id: 'book-1', title: 'A Book', wordCount: 100),
+        Uint8List.fromList([1, 2, 3]),
       );
     });
 
@@ -72,11 +70,8 @@ void main() {
 
     test('leaves another book alone', () async {
       await repo.addBook(
-        id: 'book-2',
-        title: 'Another Book',
-        bytes: Uint8List.fromList([4, 5, 6]),
-        wordCount: 100,
-        sourceFormat: 'epub',
+        fixtureBook(id: 'book-2', title: 'Another Book', wordCount: 100),
+        Uint8List.fromList([4, 5, 6]),
       );
 
       await repo.savePosition(

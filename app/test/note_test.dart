@@ -9,6 +9,7 @@ import 'package:epub_reader/epub_reader.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
+import 'fakes.dart';
 import 'test_database.dart';
 
 Uint8List _bytesOf(String text) => Uint8List.fromList(utf8.encode(text));
@@ -177,11 +178,13 @@ void main() {
       final bytes = _bytesOf('A note worth keeping.');
 
       await repo.addBook(
-        id: 'note-1',
-        title: 'Kept',
-        bytes: bytes,
-        wordCount: 4,
-        sourceFormat: 'note',
+        fixtureBook(
+          id: 'note-1',
+          title: 'Kept',
+          wordCount: 4,
+          sourceFormat: BookSourceFormat.note,
+        ),
+        bytes,
       );
 
       final stored = await repo.storedBookOf('note-1');
@@ -194,11 +197,8 @@ void main() {
 
     test('an epub row round-trips its format the same way', () async {
       await repo.addBook(
-        id: 'book-1',
-        title: 'A Book',
-        bytes: _bytesOf('irrelevant'),
-        wordCount: 1,
-        sourceFormat: 'epub',
+        fixtureBook(id: 'book-1', title: 'A Book', wordCount: 1),
+        _bytesOf('irrelevant'),
       );
 
       final stored = await repo.storedBookOf('book-1');
@@ -219,11 +219,13 @@ void main() {
       repo = LibraryRepository(db);
 
       await repo.addBook(
-        id: 'note-1',
-        title: 'Original title',
-        bytes: _bytesOf('Original text.'),
-        wordCount: 2,
-        sourceFormat: 'note',
+        fixtureBook(
+          id: 'note-1',
+          title: 'Original title',
+          wordCount: 2,
+          sourceFormat: BookSourceFormat.note,
+        ),
+        _bytesOf('Original text.'),
       );
     });
 

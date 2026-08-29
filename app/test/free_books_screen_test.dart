@@ -479,12 +479,8 @@ void main() {
     // screen makes before reaching it.
     final entry = entryStub();
     await repository.addBook(
-      id: entry.bookId,
-      title: entry.title,
-      author: entry.authors,
-      bytes: Uint8List.fromList([1, 2, 3]),
-      wordCount: 100,
-      sourceFormat: 'epub',
+      _bookFor(entry.bookId, entry.title),
+      Uint8List.fromList([1, 2, 3]),
     );
 
     catalogue.searchResponses.add(

@@ -22,6 +22,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
+import 'fakes.dart';
 import 'test_database.dart';
 
 /// Everything the app needs, wired against an in-memory database.
@@ -164,12 +165,13 @@ void main() {
     addTearDown(harness.close);
 
     await harness.repository.addBook(
-      id: 'test-1',
-      title: 'Romeo and Juliet',
-      author: 'William Shakespeare',
-      bytes: Uint8List.fromList([1, 2, 3]),
-      wordCount: 25000,
-      sourceFormat: 'epub',
+      fixtureBook(
+        id: 'test-1',
+        title: 'Romeo and Juliet',
+        author: 'William Shakespeare',
+        wordCount: 25000,
+      ),
+      Uint8List.fromList([1, 2, 3]),
     );
 
     await tester.pumpWidget(harness.app);
@@ -203,18 +205,12 @@ void main() {
     addTearDown(harness.close);
 
     await harness.repository.addBook(
-      id: 'read-first',
-      title: 'Romeo and Juliet',
-      bytes: Uint8List.fromList([1]),
-      wordCount: 25000,
-      sourceFormat: 'epub',
+      fixtureBook(id: 'read-first', title: 'Romeo and Juliet', wordCount: 25000),
+      Uint8List.fromList([1]),
     );
     await harness.repository.addBook(
-      id: 'added-later',
-      title: 'Hamlet',
-      bytes: Uint8List.fromList([2]),
-      wordCount: 30000,
-      sourceFormat: 'epub',
+      fixtureBook(id: 'added-later', title: 'Hamlet', wordCount: 30000),
+      Uint8List.fromList([2]),
     );
 
     // Read the older import, which is the whole point of the ordering: the

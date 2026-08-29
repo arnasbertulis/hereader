@@ -5,6 +5,7 @@ import 'package:app/data/library_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
+import 'fakes.dart';
 import 'test_database.dart';
 
 /// The chapter a stored position claims to be in, read straight from the
@@ -39,12 +40,13 @@ void main() {
   tearDown(() => db.close());
 
   Future<void> addBook(String id) => repository.addBook(
-    id: id,
-    title: 'Romeo and Juliet',
-    author: 'William Shakespeare',
-    bytes: Uint8List.fromList([1, 2, 3]),
-    wordCount: 25000,
-    sourceFormat: 'epub',
+    fixtureBook(
+      id: id,
+      title: 'Romeo and Juliet',
+      author: 'William Shakespeare',
+      wordCount: 25000,
+    ),
+    Uint8List.fromList([1, 2, 3]),
   );
 
   Future<void> save(

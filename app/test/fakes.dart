@@ -1,9 +1,11 @@
 import 'dart:typed_data';
 
 import 'package:app/catalogue/catalogue_client.dart';
+import 'package:app/reading/library_book.dart';
 import 'package:app/sync/api_client.dart';
 import 'package:app/sync/auth_store.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:rsvp_engine/rsvp_engine.dart';
 
 /// In-memory secure storage.
 ///
@@ -272,4 +274,38 @@ class FakeCatalogueClient implements CatalogueClient {
       throw error;
     }
   }
+}
+
+/// A [LibraryBook] whose [LibraryBook.text] tokenizes to exactly [wordCount]
+/// tokens.
+///
+/// `LibraryRepository.addBook` derives its stored word count from
+/// `book.text.length` rather than taking it as a separate argument, so a test
+/// that wants a specific word count for a book needs a book whose text
+/// actually produces that many tokens rather than an unrelated dummy value
+/// passed in beside it. One block of [wordCount] space-separated placeholder
+/// words tokenizes to exactly [wordCount] tokens: the default [Tokenizer]
+/// splits purely on whitespace runs, and a bare word with no punctuation
+/// crosses no other boundary.
+LibraryBook fixtureBook({
+  required String id,
+  String title = 'Book',
+  String? author,
+  String? language,
+  int wordCount = 1,
+  BookSourceFormat sourceFormat = BookSourceFormat.epub,
+  Uint8List? coverBytes,
+}) {
+  return LibraryBook(
+    id: id,
+    title: title,
+    author: author,
+    language: language,
+    text: TokenizedText.from(
+      [(id: 'block-0', text: List.filled(wordCount, 'word').join(' '))],
+      parserVersion: 1,
+    ),
+    sourceFormat: sourceFormat,
+    coverBytes: coverBytes,
+  );
 }

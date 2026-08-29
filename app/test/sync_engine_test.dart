@@ -52,11 +52,8 @@ void main() {
   /// A book has to exist before a position can reference it: the foreign key
   /// on reading_positions is enforced.
   Future<void> addBook(String id) => repository.addBook(
-    id: id,
-    title: 'A Book',
-    bytes: Uint8List.fromList([1]),
-    wordCount: 1000,
-    sourceFormat: 'epub',
+    fixtureBook(id: id, title: 'A Book', wordCount: 1000),
+    Uint8List.fromList([1]),
   );
 
   Future<void> savePosition(String bookId, {int tokenIndex = 100}) async {
