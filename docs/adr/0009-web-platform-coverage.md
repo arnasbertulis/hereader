@@ -5,7 +5,8 @@ Date: 2026-08-10
 ## Status
 
 Accepted. Amended 2026-08-21 to add a real browser run for `app/test/`.
-Amended 2026-08-28 to move that run off the pull-request path.
+Amended 2026-08-28 to move that run off the pull-request path. Amended
+2026-08-29 to gate the rest of the CI stack on what changed.
 
 ## Context
 
@@ -166,6 +167,54 @@ every pull request to a nightly run on `main` and a gate on the tag, ahead of
 deploy. The measured basis: 3m47s of the `app` job's wall time, 61% of that
 job's total, and zero failures across the 100 runs since the step was added,
 weighed against a compiler — DDC — that production never executes.
+
+### The rest of the CI stack is gated on what changed, too
+
+Amended 2026-08-29. Moving the browser run off the pull-request path leaves
+`ci-flutter.yml`'s remaining steps, `ci-java.yml`, `ci-dart.yml` and
+`codeql.yml` still running unconditionally, so `dart2js` and DDC are not the
+only cost this document has a stake in — a documentation-only or
+server-only pull request paid for all of it regardless. The `main` ruleset
+requires four contexts (`app`, `server`, `test (rsvp_engine)`,
+`test (epub_reader)`), and a required check that is skipped never reports
+and blocks the pull request forever, so a native `paths:` filter cannot sit
+on any workflow producing one of those four. Two patterns work instead, and
+each workflow needed a different one:
+
+- `ci-flutter.yml` (the `app` job): a `changes` gate job using
+  `dorny/paths-filter`, with a small `app` job downstream that treats a
+  skipped fan-out as success and only failure or cancellation as failure —
+  the required context otherwise could never turn green on a
+  documentation-only branch.
+- `ci-java.yml`: the same gate-and-aggregator shape, but the job the gate
+  guards had to be renamed from `server` to `build` and the small aggregator
+  takes the `server` name, because the Postgres service container is
+  declared at job level and starts as soon as the job is scheduled,
+  before any step's `if:` is evaluated — skipping every step would still
+  pay for the container. A gate job is what stops it starting at all.
+- `ci-dart.yml`: no gate job. Its two required contexts (`test
+  (rsvp_engine)`, `test (epub_reader)`) come from a matrix over the package
+  list, and a gate job would need a second matrix over the same list to
+  produce matching per-package outputs, for no gain over asking the
+  question once per matrix job instead. The `test` job keeps its name and
+  always runs; every step from checkout onward carries a per-package
+  `dorny/paths-filter` condition, scoped to that package's own directory —
+  the packages do not depend on the app (ADR 0001), so an app-only change
+  should not wake either one.
+- `codeql.yml`: a native `paths:` filter on the `pull_request` trigger only.
+  Safe here specifically because `analyze` is not one of the four required
+  contexts — nothing gates on it, so a skipped run costs nothing. `push` to
+  `main` and the weekly schedule stay unfiltered, so the security baseline
+  still runs against everything that lands rather than only what a filtered
+  pull request happened to touch.
+
+Every job across all six workflow files now carries an explicit
+`timeout-minutes`. Before this layer, only the jobs #226 introduced or
+touched carried one — `ci-flutter.yml`'s five jobs, `cd.yml`'s
+`browser-test` and `deploy`, and `flutter-nightly.yml`'s `browser` job.
+`ci-java.yml`'s `server` job, `ci-dart.yml`'s `test` job, `codeql.yml`'s
+`analyze` job, and `cd.yml`'s `server-image` and `web-image` jobs still
+inherited GitHub's 360-minute default; this layer bounds all five.
 
 ## Consequences
 
@@ -386,3 +435,29 @@ serves `<cwd>/test` and builds its path correctly, so copying the SDK's
 handler should have. That copy is gitignored and documented in
 `app/README.md`'s Testing section as a development-environment step, not
 here — it is a workaround, not a reason for the decision.
+
+**The CI-gating stack (#225–#227), before-and-after.** The baseline, measured
+across five runs on 2026-08-27 before any of the three layers landed (#224):
+`app` (`ci-flutter.yml`) 6m47s, `codeql` 1m33s (not required),
+`server` (`ci-java.yml`) 1m05s, `test (rsvp_engine)` 1m03s,
+`test (epub_reader)` 0m59s. No workflow had a `paths:` filter of any kind, so
+a documentation-only pull request paid the full total.
+
+The gate-and-aggregator shape landed first in `ci-flutter.yml` (#226). On the
+push that merged it — d768dc2, which touches `app/` so the fan-out ran in
+full — the real, observed job durations were: `changes` 4s, `format-analyze`
+47s, `test` 1m28s, `web-build` 1m10s, `app` (the aggregator) 3s
+(`gh run view 33235508565 --json jobs`). The gate and aggregator overhead
+together is single-digit seconds against a job that used to run 6m47s
+serially; the 3m47s browser step is no longer in this workflow at all,
+having moved to `flutter-nightly.yml` and `cd.yml` under #225.
+
+`ci-java.yml`, `ci-dart.yml` and `codeql.yml`'s skip paths — a
+documentation-only branch, a server-only branch and a packages-only branch
+against this layer's own changes — are not yet in this table. Path filtering
+only resolves against a real push or pull request, the same constraint
+#226's own issue recorded against its three branch shapes and left to be
+read off the actual PR rather than proven locally. The three remaining
+figures get added here, from `gh run view <run-id> --json jobs` against the
+pull request this layer opens, before that pull request is treated as
+verified against its own acceptance criteria.
