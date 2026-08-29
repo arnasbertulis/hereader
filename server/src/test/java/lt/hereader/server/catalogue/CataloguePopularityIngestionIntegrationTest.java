@@ -1,27 +1,20 @@
 package lt.hereader.server.catalogue;
 
-import com.sun.net.httpserver.HttpServer;
-import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.UncheckedIOException;
-import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
@@ -31,8 +24,9 @@ import static org.springframework.security.test.web.servlet.setup.SecurityMockMv
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
-/// End to end against a real Postgres and two local HTTP stubs standing in
-/// for Gutenberg's catalogue CSV and its bulk RDF archive (ADR 0029, #177).
+/// End to end against a real Postgres and CatalogueStubServerTest's shared
+/// local HTTP stub, standing in for Gutenberg's catalogue CSV and its bulk
+/// RDF archive (ADR 0029, #177).
 ///
 /// `rdf/pg11.rdf`, `rdf/pg15.rdf` and `rdf/pg98.rdf` are real per-book
 /// records, trimmed; see `src/test/resources/catalogue/README.md` for
@@ -41,21 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /// setup rather than committing a binary archive fixture.
 @SpringBootTest
 @ActiveProfiles("test")
-class CataloguePopularityIngestionIntegrationTest {
-
-    private static final HttpServer stub = startStub();
-
-    private static volatile byte[] csvBody = readCsvFixture();
-    private static volatile byte[] rdfArchiveBody = buildArchive("pg11.rdf", "pg15.rdf", "pg98.rdf");
-    private static volatile int rdfArchiveStatus = 200;
-
-    @DynamicPropertySource
-    static void upstreamUrls(DynamicPropertyRegistry registry) {
-        registry.add("hereader.catalogue.gutenberg-catalog-csv-url",
-                () -> "http://localhost:" + stub.getAddress().getPort() + "/pg_catalog.csv");
-        registry.add("hereader.catalogue.gutenberg-rdf-archive-url",
-                () -> "http://localhost:" + stub.getAddress().getPort() + "/rdf-files.tar.bz2");
-    }
+class CataloguePopularityIngestionIntegrationTest extends CatalogueStubServerTest {
 
     @Autowired private WebApplicationContext context;
     @Autowired private CatalogueIngestionService catalogueIngestion;
@@ -71,81 +51,18 @@ class CataloguePopularityIngestionIntegrationTest {
                 .build();
 
         csvBody = readCsvFixture();
+        // Reset even though nothing here changes it: the stub's state is
+        // static and shared with the other catalogue classes now, and
+        // CatalogueControllerIntegrationTest has a test that leaves it 503.
+        // The catalogueIngestion.refresh() below reads it.
+        csvStatus = 200;
         rdfArchiveBody = buildArchive("pg11.rdf", "pg15.rdf", "pg98.rdf");
         rdfArchiveStatus = 200;
         jdbc.sql("delete from catalogue_entries").update();
         catalogueIngestion.refresh();
     }
 
-    @AfterAll
-    static void tearDown() {
-        stub.stop(0);
-    }
-
-    // -- stub server -----------------------------------------------------
-
-    private static HttpServer startStub() {
-        try {
-            var server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
-            server.createContext("/pg_catalog.csv", exchange -> {
-                var body = csvBody;
-                exchange.getResponseHeaders().add("Content-Type", "text/csv; charset=utf-8");
-                exchange.sendResponseHeaders(200, body.length);
-                try (var out = exchange.getResponseBody()) {
-                    out.write(body);
-                }
-            });
-            server.createContext("/rdf-files.tar.bz2", exchange -> {
-                var status = rdfArchiveStatus;
-                if (status != 200) {
-                    exchange.sendResponseHeaders(status, -1);
-                    exchange.close();
-                    return;
-                }
-                var body = rdfArchiveBody;
-                exchange.getResponseHeaders().add("Content-Type", "application/x-bzip2");
-                exchange.sendResponseHeaders(200, body.length);
-                try (var out = exchange.getResponseBody()) {
-                    out.write(body);
-                }
-            });
-            server.start();
-            return server;
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
-    private static byte[] readCsvFixture() {
-        try (InputStream in = CataloguePopularityIngestionIntegrationTest.class
-                .getResourceAsStream("/catalogue/pg_catalog_sample.csv")) {
-            return in.readAllBytes();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
-    /// Packs the named `rdf/*.rdf` fixtures into a tar.bz2 byte array, one
-    /// entry per file, named the way the real archive names them
-    /// (`cache/epub/<id>/pg<id>.rdf`) — CataloguePopularityIngestionService
-    /// does not depend on that name, only on the ".rdf" suffix, but matching
-    /// it keeps the fixture honest about what it stands in for.
-    private static byte[] buildArchive(String... rdfFileNames) {
-        var bytes = new ByteArrayOutputStream();
-        try (var bzip2 = new BZip2CompressorOutputStream(bytes);
-             var tar = new TarArchiveOutputStream(bzip2)) {
-
-            for (var fileName : rdfFileNames) {
-                var id = fileName.substring("pg".length(), fileName.length() - ".rdf".length());
-                writeEntry(tar, "cache/epub/" + id + "/" + fileName, readRdfFixture(fileName));
-            }
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-        return bytes.toByteArray();
-    }
-
-    /// Same shape as buildArchive, but the entry between pg11.rdf and
+    /// Same shape as CatalogueStubServerTest.buildArchive, but the entry between pg11.rdf and
     /// pg15.rdf is XML that never closes its root element — proving
     /// GutenbergRdfEntryReader's documented "skip this one, keep streaming"
     /// contract rather than just asserting it in a comment.
@@ -163,23 +80,6 @@ class CataloguePopularityIngestionIntegrationTest {
             throw new UncheckedIOException(e);
         }
         return bytes.toByteArray();
-    }
-
-    private static void writeEntry(TarArchiveOutputStream tar, String name, byte[] content) throws IOException {
-        var entry = new TarArchiveEntry(name);
-        entry.setSize(content.length);
-        tar.putArchiveEntry(entry);
-        tar.write(content);
-        tar.closeArchiveEntry();
-    }
-
-    private static byte[] readRdfFixture(String fileName) {
-        try (InputStream in = CataloguePopularityIngestionIntegrationTest.class
-                .getResourceAsStream("/catalogue/rdf/" + fileName)) {
-            return in.readAllBytes();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
     }
 
     // -- join ------------------------------------------------------------
