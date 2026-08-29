@@ -85,36 +85,37 @@ public class CatalogueRepository {
                 .single());
     }
 
-    /// Matches [query] against title or authors, case-insensitively, when
-    /// non-blank; otherwise every entry. [category] and [language], each
-    /// blank for "no filter", narrow that further and combine with it and
-    /// with each other. Ordered by title, authors, issue date or download
-    /// count per [sort], in [direction] — every case breaks ties on title
-    /// then [gutenberg_id] (title alone for [sort] TITLE), unaffected by
-    /// [direction], so paging is stable no matter which filters or direction
-    /// are set.
+    /// Matches [query].query() against title or authors, case-insensitively,
+    /// when non-blank; otherwise every entry. [query].category() and
+    /// [query].language(), each blank for "no filter", narrow that further
+    /// and combine with it and with each other. Ordered by title, authors,
+    /// issue date or download count per [query].sort(), in
+    /// [query].direction() — every case breaks ties on title then
+    /// [gutenberg_id] (title alone for TITLE), unaffected by direction, so
+    /// paging is stable no matter which filters or direction are set.
     ///
-    /// Asks for one more row than the caller wants, so hasMore is known
-    /// without a second, count-only query.
+    /// [offset] and [limit] stay separate from [query] rather than folding
+    /// page/size into this call — CatalogueService adds one to [limit] over
+    /// [query].size() so hasMore is known without a second, count-only query,
+    /// which [query] itself has no reason to know about.
     ///
-    /// [sort] and [direction] are never caller-supplied text — CatalogueController
-    /// parses them into the enums before this is called — so building the
-    /// order-by clause from them here is safe. [category] and [language] stay
-    /// caller-supplied text throughout and are only ever bound as parameters,
-    /// never concatenated into the SQL.
-    public List<CatalogueDtos.Entry> search(
-            String query, String category, String language,
-            int offset, int limit, CatalogueDtos.Sort sort, CatalogueDtos.Direction direction) {
+    /// [query].sort() and [query].direction() are never caller-supplied text —
+    /// CatalogueController parses them into the enums before this is called —
+    /// so building the order-by clause from them here is safe. [query]
+    /// .category() and [query].language() stay caller-supplied text
+    /// throughout and are only ever bound as parameters, never concatenated
+    /// into the SQL.
+    public List<CatalogueDtos.Entry> search(CatalogueQuery query, int offset, int limit) {
 
-        var pattern = "%" + escapeLike(query) + "%";
-        var primaryColumn = switch (sort) {
+        var pattern = "%" + escapeLike(query.query()) + "%";
+        var primaryColumn = switch (query.sort()) {
             case POPULARITY -> "downloads";
             case AUTHOR -> "authors";
             case ISSUED -> "issued";
             case TITLE -> "title";
         };
-        var directionSql = direction == CatalogueDtos.Direction.DESCENDING ? "desc" : "asc";
-        var tiebreak = sort == CatalogueDtos.Sort.TITLE ? "gutenberg_id" : "title, gutenberg_id";
+        var directionSql = query.direction() == CatalogueDtos.Direction.DESCENDING ? "desc" : "asc";
+        var tiebreak = query.sort() == CatalogueDtos.Sort.TITLE ? "gutenberg_id" : "title, gutenberg_id";
         // nulls last unconditionally: default nulls placement flips with
         // direction (ascending nulls last, descending nulls first), and only
         // downloads/issued can ever be null, so this pins the "no value
@@ -137,10 +138,10 @@ public class CatalogueRepository {
 
                 limit :limit offset :offset
                 """)
-                .param("query", query)
+                .param("query", query.query())
                 .param("pattern", pattern)
-                .param("category", category)
-                .param("language", language)
+                .param("category", query.category())
+                .param("language", query.language())
                 .param("limit", limit)
                 .param("offset", offset)
                 .query((rs, _) -> new CatalogueDtos.Entry(
