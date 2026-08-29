@@ -1,15 +1,11 @@
 package lt.hereader.server.catalogue;
 
-import com.sun.net.httpserver.HttpServer;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
@@ -17,10 +13,6 @@ import org.springframework.web.context.WebApplicationContext;
 
 import tools.jackson.databind.ObjectMapper;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
-import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -37,7 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /// End to end through the real filter chain and a real Postgres, against a
 /// local HTTP stub standing in for Gutenberg's export (upstream locations
-/// are a configuration property — see catalogueCsvUrl below).
+/// are a configuration property — see CatalogueStubServerTest).
 ///
 /// `pg_catalog_sample.csv` is thirteen real rows; see
 /// `src/test/resources/catalogue/README.md` for provenance and which
@@ -47,19 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /// are not really a second upstream snapshot.
 @SpringBootTest
 @ActiveProfiles("test")
-class CatalogueControllerIntegrationTest {
-
-    private static final HttpServer stub = startStub();
-
-    private static volatile byte[] csvBody = readFixture();
-    private static volatile int csvStatus = 200;
-
-    @DynamicPropertySource
-    static void catalogueCsvUrl(DynamicPropertyRegistry registry) {
-        registry.add("hereader.catalogue.gutenberg-catalog-csv-url",
-                () -> "http://localhost:" + stub.getAddress().getPort()
-                        + "/pg_catalog.csv");
-    }
+class CatalogueControllerIntegrationTest extends CatalogueStubServerTest {
 
     @Autowired private WebApplicationContext context;
     @Autowired private CatalogueIngestionService ingestion;
@@ -74,43 +54,9 @@ class CatalogueControllerIntegrationTest {
                 .apply(springSecurity())
                 .build();
 
-        csvBody = readFixture();
+        csvBody = readCsvFixture();
         csvStatus = 200;
         jdbc.sql("delete from catalogue_entries").update();
-    }
-
-    @AfterAll
-    static void tearDown() {
-        stub.stop(0);
-    }
-
-    // -- stub server -----------------------------------------------------
-
-    private static HttpServer startStub() {
-        try {
-            var server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
-            server.createContext("/pg_catalog.csv", exchange -> {
-                var body = csvBody;
-                exchange.getResponseHeaders().add("Content-Type", "text/csv; charset=utf-8");
-                exchange.sendResponseHeaders(csvStatus, body.length);
-                try (var out = exchange.getResponseBody()) {
-                    out.write(body);
-                }
-            });
-            server.start();
-            return server;
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
-    private static byte[] readFixture() {
-        try (InputStream in = CatalogueControllerIntegrationTest.class
-                .getResourceAsStream("/catalogue/pg_catalog_sample.csv")) {
-            return in.readAllBytes();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
     }
 
     // -- readiness ---------------------------------------------------------
@@ -490,7 +436,7 @@ class CatalogueControllerIntegrationTest {
 
         // Alice's Adventures in Wonderland (id 11) is absent from the next
         // export, standing in for a book Gutenberg has withdrawn.
-        csvBody = withoutRow(readFixture(), "11,Text,");
+        csvBody = withoutRow(readCsvFixture(), "11,Text,");
         ingestion.refresh();
 
         mvc.perform(get("/catalogue/search?q=Alice"))
@@ -507,7 +453,7 @@ class CatalogueControllerIntegrationTest {
 
         // Alice's Adventures in Wonderland (id 11) carries British Literature
         // — its category rows must go with it, via the FK's cascade delete.
-        csvBody = withoutRow(readFixture(), "11,Text,");
+        csvBody = withoutRow(readCsvFixture(), "11,Text,");
         ingestion.refresh();
 
         mvc.perform(get("/catalogue/categories"))
@@ -521,7 +467,7 @@ class CatalogueControllerIntegrationTest {
                 .andExpect(jsonPath("$[?(@.language=='fr')].count").value(1));
 
         // Les morts qui parlent (79438) is the fixture's only fr entry.
-        csvBody = withoutRow(readFixture(), "79438,Text,");
+        csvBody = withoutRow(readCsvFixture(), "79438,Text,");
         ingestion.refresh();
 
         mvc.perform(get("/catalogue/languages"))
@@ -549,7 +495,7 @@ class CatalogueControllerIntegrationTest {
 
         // Cut partway through id 15's quoted Subjects field, as a dropped
         // connection mid-download would.
-        var text = new String(readFixture(), StandardCharsets.UTF_8);
+        var text = new String(readCsvFixture(), StandardCharsets.UTF_8);
         var cutAt = text.indexOf("\"Whaling");
         csvBody = text.substring(0, cutAt).getBytes(StandardCharsets.UTF_8);
 
@@ -562,7 +508,7 @@ class CatalogueControllerIntegrationTest {
 
     @Test
     void aRowWithFewerColumnsThanTheHeaderAbortsTheRefresh() {
-        var text = new String(readFixture(), StandardCharsets.UTF_8);
+        var text = new String(readCsvFixture(), StandardCharsets.UTF_8);
         // Truncates id 50's row after its second column — no trailing
         // newline, so the reader reaches end of file mid-row rather than
         // mid-field, which is the other shape a truncated download takes.
