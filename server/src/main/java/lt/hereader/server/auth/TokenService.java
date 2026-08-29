@@ -1,3 +1,4 @@
+// Throwaway comment: measuring server-only CI wall clock for ADR 0009 (#224).
 package lt.hereader.server.auth;
 
 import io.jsonwebtoken.Claims;
