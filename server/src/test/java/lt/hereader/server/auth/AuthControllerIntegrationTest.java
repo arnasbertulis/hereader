@@ -1,12 +1,12 @@
 package lt.hereader.server.auth;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
@@ -15,6 +15,7 @@ import java.util.UUID;
 
 import static org.hamcrest.Matchers.notNullValue;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -34,10 +35,25 @@ class AuthControllerIntegrationTest {
     @Autowired
     private WebApplicationContext context;
 
-    @MockitoSpyBean
+    // Wired via lt.hereader.server.config.TestPasswordEncoderConfig, which
+    // supplies the test profile's PasswordEncoder as a Mockito spy — this
+    // class declares no bean override, so it shares a context with the
+    // other plain @SpringBootTest classes (#231).
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     private MockMvc mvc;
+
+    /// The spy is a singleton in a context shared with every other class in
+    /// the suite, so its invocations would otherwise accumulate across test
+    /// methods and across classes. @MockitoSpyBean used to reset it after
+    /// each test; without the override, the class does it itself, and the
+    /// verify below stays an assertion about one request rather than about
+    /// whatever ran before it.
+    @BeforeEach
+    void clearEncoderInvocations() {
+        clearInvocations(passwordEncoder);
+    }
 
     private MockMvc mvc() {
         if (mvc == null) {

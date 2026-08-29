@@ -5,6 +5,7 @@ import lt.hereader.server.sync.SyncRequestSizeFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -114,7 +115,12 @@ class SecurityConfig {
         return source;
     }
 
+    // The test profile supplies its own, spy-wrapped instance (see
+    // lt.hereader.server.config.TestPasswordEncoderConfig) so
+    // AuthControllerIntegrationTest can verify encoder calls without a
+    // @MockitoSpyBean override forking the test context's cache key (#231).
     @Bean
+    @Profile("!test")
     PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
