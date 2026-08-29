@@ -3,15 +3,50 @@ name: codeql
 on:
   push:
     branches: [main]
+  # Filtered on this trigger only, not on push or the schedule: nothing
+  # required gates on this workflow (unlike ci-java.yml and ci-dart.yml,
+  # where a skipped required context would block the pull request forever),
+  # so a native `paths:` filter is safe here. main and the weekly cron stay
+  # unfiltered so the security baseline still runs against everything that
+  # lands, not just what a filtered pull request happened to touch.
+  #
+  # The list covers what either matrix language can find something in:
+  # java-kotlin scans server/ and app/android, javascript-typescript scans
+  # the repo's one JS file. No language target exists for Dart, so the
+  # packages and app/lib are not in this list.
   pull_request:
+    paths:
+      - 'server/**'
+      - 'app/android/**'
+      - 'app/web/drift_worker.js'
+      - '.github/workflows/codeql.yml'
   schedule:
     # Catches CVEs disclosed against dependencies between pushes, not just
     # new code.
     - cron: '0 5 * * 1'
 
+# A second push to a pull request supersedes the first, so the run against
+# the commit nobody will merge is cancelled rather than finished.
+#
+# The group is head_ref on a pull request — the source branch, shared by
+# every push to it — falling back to the sha on a push to main, where
+# head_ref is empty. Each main commit therefore gets a group of its own,
+# which is the point: cancel-in-progress does not mean "leave the other run
+# alone", it means "queue behind it", so one shared main group would make
+# the second of two quick merges wait out the first before starting. A
+# group of one has nothing to queue behind and nothing to cancel, and the
+# run against a tagged commit is the only test evidence it ever gets —
+# cd.yml builds and deploys, it does not test.
+#
+# cd.yml is the deliberate opposite, for a reason it states itself.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.sha }}
+  cancel-in-progress: true
+
 jobs:
   analyze:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       security-events: write
       contents: read
