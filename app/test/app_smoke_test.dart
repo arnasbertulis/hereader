@@ -205,7 +205,11 @@ void main() {
     addTearDown(harness.close);
 
     await harness.repository.addBook(
-      fixtureBook(id: 'read-first', title: 'Romeo and Juliet', wordCount: 25000),
+      fixtureBook(
+        id: 'read-first',
+        title: 'Romeo and Juliet',
+        wordCount: 25000,
+      ),
       Uint8List.fromList([1]),
     );
     await harness.repository.addBook(

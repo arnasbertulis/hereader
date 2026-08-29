@@ -53,14 +53,14 @@ void main() {
     await db.close();
   });
 
-  Future<void> addBook(String id, {required String title}) => repository
-      .addBook(
+  Future<void> addBook(String id, {required String title}) =>
+      repository.addBook(
         fixtureBook(id: id, title: title, wordCount: 1000),
         Uint8List.fromList([1, 2, 3]),
       );
 
-  Future<void> addNote(String id, {required String title}) => repository
-      .addBook(
+  Future<void> addNote(String id, {required String title}) =>
+      repository.addBook(
         fixtureBook(
           id: id,
           title: title,

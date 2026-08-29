@@ -301,10 +301,9 @@ LibraryBook fixtureBook({
     title: title,
     author: author,
     language: language,
-    text: TokenizedText.from(
-      [(id: 'block-0', text: List.filled(wordCount, 'word').join(' '))],
-      parserVersion: 1,
-    ),
+    text: TokenizedText.from([
+      (id: 'block-0', text: List.filled(wordCount, 'word').join(' ')),
+    ], parserVersion: 1),
     sourceFormat: sourceFormat,
     coverBytes: coverBytes,
   );
