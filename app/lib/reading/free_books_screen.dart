@@ -5,7 +5,6 @@ import 'package:epub_reader/epub_reader.dart';
 import 'package:flutter/material.dart';
 
 import '../catalogue/catalogue_client.dart';
-import '../catalogue/catalogue_importer.dart';
 import '../catalogue/language_names.dart';
 import '../data/library_repository.dart';
 import '../net/http_transport.dart';
@@ -141,10 +140,6 @@ class FreeBooksScreen extends StatefulWidget {
 }
 
 class _FreeBooksScreenState extends State<FreeBooksScreen> {
-  late final CatalogueImporter _importer = CatalogueImporter(
-    client: widget.client,
-    bookImporter: widget.bookImporter,
-  );
   late final BookOpener _opener = BookOpener(
     repository: widget.repository,
     sync: widget.sync,
@@ -373,18 +368,10 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
     setState(() => _importing.add(entry.bookId));
 
     try {
-      final imported = await _importer.import(entry.gutenbergId);
+      final bytes = await widget.client.download(entry.gutenbergId);
+      final book = await widget.bookImporter.import(bytes);
 
-      await widget.repository.addBook(
-        id: imported.book.id,
-        title: imported.book.title,
-        author: imported.book.author,
-        language: imported.book.language,
-        bytes: imported.bytes,
-        wordCount: imported.book.text.length,
-        sourceFormat: 'epub',
-        coverBytes: imported.book.coverBytes,
-      );
+      await widget.repository.addBook(book, bytes);
 
       if (!mounted) return;
       setState(() {

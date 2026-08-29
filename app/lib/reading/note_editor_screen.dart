@@ -104,13 +104,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
           resetProgress: textChanged,
         );
       } else {
-        await widget.repository.addBook(
-          id: id,
-          title: effectiveTitle,
-          bytes: bytes,
-          wordCount: parsed.text.length,
-          sourceFormat: 'note',
-        );
+        await widget.repository.addBook(parsed, bytes);
       }
 
       if (!mounted) return;
