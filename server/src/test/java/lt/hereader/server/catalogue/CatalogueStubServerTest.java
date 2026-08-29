@@ -54,11 +54,22 @@ import java.util.Comparator;
 /// local, in-process resources the OS reclaims when the test JVM exits.
 abstract class CatalogueStubServerTest {
 
-    static volatile byte[] csvBody = readCsvFixture();
+    /// The unmodified fixture export, read from the classpath once for the
+    /// JVM, and the tar.bz2 the popularity ingestion reads, packed once.
+    /// Neither varies between tests, so neither is rebuilt per test: a
+    /// subclass resetting the stub assigns these references back rather than
+    /// re-reading and re-compressing identical bytes (#232). Both are treated
+    /// as immutable — a test needing a different export or a different archive
+    /// derives a new array (CatalogueControllerIntegrationTest.withoutRow,
+    /// CataloguePopularityIngestionIntegrationTest.buildArchiveWithOneMalformedEntry)
+    /// rather than writing into these.
+    static final byte[] csvFixture = readCsvFixture();
+    static final byte[] rdfArchiveFixture = buildArchive("pg11.rdf", "pg15.rdf", "pg98.rdf");
+
+    static volatile byte[] csvBody = csvFixture;
     static volatile int csvStatus = 200;
 
-    static volatile byte[] rdfArchiveBody =
-            buildArchive("pg11.rdf", "pg15.rdf", "pg98.rdf");
+    static volatile byte[] rdfArchiveBody = rdfArchiveFixture;
     static volatile int rdfArchiveStatus = 200;
 
     static volatile byte[] coverBody = "cover-bytes".getBytes(StandardCharsets.UTF_8);
