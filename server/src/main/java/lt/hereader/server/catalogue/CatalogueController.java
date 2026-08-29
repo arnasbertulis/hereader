@@ -44,9 +44,9 @@ class CatalogueController {
     /// setting. An unrecognized [category] or [language] is not an error:
     /// CatalogueService treats it as an ordinary filter that happens to
     /// match nothing. [sort] is "title", "author", "issued" or "popularity",
-    /// case-insensitive; left absent, CatalogueService picks a default from
+    /// case-insensitive; left absent, CatalogueQuery picks a default from
     /// whether [q] is blank. [direction] is "ascending" or "descending",
-    /// case-insensitive; left absent, CatalogueService picks the resolved
+    /// case-insensitive; left absent, CatalogueQuery picks the resolved
     /// [sort] field's own existing default direction.
     @GetMapping("/search")
     CatalogueDtos.SearchResponse search(
@@ -62,8 +62,8 @@ class CatalogueController {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST, "page cannot be negative.");
         }
-        return service.search(
-                q, category, language, page, size, parseSort(sort), parseDirection(direction));
+        return service.search(CatalogueQuery.of(
+                q, category, language, page, size, parseSort(sort), parseDirection(direction)));
     }
 
     /// Every Category at least one Catalogue Entry carries, with how many —
