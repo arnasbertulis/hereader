@@ -64,11 +64,6 @@ class HomeScreen extends StatefulWidget {
   /// every book already exists.
   final VoidCallback onSeeAll;
 
-  /// Stamps anything the paste screen writes. Taken as a function rather
-  /// than reached through [sync], so a widget test can supply one without
-  /// standing up a clock, an auth store and a device id it has no use for.
-  final Future<String> Function() issueStamp;
-
   /// Whether the time on the tile counts down to the end of the chapter or
   /// the end of the book. Listened to rather than read, because Settings is
   /// a sibling tab kept alive beside this one and a value read at build time
@@ -85,7 +80,6 @@ class HomeScreen extends StatefulWidget {
     required this.repository,
     required this.sync,
     required this.onSeeAll,
-    required this.issueStamp,
     required this.display,
     required this.catalogue,
   });
@@ -230,8 +224,10 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openPaste() {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) =>
-            PasteReaderScreen(repository: _repo, issueStamp: widget.issueStamp),
+        builder: (_) => PasteReaderScreen(
+          repository: _repo,
+          issueStamp: widget.sync.issueStamp,
+        ),
       ),
     );
   }

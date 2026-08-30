@@ -89,11 +89,6 @@ class LibraryScreen extends StatefulWidget {
   final LibraryRepository repository;
   final SyncEngine sync;
 
-  /// Stamps the sort preference. Taken as a function rather than reached
-  /// through [sync], so a widget test can supply one without standing up a
-  /// clock, an auth store and a device id it has no use for.
-  final Future<String> Function() issueStamp;
-
   /// Whether a tile's time counts down to the end of the chapter or the end
   /// of the book. Listened to for the reason Home listens: Settings is a
   /// sibling tab kept alive beside this one.
@@ -108,7 +103,6 @@ class LibraryScreen extends StatefulWidget {
     super.key,
     required this.repository,
     required this.sync,
-    required this.issueStamp,
     required this.display,
     required this.catalogue,
   });
@@ -193,7 +187,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
     setState(() => _filter = filter);
 
-    final hlc = await widget.issueStamp();
+    final hlc = await widget.sync.issueStamp();
     await _repo.setPreference(_filterKey, filter.name, hlc: hlc);
   }
 
@@ -220,7 +214,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// concerned, and a crash between two writes would leave a field stored
   /// against the other field's direction.
   Future<void> _writeSort() async {
-    final hlc = await widget.issueStamp();
+    final hlc = await widget.sync.issueStamp();
 
     await _repo.setPreference(_sortKey, _sort.name, hlc: hlc);
     await _repo.setPreference(_sortReversedKey, '$_reversed', hlc: hlc);
