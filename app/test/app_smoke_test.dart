@@ -677,4 +677,29 @@ void main() {
     expect(byLastRead([read, imported]).first.id, 'imported');
     expect(byLastRead([imported, read]).first.id, 'imported');
   });
+
+  test('a tied timestamp still favours the book that has been opened', () {
+    // Drift's whole-second precision can round two real-clock writes onto
+    // the same stored value, which is exactly what this pins: the tie
+    // itself, not a difference small enough to disappear in rounding.
+    final tie = DateTime.utc(2026, 1, 1);
+    final read = BookSummary(
+      id: 'read',
+      title: 'Read',
+      wordCount: 10,
+      importedAt: tie,
+      sourceFormat: 'epub',
+      lastReadAt: tie,
+    );
+    final imported = BookSummary(
+      id: 'imported',
+      title: 'Imported',
+      wordCount: 10,
+      importedAt: tie,
+      sourceFormat: 'epub',
+    );
+
+    expect(byLastRead([read, imported]).first.id, 'read');
+    expect(byLastRead([imported, read]).first.id, 'read');
+  });
 }
