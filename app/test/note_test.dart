@@ -240,10 +240,13 @@ void main() {
         )..where((b) => b.id.equals('note-1'))).getSingle();
 
         await repo.editNote(
-          id: 'note-1',
-          title: 'New title',
-          bytes: _bytesOf('New text.'),
-          wordCount: 2,
+          fixtureBook(
+            id: 'note-1',
+            title: 'New title',
+            wordCount: 2,
+            sourceFormat: BookSourceFormat.note,
+          ),
+          _bytesOf('New text.'),
           resetProgress: false,
         );
 
@@ -272,10 +275,13 @@ void main() {
       );
 
       await repo.editNote(
-        id: 'note-1',
-        title: 'Original title',
-        bytes: _bytesOf('Original text.'),
-        wordCount: 2,
+        fixtureBook(
+          id: 'note-1',
+          title: 'Original title',
+          wordCount: 2,
+          sourceFormat: BookSourceFormat.note,
+        ),
+        _bytesOf('Original text.'),
         resetProgress: false,
       );
 
@@ -291,10 +297,13 @@ void main() {
       );
 
       await repo.editNote(
-        id: 'note-1',
-        title: 'Original title',
-        bytes: _bytesOf('Edited text.'),
-        wordCount: 2,
+        fixtureBook(
+          id: 'note-1',
+          title: 'Original title',
+          wordCount: 2,
+          sourceFormat: BookSourceFormat.note,
+        ),
+        _bytesOf('Edited text.'),
         resetProgress: true,
       );
 
@@ -310,10 +319,13 @@ void main() {
       );
 
       await repo.editNote(
-        id: 'note-1',
-        title: 'Original title',
-        bytes: _bytesOf('Edited text.'),
-        wordCount: 2,
+        fixtureBook(
+          id: 'note-1',
+          title: 'Original title',
+          wordCount: 2,
+          sourceFormat: BookSourceFormat.note,
+        ),
+        _bytesOf('Edited text.'),
         resetProgress: true,
       );
 
