@@ -15,19 +15,6 @@ import 'package:rsvp_engine/rsvp_engine.dart';
 import 'fakes.dart';
 import 'test_database.dart';
 
-/// Stands in for the real [BookImporter], which parses through `compute()` —
-/// a real isolate a widget test has no cheap way to wait on. Returns [book]
-/// regardless of the bytes handed to it, the way [FakeCatalogueClient]
-/// answers regardless of the request it was asked.
-class _StubBookImporter extends BookImporter {
-  final LibraryBook book;
-
-  const _StubBookImporter(this.book);
-
-  @override
-  Future<LibraryBook> import(Uint8List bytes) async => book;
-}
-
 LibraryBook _bookFor(String id, String title) => LibraryBook(
   id: id,
   title: title,
@@ -449,7 +436,7 @@ void main() {
     );
     await pump(
       tester,
-      bookImporter: _StubBookImporter(_bookFor(entry.bookId, entry.title)),
+      bookImporter: StubBookImporter(_bookFor(entry.bookId, entry.title)),
     );
     await tester.pumpAndSettle();
 
