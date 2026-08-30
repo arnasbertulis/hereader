@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
+import 'profile_actions.dart';
 import 'profile_edit_screen.dart';
 import 'profile_row.dart';
 
@@ -44,9 +45,15 @@ class ProfilesScreen extends StatefulWidget {
 class _ProfilesScreenState extends State<ProfilesScreen> {
   String? _activeId;
 
+  late final ProfileActions _profileActions;
+
   @override
   void initState() {
     super.initState();
+    _profileActions = ProfileActions(
+      repository: widget.repository,
+      issueStamp: widget.issueStamp,
+    );
     _loadActive();
   }
 
@@ -68,16 +75,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   }
 
   Future<void> _duplicate(ReadingProfile source) async {
-    final copy = source.fork(id: ReadingProfile.newId());
-    await widget.repository.saveProfile(copy, hlc: await widget.issueStamp());
+    await _profileActions.duplicate(context, source);
     if (!mounted) return;
-
-    // A copy is a profile the reader just asked to make and is about to
-    // customise, so it is what they read with next rather than whatever was
-    // active before the copy existed.
-    await _select(copy);
-    if (!mounted) return;
-    await _edit(copy);
+    await _loadActive();
   }
 
   Future<void> _edit(ReadingProfile profile) async {
@@ -93,9 +93,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
 
     if (!mounted) return;
 
-    // The editor forked a preset. Same rule as _duplicate above: a profile
-    // just created by editing is the one to read with, regardless of what
-    // was active when the fork happened.
+    // The editor forked a preset. Same rule ProfileActions.duplicate
+    // follows: a profile just created by editing is the one to read with,
+    // regardless of what was active when the fork happened.
     if (result != null && result.id != profile.id) {
       await _select(result);
       return;
@@ -105,33 +105,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   }
 
   Future<void> _delete(ReadingProfile profile) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete ${profile.name}?'),
-        content: const Text(
-          'This removes it from every device signed in to your account. '
-          'Presets are not affected.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Keep'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true || !mounted) return;
-
-    await widget.repository.deleteProfile(
-      profile.id,
-      hlc: await widget.issueStamp(),
-    );
+    final deleted = await _profileActions.delete(context, profile);
+    if (!deleted || !mounted) return;
 
     // Deleting the active profile clears the pointer in the repository, so
     // this reads back as Standard rather than as a dangling id.

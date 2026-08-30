@@ -11,6 +11,7 @@ import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
 import 'library_book.dart';
 import 'mode_fork.dart';
+import 'profile_actions.dart';
 import 'profile_edit_screen.dart';
 import 'profile_presentation.dart';
 import 'profile_row.dart';
@@ -255,9 +256,15 @@ class _ReaderScreenState extends State<ReaderScreen>
   /// is also what ADR 0015 rejected for `AppearanceController`.
   int _stepWords = kDefaultStepWords;
 
+  late final ProfileActions _profileActions;
+
   @override
   void initState() {
     super.initState();
+    _profileActions = ProfileActions(
+      repository: widget.repository,
+      issueStamp: widget.issueStamp,
+    );
     _session = PlaybackSession(
       tokens: widget.book.text.tokens,
       profile: _profile,
@@ -833,58 +840,13 @@ class _ReaderScreenState extends State<ReaderScreen>
         await _adoptActiveProfile();
 
       case _CopyProfile(:final profile):
-        final copy = profile.fork(id: ReadingProfile.newId());
-        await widget.repository.saveProfile(
-          copy,
-          hlc: await widget.issueStamp(),
-        );
-        if (!mounted) return;
-        // A copy is selected as soon as it exists, same rule as
-        // ProfilesScreen._duplicate — the reader asked to make it and is
-        // about to customise it.
-        await widget.repository.setActiveProfile(
-          copy.id,
-          hlc: await widget.issueStamp(),
-        );
-        if (!mounted) return;
-        await Navigator.of(context).push<ReadingProfile>(
-          MaterialPageRoute(
-            builder: (_) => ProfileEditScreen(
-              profile: copy,
-              repository: widget.repository,
-              issueStamp: widget.issueStamp,
-            ),
-          ),
-        );
+        await _profileActions.duplicate(context, profile);
         if (!mounted) return;
         await _adoptActiveProfile();
 
       case _DeleteProfile(:final profile):
-        final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text('Delete ${profile.name}?'),
-            content: const Text(
-              'This removes it from every device signed in to your account. '
-              'Presets are not affected.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Keep'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Delete'),
-              ),
-            ],
-          ),
-        );
-        if (confirmed != true || !mounted) return;
-        await widget.repository.deleteProfile(
-          profile.id,
-          hlc: await widget.issueStamp(),
-        );
+        final deleted = await _profileActions.delete(context, profile);
+        if (!deleted || !mounted) return;
         // Deleting the active profile clears the pointer in the repository,
         // so this reads back as Standard rather than as a dangling id.
         await _adoptActiveProfile();
