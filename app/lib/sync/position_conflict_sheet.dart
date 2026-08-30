@@ -20,20 +20,21 @@ class _Candidate {
   /// if the two disagree.
   final int? tokenIndex;
 
-  final int? totalTokens;
+  /// The book text this position was resolved against, kept so progress can
+  /// be read from [TokenizedText.progressAt] instead of a second copy of its
+  /// arithmetic.
+  final TokenizedText? text;
 
   const _Candidate({
     required this.locator,
     required this.tokenIndex,
-    required this.totalTokens,
+    required this.text,
   });
 
   bool get isResolvable => tokenIndex != null;
 
   double? get progress =>
-      tokenIndex == null || totalTokens == null || totalTokens == 0
-      ? null
-      : tokenIndex! / totalTokens!;
+      tokenIndex == null || text == null ? null : text!.progressAt(tokenIndex!);
 
   static _Candidate from(Map<String, dynamic> payload, TokenizedText? text) {
     final locator = Locator(
@@ -45,7 +46,7 @@ class _Candidate {
     return _Candidate(
       locator: locator,
       tokenIndex: text?.indexOf(locator),
-      totalTokens: text?.length,
+      text: text,
     );
   }
 }
@@ -62,12 +63,18 @@ class PositionConflictSheet extends StatefulWidget {
   final LibraryRepository repository;
   final SyncEngine sync;
 
+  /// Overridable so a test can resolve a candidate's position without going
+  /// through the real [BookImporter]'s `compute()` isolate, the way
+  /// `FreeBooksScreen.bookImporter` already does.
+  final BookImporter bookImporter;
+
   const PositionConflictSheet({
     super.key,
     required this.conflict,
     required this.bookTitle,
     required this.repository,
     required this.sync,
+    this.bookImporter = const BookImporter(),
   });
 
   /// Shows the sheet and settles the conflict with whatever is chosen.
@@ -131,7 +138,7 @@ class _PositionConflictSheetState extends State<PositionConflictSheet> {
         widget.conflict.bookId,
       );
       if (stored != null) {
-        text = (await const BookImporter().reopenStored(
+        text = (await widget.bookImporter.reopenStored(
           stored.bytes,
           sourceFormat: BookSourceFormat.fromName(stored.sourceFormat),
           id: widget.conflict.bookId,
@@ -282,7 +289,7 @@ class _PositionOption extends StatelessWidget {
     if (!candidate.isResolvable) return 'Not in this copy of the book';
 
     final progress = candidate.progress;
-    if (progress == null) return 'Around word ${candidate.tokenIndex}';
+    if (progress == null) return 'Around word ${candidate.tokenIndex! + 1}';
 
     return '${(progress * 100).round()}% through';
   }
