@@ -541,6 +541,66 @@ void main() {
   });
 
   testWidgets(
+    'a failed load-more leaves the pages already on screen and offers a '
+    'retry that resumes from the same page',
+    (tester) async {
+      final firstPage = List.generate(
+        12,
+        (i) => entryStub(gutenbergId: i + 1, title: 'Book $i').toEntry(),
+      );
+      catalogue.searchResponses.add(
+        CatalogueSearchResult(
+          catalogueReady: true,
+          results: firstPage,
+          page: 0,
+          hasMore: true,
+        ),
+      );
+
+      await pump(tester);
+      await tester.pumpAndSettle();
+
+      catalogue.nextError = const NetworkException('unreachable');
+
+      await tester.drag(find.byKey(freeBooksGridKey), const Offset(0, -3000));
+      await tester.pumpAndSettle();
+
+      // The grid from the first page is still on screen, not replaced by the
+      // full-screen error — the tile nearest the scroll position, which the
+      // drag put in view, is still there.
+      expect(find.byKey(freeBooksGridKey), findsOneWidget);
+      expect(find.text('Book 11'), findsOneWidget);
+      expect(find.byKey(freeBooksMessageKey), findsNothing);
+      expect(
+        find.text(
+          'No internet connection. Check your connection and try again.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(freeBooksLoadMoreRetryButtonKey), findsOneWidget);
+
+      final secondEntry = entryStub(gutenbergId: 999, title: 'The Last Book');
+      catalogue.searchResponses.add(
+        CatalogueSearchResult(
+          catalogueReady: true,
+          results: [secondEntry.toEntry()],
+          page: 1,
+          hasMore: false,
+        ),
+      );
+
+      await tester.tap(find.byKey(freeBooksLoadMoreRetryButtonKey));
+      await tester.pumpAndSettle();
+
+      expect(catalogue.searches.last.page, 1);
+      expect(find.text('The Last Book'), findsOneWidget);
+      expect(find.byKey(freeBooksLoadMoreErrorKey), findsNothing);
+
+      await _disposeTree(tester);
+    },
+  );
+
+  testWidgets(
     'an active category filter carries through a load-more page request',
     (tester) async {
       catalogue.categoryResponse = const [

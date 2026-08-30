@@ -36,6 +36,16 @@ const Key freeBooksMessageKey = Key('free-books-message');
 /// Identifies the button that repeats the last search.
 const Key freeBooksRetryButtonKey = Key('free-books-retry-button');
 
+/// Identifies the message shown when a *further* page fails to load, with
+/// the pages already on screen left in place.
+const Key freeBooksLoadMoreErrorKey = Key('free-books-load-more-error');
+
+/// Identifies the button that retries only the page that failed, rather
+/// than the whole search.
+const Key freeBooksLoadMoreRetryButtonKey = Key(
+  'free-books-load-more-retry-button',
+);
+
 /// Identifies the button that reverses the current sort's direction.
 const Key freeBooksReverseSortButtonKey = Key('free-books-reverse-sort-button');
 
@@ -155,6 +165,11 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
   bool _loading = true;
   bool _loadingMore = false;
   _FreeBooksProblem? _problem;
+
+  /// Set only by a failed load-more (`_load(reset: false)`), never by a
+  /// first load — [_problem] covers that. Kept apart so a failure on the
+  /// *next* page cannot make [_body] discard the pages already on screen.
+  _FreeBooksProblem? _loadMoreProblem;
 
   String _category = '';
   String _language = '';
@@ -283,10 +298,14 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
         _entries.clear();
         _hasMore = false;
         _problem = null;
+        _loadMoreProblem = null;
         _loading = true;
       });
     } else {
-      setState(() => _loadingMore = true);
+      setState(() {
+        _loadingMore = true;
+        _loadMoreProblem = null;
+      });
     }
 
     // Captured so a reset started while this request is in flight can be
@@ -313,7 +332,11 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
 
       if (!result.catalogueReady) {
         setState(() {
-          _problem = _FreeBooksProblem.catalogueUnavailable;
+          if (reset) {
+            _problem = _FreeBooksProblem.catalogueUnavailable;
+          } else {
+            _loadMoreProblem = _FreeBooksProblem.catalogueUnavailable;
+          }
           _loading = false;
           _loadingMore = false;
         });
@@ -335,14 +358,22 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
     } on NetworkException {
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
-        _problem = _FreeBooksProblem.noConnection;
+        if (reset) {
+          _problem = _FreeBooksProblem.noConnection;
+        } else {
+          _loadMoreProblem = _FreeBooksProblem.noConnection;
+        }
         _loading = false;
         _loadingMore = false;
       });
     } on ApiException {
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
-        _problem = _FreeBooksProblem.catalogueUnavailable;
+        if (reset) {
+          _problem = _FreeBooksProblem.catalogueUnavailable;
+        } else {
+          _loadMoreProblem = _FreeBooksProblem.catalogueUnavailable;
+        }
         _loading = false;
         _loadingMore = false;
       });
@@ -457,6 +488,7 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
               final metrics = notification.metrics;
               if (_hasMore &&
                   !_loadingMore &&
+                  _loadMoreProblem == null &&
                   metrics.pixels >=
                       metrics.maxScrollExtent - _loadMoreThreshold) {
                 _load(reset: false);
@@ -475,10 +507,27 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
         ),
         if (_loadingMore)
           const LinearProgressIndicator(key: freeBooksLoadingMoreKey),
+        if (_loadMoreProblem != null)
+          _LoadMoreError(
+            problem: _loadMoreProblem!,
+            onRetry: () => _load(reset: false),
+          ),
       ],
     );
   }
 }
+
+/// The message for each [_FreeBooksProblem], shared by [_ProblemView] (a
+/// failed first load) and [_LoadMoreError] (a failed further page) so the
+/// two never drift onto different wording for the same problem.
+String _problemMessage(_FreeBooksProblem problem) => switch (problem) {
+  _FreeBooksProblem.nothingMatched => 'Nothing matched your search or filters.',
+  _FreeBooksProblem.catalogueEmpty => 'The catalogue has no books yet.',
+  _FreeBooksProblem.noConnection =>
+    'No internet connection. Check your connection and try again.',
+  _FreeBooksProblem.catalogueUnavailable =>
+    'The catalogue is not available right now. Try again later.',
+};
 
 /// The three answers a search can come back with, none of them silence.
 class _ProblemView extends StatelessWidget {
@@ -486,16 +535,6 @@ class _ProblemView extends StatelessWidget {
   final VoidCallback onRetry;
 
   const _ProblemView({required this.problem, required this.onRetry});
-
-  String get _message => switch (problem) {
-    _FreeBooksProblem.nothingMatched =>
-      'Nothing matched your search or filters.',
-    _FreeBooksProblem.catalogueEmpty => 'The catalogue has no books yet.',
-    _FreeBooksProblem.noConnection =>
-      'No internet connection. Check your connection and try again.',
-    _FreeBooksProblem.catalogueUnavailable =>
-      'The catalogue is not available right now. Try again later.',
-  };
 
   bool get _showsRetry =>
       problem == _FreeBooksProblem.noConnection ||
@@ -512,7 +551,7 @@ class _ProblemView extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              _message,
+              _problemMessage(problem),
               key: freeBooksMessageKey,
               textAlign: TextAlign.center,
               style: theme.textTheme.bodyLarge,
@@ -527,6 +566,45 @@ class _ProblemView extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Shown under an already-loaded grid when the *next* page fails, leaving
+/// the pages already on screen in place — unlike [_ProblemView], which
+/// replaces the whole screen for a failed first load. [_FreeBooksScreenState]
+/// only ever reaches this with [_FreeBooksProblem.noConnection] or
+/// [_FreeBooksProblem.catalogueUnavailable], both retryable, so the retry
+/// button is unconditional here.
+class _LoadMoreError extends StatelessWidget {
+  final _FreeBooksProblem problem;
+  final VoidCallback onRetry;
+
+  const _LoadMoreError({required this.problem, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            _problemMessage(problem),
+            key: freeBooksLoadMoreErrorKey,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          FilledButton(
+            key: freeBooksLoadMoreRetryButtonKey,
+            onPressed: onRetry,
+            child: const Text('Try again'),
+          ),
+        ],
       ),
     );
   }
