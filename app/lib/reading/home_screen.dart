@@ -386,7 +386,10 @@ List<BookSummary> byLastRead(List<BookSummary> books) {
     // timestamp that survives the round trip through the database. A tie
     // still has a right answer: a book that has actually been opened
     // outranks one that has only ever been added.
-    return _hasBeenRead(b) == _hasBeenRead(a) ? 0 : (_hasBeenRead(a) ? -1 : 1);
+    final aRead = _hasBeenRead(a);
+    final bRead = _hasBeenRead(b);
+    if (aRead == bRead) return 0;
+    return aRead ? -1 : 1;
   });
 
   return sorted;
