@@ -377,12 +377,24 @@ double _screenPadding(BuildContext context) =>
 /// its own list in Dart for the same reason.
 List<BookSummary> byLastRead(List<BookSummary> books) {
   final sorted = [...books];
-  sorted.sort((a, b) => _activityOf(b).compareTo(_activityOf(a)));
+  sorted.sort((a, b) {
+    final byActivity = _activityOf(b).compareTo(_activityOf(a));
+    if (byActivity != 0) return byActivity;
+
+    // Drift stores DateTime columns at whole-second precision, so a book
+    // read right after being imported can tie its own import on the
+    // timestamp that survives the round trip through the database. A tie
+    // still has a right answer: a book that has actually been opened
+    // outranks one that has only ever been added.
+    return _hasBeenRead(b) == _hasBeenRead(a) ? 0 : (_hasBeenRead(a) ? -1 : 1);
+  });
 
   return sorted;
 }
 
 DateTime _activityOf(BookSummary book) => book.lastReadAt ?? book.importedAt;
+
+bool _hasBeenRead(BookSummary book) => book.lastReadAt != null;
 
 class _SectionLabel extends StatelessWidget {
   final String text;
