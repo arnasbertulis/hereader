@@ -97,10 +97,8 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
 
       if (widget.isEditing) {
         await widget.repository.editNote(
-          id: id,
-          title: effectiveTitle,
-          bytes: bytes,
-          wordCount: parsed.text.length,
+          parsed,
+          bytes,
           resetProgress: textChanged,
         );
       } else {

@@ -385,6 +385,11 @@ class LibraryRepository {
 
   /// Rewrites a stored note's title and text.
   ///
+  /// Takes the re-parsed [book] and the [bytes] it was parsed from, the same
+  /// shape as [addBook]: `title` comes straight off [book] and `wordCount` is
+  /// `book.text.length`, so a caller wanting a different figure fixes the
+  /// parse rather than restating the derivation here too.
+  ///
   /// A plain update, not [addBook]'s `insertOnConflictUpdate`: that path
   /// rewrites `importedAt` to now on every call, which is right for
   /// re-importing an edition and wrong here — an edit changes when the note
@@ -399,26 +404,24 @@ class LibraryRepository {
   ///
   /// Not enqueued: book content has never synced, notes included, so there is
   /// nothing here for another device to receive.
-  Future<void> editNote({
-    required String id,
-    required String title,
-    required Uint8List bytes,
-    required int wordCount,
+  Future<void> editNote(
+    LibraryBook book,
+    Uint8List bytes, {
     required bool resetProgress,
   }) async {
     await _db.transaction(() async {
       final now = DateTime.now().toUtc();
 
-      await (_db.update(_db.books)..where((b) => b.id.equals(id))).write(
+      await (_db.update(_db.books)..where((b) => b.id.equals(book.id))).write(
         BooksCompanion(
-          title: Value(title),
+          title: Value(book.title),
           bytes: Value(bytes),
-          wordCount: Value(wordCount),
+          wordCount: Value(book.text.length),
           updatedAt: Value(now),
         ),
       );
 
-      if (resetProgress) await _resetPosition(id);
+      if (resetProgress) await _resetPosition(book.id);
     });
   }
 

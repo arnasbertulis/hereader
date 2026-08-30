@@ -311,10 +311,13 @@ void main() {
     // that only ever equalled importedAt would leave the assertion above
     // true while an edit still could not be timestamped.
     await LibraryRepository(upgraded).editNote(
-      id: 'note-1',
-      title: 'A note, edited',
-      bytes: Uint8List.fromList([4, 5, 6]),
-      wordCount: 10,
+      fixtureBook(
+        id: 'note-1',
+        title: 'A note, edited',
+        wordCount: 10,
+        sourceFormat: BookSourceFormat.note,
+      ),
+      Uint8List.fromList([4, 5, 6]),
       resetProgress: false,
     );
 
