@@ -140,6 +140,11 @@ lib/
    │                             configured. What is ruled out here is a
    │                             setting whose wrong value costs the reader
    │                             their place, not a preference as such
+   ├─ profile_actions.dart      Duplicate and delete a profile, including
+   │                             the delete confirmation copy, in
+   │                             BookOpener's stateless shape — called by
+   │                             both ReaderScreen and ProfilesScreen instead
+   │                             of each carrying its own copy
    ├─ profiles_screen.dart      Profile list, presets separated from forks
    ├─ profile_edit_screen.dart  One profile, with a live preview
    ├─ appearance_screen.dart    Theme, accent and contrast for app chrome.
