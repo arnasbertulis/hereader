@@ -32,10 +32,10 @@ void main() {
   late SyncEngine sync;
   late FakeCatalogueClient catalogue;
 
-  setUp(() {
+  setUp(() async {
     db = AppDatabase(testExecutor());
     repository = LibraryRepository(db);
-    auth = AuthStore();
+    auth = AuthStore(storage: FakeSecureStorage());
     api = ApiClient(baseUrl: Uri.parse('http://localhost'), auth: auth);
     sync = SyncEngine(
       repository: repository,
@@ -43,6 +43,7 @@ void main() {
       auth: auth,
       database: db,
     );
+    await sync.start();
     catalogue = FakeCatalogueClient();
   });
 
@@ -80,7 +81,6 @@ void main() {
         home: LibraryScreen(
           repository: repository,
           sync: sync,
-          issueStamp: () async => '0000000000001-00000-test',
           display: ReadingDisplayController(
             repository: repository,
             issueStamp: () async => '0000000000001-00000-test',
