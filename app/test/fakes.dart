@@ -308,3 +308,23 @@ LibraryBook fixtureBook({
     coverBytes: coverBytes,
   );
 }
+
+/// Stands in for the real [BookImporter], which parses through `compute()` —
+/// a real isolate a widget test has no cheap way to wait on. Returns [book]
+/// regardless of the bytes handed to it, the way [FakeCatalogueClient]
+/// answers regardless of the request it was asked.
+class StubBookImporter extends BookImporter {
+  final LibraryBook book;
+
+  const StubBookImporter(this.book);
+
+  @override
+  Future<LibraryBook> import(Uint8List bytes) async => book;
+
+  @override
+  Future<LibraryBook> openNote(
+    Uint8List bytes, {
+    required String id,
+    required String title,
+  }) async => book;
+}
