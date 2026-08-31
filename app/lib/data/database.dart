@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:flutter/foundation.dart';
 
 part 'database.g.dart';
 
@@ -304,6 +305,21 @@ class AppDatabase extends _$AppDatabase {
               web: DriftWebOptions(
                 sqlite3Wasm: Uri.parse('sqlite3.wasm'),
                 driftWorker: Uri.parse('drift_worker.js'),
+                // drift_flutter's own default onResult unconditionally
+                // print()s the storage tier and any missing browser
+                // features straight to the console. Falling back to
+                // sharedIndexedDb is expected on browsers without drift's
+                // preferred OPFS access (Firefox, at review time) — not a
+                // failure worth surfacing to every production reader's
+                // console. Kept for local debugging only.
+                onResult: (result) {
+                  if (kDebugMode && result.missingFeatures.isNotEmpty) {
+                    debugPrint(
+                      'Using ${result.chosenImplementation} due to missing '
+                      'browser features: ${result.missingFeatures}',
+                    );
+                  }
+                },
               ),
             ),
       );
