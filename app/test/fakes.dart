@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:app/catalogue/catalogue_client.dart';
@@ -199,6 +200,12 @@ class FakeCatalogueClient implements CatalogueClient {
   /// Queued responses, taken in order. Empty defaults to a ready, empty page.
   final List<CatalogueSearchResult> searchResponses = [];
 
+  /// Gates queued by [holdNextSearch], taken in call order — the first
+  /// `search()` call to arrive after a gate is queued waits on it, not
+  /// necessarily the call that queued it. Empty means resolve immediately,
+  /// the pre-#257 default.
+  final List<Completer<void>> _searchGates = [];
+
   List<CategoryCount> categoryResponse = const [];
   List<LanguageCount> languageResponse = const [];
   Uint8List coverBytes = Uint8List(0);
@@ -206,6 +213,17 @@ class FakeCatalogueClient implements CatalogueClient {
 
   /// Thrown by the next call, then cleared.
   Object? nextError;
+
+  /// Queues a gate that the next uncommitted `search()` call will wait on.
+  /// Complete the returned [Completer] to let that call proceed to its
+  /// queued response. Call this once per call a test wants to hold, before
+  /// making that call — queuing two gates and completing them out of order
+  /// is how a test makes an earlier request resolve after a later one.
+  Completer<void> holdNextSearch() {
+    final gate = Completer<void>();
+    _searchGates.add(gate);
+    return gate;
+  }
 
   @override
   Future<CatalogueSearchResult> search({
@@ -228,14 +246,22 @@ class FakeCatalogueClient implements CatalogueClient {
       direction: direction,
     ));
 
-    if (searchResponses.isNotEmpty) return searchResponses.removeAt(0);
+    // Bound to this call before the gate wait, not after: which response a
+    // call gets must follow call order even when release order does not, or
+    // holding an earlier call open would let a later call steal its place in
+    // the response queue.
+    final response = searchResponses.isNotEmpty
+        ? searchResponses.removeAt(0)
+        : CatalogueSearchResult(
+            catalogueReady: true,
+            results: const [],
+            page: page,
+            hasMore: false,
+          );
 
-    return CatalogueSearchResult(
-      catalogueReady: true,
-      results: const [],
-      page: page,
-      hasMore: false,
-    );
+    if (_searchGates.isNotEmpty) await _searchGates.removeAt(0).future;
+
+    return response;
   }
 
   @override
