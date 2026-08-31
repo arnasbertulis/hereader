@@ -363,6 +363,24 @@ void main() {
       expect(client.searches, isEmpty);
     });
 
+    test('carries the active filters into the further page request', () async {
+      client.searchResponses.addAll([
+        ready(results: [entry(1)], hasMore: true),
+        ready(results: [entry(2)], hasMore: false),
+      ]);
+      final browse = CatalogueBrowse(client: client);
+      addTearDown(browse.dispose);
+
+      browse.filtersChanged(category: 'Fiction', language: 'fr');
+      await pumpEventQueue();
+      browse.loadMore();
+      await pumpEventQueue();
+
+      expect(client.searches.last.page, 1);
+      expect(client.searches.last.category, 'Fiction');
+      expect(client.searches.last.language, 'fr');
+    });
+
     test('is a no-op while a load-more error is already showing', () async {
       client.searchResponses.add(ready(results: [entry(1)], hasMore: true));
       final browse = CatalogueBrowse(client: client);
