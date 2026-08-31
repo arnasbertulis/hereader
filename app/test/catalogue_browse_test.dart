@@ -383,6 +383,83 @@ void main() {
     });
   });
 
+  group('filter getters', () {
+    test('start at the defaults a fresh Browse queries with', () async {
+      final browse = CatalogueBrowse(client: client);
+      addTearDown(browse.dispose);
+
+      expect(browse.category, '');
+      expect(browse.language, '');
+      expect(browse.sort, CatalogueSort.popularity);
+      expect(browse.direction, isNull);
+    });
+
+    test('report what filtersChanged last set', () async {
+      final browse = CatalogueBrowse(client: client);
+      addTearDown(browse.dispose);
+
+      browse.filtersChanged(
+        category: 'Fiction',
+        language: 'fr',
+        sort: CatalogueSort.title,
+        direction: CatalogueDirection.descending,
+      );
+      await pumpEventQueue();
+
+      expect(browse.category, 'Fiction');
+      expect(browse.language, 'fr');
+      expect(browse.sort, CatalogueSort.title);
+      expect(browse.direction, CatalogueDirection.descending);
+
+      browse.filtersChanged(direction: null);
+      await pumpEventQueue();
+
+      expect(browse.direction, isNull);
+      expect(browse.category, 'Fiction');
+    });
+  });
+
+  group('retryLoadMore', () {
+    test('re-requests the page that failed, keeping the entries', () async {
+      client.searchResponses.add(ready(results: [entry(1)], hasMore: true));
+      final browse = CatalogueBrowse(client: client);
+      addTearDown(browse.dispose);
+      final states = track(browse);
+
+      browse.start();
+      await pumpEventQueue();
+
+      client.nextError = const NetworkException('unreachable');
+      browse.loadMore();
+      await pumpEventQueue();
+      client.searches.clear();
+
+      client.searchResponses.add(ready(results: [entry(2)], hasMore: false));
+      browse.retryLoadMore();
+      await pumpEventQueue();
+
+      expect(client.searches.single.page, 1);
+      final result = states.last as BrowseReady;
+      expect(result.entries.map((e) => e.gutenbergId).toList(), [1, 2]);
+      expect(result.loadMoreProblem, isNull);
+    });
+
+    test('is a no-op with no load-more problem showing', () async {
+      client.searchResponses.add(ready(results: [entry(1)], hasMore: true));
+      final browse = CatalogueBrowse(client: client);
+      addTearDown(browse.dispose);
+
+      browse.start();
+      await pumpEventQueue();
+      client.searches.clear();
+
+      browse.retryLoadMore();
+      await pumpEventQueue();
+
+      expect(client.searches, isEmpty);
+    });
+  });
+
   group('dispose', () {
     test(
       'cancels a pending debounced search; no further state is emitted',
