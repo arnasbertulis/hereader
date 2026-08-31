@@ -1,9 +1,9 @@
-import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:epub_reader/epub_reader.dart';
 import 'package:flutter/material.dart';
 
+import '../catalogue/catalogue_browse.dart';
 import '../catalogue/catalogue_client.dart';
 import '../catalogue/language_names.dart';
 import '../data/library_repository.dart';
@@ -53,12 +53,6 @@ const Key freeBooksReverseSortButtonKey = Key('free-books-reverse-sort-button');
 /// the title it happens to carry this week.
 Key freeBooksTileKey(int gutenbergId) => Key('free-books-tile-$gutenbergId');
 
-/// How long a keystroke waits before it becomes a search.
-///
-/// Short enough that the list still feels live, long enough that a reader
-/// typing a whole word does not fire one request per letter.
-const _debounceDelay = Duration(milliseconds: 400);
-
 /// How close to the bottom the grid has to scroll before the next page is
 /// asked for, in logical pixels.
 const double _loadMoreThreshold = 300;
@@ -68,25 +62,6 @@ const double _loadMoreThreshold = 300;
 /// Catalogue tile carries no place or progress line — there is nothing to
 /// resume in a book not yet on this device.
 const double _textBlockHeight = 96;
-
-enum _FreeBooksProblem {
-  /// A search, a Category or a Language narrowed the Catalogue to nothing —
-  /// distinct from [catalogueEmpty], which is what the reader sees with none
-  /// of those active, so the two read differently rather than sharing one
-  /// generic "nothing here" message.
-  nothingMatched,
-
-  /// The Catalogue is ready but holds no Entry at all, with no search and no
-  /// filter narrowing it.
-  catalogueEmpty,
-
-  /// The device could not reach the server at all.
-  noConnection,
-
-  /// The server answered, but the Catalogue itself is not ready — ADR 0029:
-  /// ingestion can be mid-run or have never completed.
-  catalogueUnavailable,
-}
 
 /// The sort control's own words, rather than [CatalogueSort]'s wire names.
 extension on CatalogueSort {
@@ -156,33 +131,22 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
   );
 
   final _searchController = TextEditingController();
-  Timer? _debounce;
 
-  final _entries = <CatalogueEntry>[];
-  int _page = 0;
-  int _loadGeneration = 0;
-  bool _hasMore = false;
-  bool _loading = true;
-  bool _loadingMore = false;
-  _FreeBooksProblem? _problem;
+  /// The query, filters, sort, pagination position and debounce for this
+  /// Browse, all of it. This screen keeps no copy of any of them: it hands
+  /// the reader's actions to [_browse] and paints whatever comes back out
+  /// of [CatalogueBrowse.state].
+  late final CatalogueBrowse _browse = CatalogueBrowse(client: widget.client);
 
-  /// Set only by a failed load-more (`_load(reset: false)`), never by a
-  /// first load — [_problem] covers that. Kept apart so a failure on the
-  /// *next* page cannot make [_body] discard the pages already on screen.
-  _FreeBooksProblem? _loadMoreProblem;
-
-  String _category = '';
-  String _language = '';
-  CatalogueSort _sort = CatalogueSort.popularity;
-
-  /// Flips [CatalogueSort.defaultDirection] for the active [_sort]. Resets
-  /// with the field, the same reasoning `library_screen.dart`'s own
-  /// `_chooseSort` gives: "Oldest first" carried over onto Title is not the
-  /// request the reader made by picking Title.
-  bool _reversed = false;
+  /// Whether the reader has flipped the active sort off its own default
+  /// direction, read back off [_browse] rather than tracked here — the
+  /// reverse button is a toggle and needs to know which way it is pointing.
+  bool get _reversed =>
+      _browse.direction != null &&
+      _browse.direction != _browse.sort.defaultDirection;
 
   /// The Category and Language browse lists, with their counts — fetched
-  /// once and independent of [_load]: a failure here costs the reader the
+  /// once and independent of [_browse]: a failure here costs the reader the
   /// counts beside "All", not the screen itself.
   List<CategoryCount> _categories = const [];
   List<LanguageCount> _languages = const [];
@@ -228,7 +192,7 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
   @override
   void initState() {
     super.initState();
-    _load(reset: true);
+    _browse.start();
     _loadFilters();
   }
 
@@ -251,134 +215,45 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
 
   @override
   void dispose() {
-    _debounce?.cancel();
+    _browse.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  void _onQueryChanged(String _) {
-    _debounce?.cancel();
-    _debounce = Timer(_debounceDelay, () => _load(reset: true));
-  }
+  void _onQueryChanged(String text) => _browse.queryChanged(text);
 
+  /// The four control handlers below all wrap their call to [_browse] in
+  /// `setState`. Nothing here is assigned — [_FiltersRow] paints straight off
+  /// [_browse]'s own fields — but the rebuild is what puts the new choice on
+  /// the chip in this frame, rather than a frame later when the [BrowseState]
+  /// the call schedules reaches the [StreamBuilder] below.
   void _onCategoryChanged(String category) {
-    if (category == _category) return;
-    setState(() => _category = category);
-    _load(reset: true);
+    if (category == _browse.category) return;
+    setState(() => _browse.filtersChanged(category: category));
   }
 
   void _onLanguageChanged(String language) {
-    if (language == _language) return;
-    setState(() => _language = language);
-    _load(reset: true);
+    if (language == _browse.language) return;
+    setState(() => _browse.filtersChanged(language: language));
   }
 
+  /// Picking a sort field drops any reversal with it — `direction: null` is
+  /// "this sort's own default", the same reasoning `library_screen.dart`'s
+  /// `_chooseSort` gives: "Oldest first" carried over onto Title is not the
+  /// request the reader made by picking Title.
   void _onSortChanged(CatalogueSort sort) {
-    if (sort == _sort) return;
-    setState(() {
-      _sort = sort;
-      _reversed = false;
-    });
-    _load(reset: true);
+    if (sort == _browse.sort) return;
+    setState(() => _browse.filtersChanged(sort: sort, direction: null));
   }
 
-  void _onFlipDirection() {
-    setState(() => _reversed = !_reversed);
-    _load(reset: true);
-  }
+  void _onFlipDirection() => setState(
+    () => _browse.filtersChanged(
+      direction: _reversed ? null : _browse.sort.defaultDirection.opposite,
+    ),
+  );
 
   Future<bool> _checkInLibrary(String bookId) =>
       _inLibrary.putIfAbsent(bookId, () => widget.repository.hasBook(bookId));
-
-  Future<void> _load({required bool reset}) async {
-    if (reset) {
-      _loadGeneration += 1;
-      setState(() {
-        _page = 0;
-        _entries.clear();
-        _hasMore = false;
-        _problem = null;
-        _loadMoreProblem = null;
-        _loading = true;
-      });
-    } else {
-      setState(() {
-        _loadingMore = true;
-        _loadMoreProblem = null;
-      });
-    }
-
-    // Captured so a reset started while this request is in flight can be
-    // told apart from the request it superseded: without it, a load-more or
-    // an earlier search that resolves after a newer reset would append its
-    // results onto the freshly-cleared list — the "list changes mid-word"
-    // outcome the search field's debounce exists to prevent.
-    final generation = _loadGeneration;
-    final query = _searchController.text.trim();
-    final filtered =
-        query.isNotEmpty || _category.isNotEmpty || _language.isNotEmpty;
-
-    try {
-      final result = await widget.client.search(
-        q: query,
-        category: _category,
-        language: _language,
-        page: _page,
-        sort: _sort,
-        direction: _reversed ? _sort.direction(reversed: true) : null,
-      );
-
-      if (!mounted || generation != _loadGeneration) return;
-
-      if (!result.catalogueReady) {
-        setState(() {
-          if (reset) {
-            _problem = _FreeBooksProblem.catalogueUnavailable;
-          } else {
-            _loadMoreProblem = _FreeBooksProblem.catalogueUnavailable;
-          }
-          _loading = false;
-          _loadingMore = false;
-        });
-        return;
-      }
-
-      setState(() {
-        _entries.addAll(result.results);
-        _hasMore = result.hasMore;
-        _page += 1;
-        _problem = _entries.isEmpty
-            ? (filtered
-                  ? _FreeBooksProblem.nothingMatched
-                  : _FreeBooksProblem.catalogueEmpty)
-            : null;
-        _loading = false;
-        _loadingMore = false;
-      });
-    } on NetworkException {
-      if (!mounted || generation != _loadGeneration) return;
-      setState(() {
-        if (reset) {
-          _problem = _FreeBooksProblem.noConnection;
-        } else {
-          _loadMoreProblem = _FreeBooksProblem.noConnection;
-        }
-        _loading = false;
-        _loadingMore = false;
-      });
-    } on ApiException {
-      if (!mounted || generation != _loadGeneration) return;
-      setState(() {
-        if (reset) {
-          _problem = _FreeBooksProblem.catalogueUnavailable;
-        } else {
-          _loadMoreProblem = _FreeBooksProblem.catalogueUnavailable;
-        }
-        _loading = false;
-        _loadingMore = false;
-      });
-    }
-  }
 
   Future<void> _openOrImport(CatalogueEntry entry) async {
     if (_importing.contains(entry.bookId)) return;
@@ -448,97 +323,109 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
         child: Column(
           children: [
             _FiltersRow(
-              category: _category,
+              category: _browse.category,
               categories: _categories,
               onCategory: _onCategoryChanged,
-              language: _language,
+              language: _browse.language,
               languages: _languages,
               onLanguage: _onLanguageChanged,
-              sort: _sort,
+              sort: _browse.sort,
               onSort: _onSortChanged,
               reversed: _reversed,
               onFlip: _onFlipDirection,
             ),
-            Expanded(child: _body(context)),
+            Expanded(
+              // [CatalogueBrowse.state] is a broadcast stream and replays
+              // nothing, so the [BrowseLoading] that `start()` emitted back in
+              // `initState` — before this ever subscribed — is gone. It is the
+              // initial data instead, which is the same state it stood for.
+              child: StreamBuilder<BrowseState>(
+                stream: _browse.state,
+                initialData: const BrowseLoading(),
+                builder: (context, snapshot) => _body(snapshot.data!),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _body(BuildContext context) {
-    if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(key: freeBooksLoadingKey),
-      );
-    }
-
-    if (_problem != null) {
-      return _ProblemView(
-        problem: _problem!,
-        onRetry: () => _load(reset: true),
-      );
-    }
-
-    return Column(
-      children: [
-        Expanded(
-          child: NotificationListener<ScrollNotification>(
-            onNotification: (notification) {
-              final metrics = notification.metrics;
-              if (_hasMore &&
-                  !_loadingMore &&
-                  _loadMoreProblem == null &&
-                  metrics.pixels >=
-                      metrics.maxScrollExtent - _loadMoreThreshold) {
-                _load(reset: false);
-              }
-              return false;
-            },
-            child: _EntryGrid(
-              entries: _entries,
-              importing: _importing,
-              justImported: _justImported,
-              inLibraryOf: _checkInLibrary,
-              coverOf: _coverOf,
-              onTap: _openOrImport,
+  /// One arm per [BrowseState], exhaustive — the sealed hierarchy is what
+  /// stops a fourth state arriving later and landing silently in a `default`.
+  Widget _body(BrowseState state) => switch (state) {
+    BrowseLoading() => const Center(
+      child: CircularProgressIndicator(key: freeBooksLoadingKey),
+    ),
+    // A first load that failed has nothing to keep, so it takes the screen.
+    // Retrying it restarts the Browse from page 0.
+    BrowseFailed(:final problem) => _ProblemView(
+      problem: problem,
+      onRetry: _browse.start,
+    ),
+    BrowseReady(:final entries, :final loadingMore, :final loadMoreProblem) =>
+      Column(
+        children: [
+          Expanded(
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (notification) {
+                final metrics = notification.metrics;
+                // Unconditional past the threshold: `loadMore` already turns
+                // itself away while a page is in flight, once there is no
+                // further page and while a load-more problem is showing, and
+                // re-deriving those guards here is how the two come apart.
+                if (metrics.pixels >=
+                    metrics.maxScrollExtent - _loadMoreThreshold) {
+                  _browse.loadMore();
+                }
+                return false;
+              },
+              child: _EntryGrid(
+                entries: entries,
+                importing: _importing,
+                justImported: _justImported,
+                inLibraryOf: _checkInLibrary,
+                coverOf: _coverOf,
+                onTap: _openOrImport,
+              ),
             ),
           ),
-        ),
-        if (_loadingMore)
-          const LinearProgressIndicator(key: freeBooksLoadingMoreKey),
-        if (_loadMoreProblem != null)
-          _LoadMoreError(
-            problem: _loadMoreProblem!,
-            onRetry: () => _load(reset: false),
-          ),
-      ],
-    );
-  }
+          if (loadingMore)
+            const LinearProgressIndicator(key: freeBooksLoadingMoreKey),
+          // Retrying here repeats only the page that failed; the pages above
+          // stay exactly where the reader left them.
+          if (loadMoreProblem != null)
+            _LoadMoreError(
+              problem: loadMoreProblem,
+              onRetry: _browse.retryLoadMore,
+            ),
+        ],
+      ),
+  };
 }
 
-/// The message for each [_FreeBooksProblem], shared by [_ProblemView] (a
-/// failed first load) and [_LoadMoreError] (a failed further page) so the
-/// two never drift onto different wording for the same problem.
-String _problemMessage(_FreeBooksProblem problem) => switch (problem) {
-  _FreeBooksProblem.nothingMatched => 'Nothing matched your search or filters.',
-  _FreeBooksProblem.catalogueEmpty => 'The catalogue has no books yet.',
-  _FreeBooksProblem.noConnection =>
+/// The message for each [BrowseProblem], shared by [_ProblemView] (a failed
+/// first load) and [_LoadMoreError] (a failed further page) so the two never
+/// drift onto different wording for the same problem.
+String _problemMessage(BrowseProblem problem) => switch (problem) {
+  BrowseProblem.nothingMatched => 'Nothing matched your search or filters.',
+  BrowseProblem.catalogueEmpty => 'The catalogue has no books yet.',
+  BrowseProblem.noConnection =>
     'No internet connection. Check your connection and try again.',
-  _FreeBooksProblem.catalogueUnavailable =>
+  BrowseProblem.catalogueUnavailable =>
     'The catalogue is not available right now. Try again later.',
 };
 
 /// The three answers a search can come back with, none of them silence.
 class _ProblemView extends StatelessWidget {
-  final _FreeBooksProblem problem;
+  final BrowseProblem problem;
   final VoidCallback onRetry;
 
   const _ProblemView({required this.problem, required this.onRetry});
 
   bool get _showsRetry =>
-      problem == _FreeBooksProblem.noConnection ||
-      problem == _FreeBooksProblem.catalogueUnavailable;
+      problem == BrowseProblem.noConnection ||
+      problem == BrowseProblem.catalogueUnavailable;
 
   @override
   Widget build(BuildContext context) {
@@ -573,12 +460,12 @@ class _ProblemView extends StatelessWidget {
 
 /// Shown under an already-loaded grid when the *next* page fails, leaving
 /// the pages already on screen in place — unlike [_ProblemView], which
-/// replaces the whole screen for a failed first load. [_FreeBooksScreenState]
-/// only ever reaches this with [_FreeBooksProblem.noConnection] or
-/// [_FreeBooksProblem.catalogueUnavailable], both retryable, so the retry
-/// button is unconditional here.
+/// replaces the whole screen for a failed first load. [CatalogueBrowse] only
+/// ever sets [BrowseReady.loadMoreProblem] to [BrowseProblem.noConnection] or
+/// [BrowseProblem.catalogueUnavailable], both retryable, so the retry button
+/// is unconditional here.
 class _LoadMoreError extends StatelessWidget {
-  final _FreeBooksProblem problem;
+  final BrowseProblem problem;
   final VoidCallback onRetry;
 
   const _LoadMoreError({required this.problem, required this.onRetry});
@@ -615,7 +502,7 @@ class _LoadMoreError extends StatelessWidget {
 /// menus do not fit one line, and this wraps the third onto its own line
 /// rather than clipping or overlapping it.
 ///
-/// Stays mounted through every [_FreeBooksProblem]: it is a sibling of
+/// Stays mounted through every [BrowseProblem]: it is a sibling of
 /// `_body` in [FreeBooksScreen.build], not inside it, so a reader who
 /// filtered to nothing keeps the menus that got them there rather than
 /// having to back out to change them.

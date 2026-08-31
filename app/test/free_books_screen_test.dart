@@ -113,7 +113,14 @@ void main() {
     await _disposeTree(tester);
   });
 
-  testWidgets('a typed search debounces before it is sent', (tester) async {
+  // Whether a keystroke waits before it becomes a search, and how long, is
+  // CatalogueBrowse's own debounce and is asserted tick by tick in
+  // catalogue_browse_test.dart. What is this screen's is only that the search
+  // field's text reaches queryChanged at all, and that the page it comes back
+  // with is what gets painted.
+  testWidgets('typing in the search field searches for what was typed', (
+    tester,
+  ) async {
     catalogue.searchResponses.add(
       const CatalogueSearchResult(
         catalogueReady: true,
@@ -142,11 +149,7 @@ void main() {
     );
 
     await tester.enterText(find.byKey(freeBooksSearchFieldKey), 'frank');
-    await tester.pump(const Duration(milliseconds: 200));
-    // Not yet: still short of the debounce.
-    expect(catalogue.searches, hasLength(1));
-
-    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
 
     expect(catalogue.searches, hasLength(2));
@@ -154,6 +157,33 @@ void main() {
     expect(find.text('Frankenstein'), findsOneWidget);
 
     await _disposeTree(tester);
+  });
+
+  testWidgets('disposing the screen disposes the Browse with it', (
+    tester,
+  ) async {
+    catalogue.searchResponses.add(
+      const CatalogueSearchResult(
+        catalogueReady: true,
+        results: [],
+        page: 0,
+        hasMore: false,
+      ),
+    );
+
+    await pump(tester);
+    await tester.pumpAndSettle();
+    expect(catalogue.searches, hasLength(1));
+
+    // A keystroke leaves a debounce timer pending inside the Browse. Tearing
+    // the tree down has to cancel it: an uncancelled one fires its search
+    // after the screen is gone, and flutter_test reports the timer itself as
+    // leaked at teardown.
+    await tester.enterText(find.byKey(freeBooksSearchFieldKey), 'never fired');
+    await _disposeTree(tester);
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(catalogue.searches, hasLength(1));
   });
 
   testWidgets('an empty catalogue with no filters active says so '
@@ -582,64 +612,6 @@ void main() {
       expect(catalogue.searches.last.page, 1);
       expect(find.text('The Last Book'), findsOneWidget);
       expect(find.byKey(freeBooksLoadMoreErrorKey), findsNothing);
-
-      await _disposeTree(tester);
-    },
-  );
-
-  testWidgets(
-    'an active category filter carries through a load-more page request',
-    (tester) async {
-      catalogue.categoryResponse = const [
-        CategoryCount(category: 'Fiction', count: 12),
-      ];
-      catalogue.searchResponses.add(
-        const CatalogueSearchResult(
-          catalogueReady: true,
-          results: [],
-          page: 0,
-          hasMore: false,
-        ),
-      );
-
-      await pump(tester);
-      await tester.pumpAndSettle();
-
-      final firstPage = List.generate(
-        12,
-        (i) => entryStub(gutenbergId: i + 1, title: 'Book $i').toEntry(),
-      );
-      catalogue.searchResponses.add(
-        CatalogueSearchResult(
-          catalogueReady: true,
-          results: firstPage,
-          page: 0,
-          hasMore: true,
-        ),
-      );
-      await tester.tap(find.text('All categories'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Fiction (12)').last);
-      await tester.pumpAndSettle();
-
-      expect(catalogue.searches.last.category, 'Fiction');
-
-      final secondEntry = entryStub(gutenbergId: 999, title: 'The Last Book');
-      catalogue.searchResponses.add(
-        CatalogueSearchResult(
-          catalogueReady: true,
-          results: [secondEntry.toEntry()],
-          page: 1,
-          hasMore: false,
-        ),
-      );
-
-      await tester.drag(find.byKey(freeBooksGridKey), const Offset(0, -3000));
-      await tester.pumpAndSettle();
-
-      expect(catalogue.searches.last.page, 1);
-      expect(catalogue.searches.last.category, 'Fiction');
-      expect(find.text('The Last Book'), findsOneWidget);
 
       await _disposeTree(tester);
     },

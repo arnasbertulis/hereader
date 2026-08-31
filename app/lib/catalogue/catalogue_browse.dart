@@ -119,8 +119,20 @@ class CatalogueBrowse {
   CatalogueDirection? _direction;
   int _page = 0;
 
-  /// Kicks off the first load. Call once; nothing before this reaches the
-  /// network.
+  /// The filters this Browse is running under, so the screen's controls can
+  /// paint the current choice without keeping a second copy of it. Read-only:
+  /// [filtersChanged] is the one way in.
+  String get category => _category;
+  String get language => _language;
+  CatalogueSort get sort => _sort;
+
+  /// `null` means this sort's own default direction, the same way it does in
+  /// [filtersChanged] — not "no direction".
+  CatalogueDirection? get direction => _direction;
+
+  /// Kicks off the first load; nothing before this reaches the network.
+  /// Also the entry point for retrying a failed first load, restarting from
+  /// page 0 — safe to call again for that reason.
   void start() => _load(reset: true);
 
   /// A keystroke in the search field. Debounced so a reader typing a whole
@@ -160,8 +172,9 @@ class CatalogueBrowse {
 
   /// Asks for the next page. A no-op while a load is already in flight,
   /// once there is no further page, or while a load-more error is already
-  /// showing — retrying that is [filtersChanged] or another [loadMore] call
-  /// after the reader acts, not an automatic repeat.
+  /// showing — a scroll that reaches the bottom must not repeat a failing
+  /// request on its own, so getting past that last guard takes the reader's
+  /// own [retryLoadMore] or a [filtersChanged].
   void loadMore() {
     final current = _current;
     if (current is! BrowseReady) return;
@@ -170,6 +183,20 @@ class CatalogueBrowse {
         current.loadMoreProblem != null) {
       return;
     }
+    _load(reset: false);
+  }
+
+  /// Retries only the page that failed, leaving the pages already loaded on
+  /// screen. [_page] still points at the failed page — it advances only on a
+  /// resolved response — so this repeats that request rather than skipping it.
+  ///
+  /// Separate from [loadMore] rather than a flag on it: this is the one entry
+  /// the load-more-problem guard is meant to let through, and a boolean
+  /// argument would put the reader's tap and the scroll listener on the same
+  /// call with only a parameter telling them apart.
+  void retryLoadMore() {
+    final current = _current;
+    if (current is! BrowseReady || current.loadMoreProblem == null) return;
     _load(reset: false);
   }
 
