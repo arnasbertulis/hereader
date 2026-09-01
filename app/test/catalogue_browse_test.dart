@@ -136,8 +136,95 @@ void main() {
       },
     );
 
+    test('changes only the fields passed', () async {
+      client.searchResponses.addAll([ready(), ready()]);
+      final browse = CatalogueBrowse(client: client);
+      addTearDown(browse.dispose);
+      browse.start();
+      await pumpEventQueue();
+
+      browse.filtersChanged(direction: CatalogueDirection.ascending);
+      await pumpEventQueue();
+      expect(client.searches.last.direction, CatalogueDirection.ascending);
+      expect(client.searches.last.category, '');
+
+      // category changes; direction is not passed, so it stays ascending.
+      browse.filtersChanged(category: 'Fiction');
+      await pumpEventQueue();
+      expect(client.searches.last.category, 'Fiction');
+      expect(client.searches.last.direction, CatalogueDirection.ascending);
+    });
+  });
+
+  group('direction', () {
     test(
-      'changes only the fields passed; direction null is its own value',
+      'every search carries an explicit direction, from the first',
+      () async {
+        client.searchResponses.add(ready());
+        final browse = CatalogueBrowse(client: client);
+        addTearDown(browse.dispose);
+
+        browse.start();
+        await pumpEventQueue();
+
+        expect(client.searches.single.direction, isNotNull);
+      },
+    );
+
+    test('popularity resolves descending; the other three ascending', () async {
+      client.searchResponses.addAll([ready(), ready(), ready(), ready()]);
+      final browse = CatalogueBrowse(client: client);
+      addTearDown(browse.dispose);
+      browse.start();
+      await pumpEventQueue();
+      expect(client.searches.last.direction, CatalogueDirection.descending);
+
+      for (final sort in [
+        CatalogueSort.title,
+        CatalogueSort.author,
+        CatalogueSort.issued,
+      ]) {
+        browse.filtersChanged(sort: sort);
+        await pumpEventQueue();
+        expect(client.searches.last.direction, CatalogueDirection.ascending);
+      }
+    });
+
+    test(
+      'toggling yields the opposite of the active sort\'s default',
+      () async {
+        client.searchResponses.addAll([ready(), ready()]);
+        final browse = CatalogueBrowse(client: client);
+        addTearDown(browse.dispose);
+        browse.start();
+        await pumpEventQueue();
+
+        browse.toggleDirection();
+        await pumpEventQueue();
+
+        expect(client.searches.last.direction, CatalogueDirection.ascending);
+        expect(browse.reversed, isTrue);
+      },
+    );
+
+    test('toggling twice returns to the default', () async {
+      client.searchResponses.addAll([ready(), ready(), ready()]);
+      final browse = CatalogueBrowse(client: client);
+      addTearDown(browse.dispose);
+      browse.start();
+      await pumpEventQueue();
+
+      browse.toggleDirection();
+      await pumpEventQueue();
+      browse.toggleDirection();
+      await pumpEventQueue();
+
+      expect(client.searches.last.direction, CatalogueDirection.descending);
+      expect(browse.reversed, isFalse);
+    });
+
+    test(
+      'changing sort resets a reversal to the new sort\'s default',
       () async {
         client.searchResponses.addAll([ready(), ready(), ready()]);
         final browse = CatalogueBrowse(client: client);
@@ -145,24 +232,32 @@ void main() {
         browse.start();
         await pumpEventQueue();
 
-        browse.filtersChanged(direction: CatalogueDirection.descending);
+        browse.toggleDirection();
         await pumpEventQueue();
-        expect(client.searches.last.direction, CatalogueDirection.descending);
-        expect(client.searches.last.category, '');
+        expect(browse.reversed, isTrue);
 
-        // category changes; direction is not passed, so it stays descending.
-        browse.filtersChanged(category: 'Fiction');
+        browse.filtersChanged(sort: CatalogueSort.title);
         await pumpEventQueue();
-        expect(client.searches.last.category, 'Fiction');
-        expect(client.searches.last.direction, CatalogueDirection.descending);
 
-        // direction explicitly reset to null (the sort's own default).
-        browse.filtersChanged(direction: null);
-        await pumpEventQueue();
-        expect(client.searches.last.direction, isNull);
-        expect(client.searches.last.category, 'Fiction');
+        expect(client.searches.last.direction, CatalogueDirection.ascending);
+        expect(browse.reversed, isFalse);
       },
     );
+
+    test('the reversed flag agrees with the direction actually sent', () async {
+      client.searchResponses.addAll([ready(), ready()]);
+      final browse = CatalogueBrowse(client: client);
+      addTearDown(browse.dispose);
+      browse.start();
+      await pumpEventQueue();
+      expect(browse.reversed, isFalse);
+      expect(browse.direction, client.searches.last.direction);
+
+      browse.toggleDirection();
+      await pumpEventQueue();
+      expect(browse.reversed, isTrue);
+      expect(browse.direction, client.searches.last.direction);
+    });
   });
 
   group('generation guard', () {
@@ -409,7 +504,7 @@ void main() {
       expect(browse.category, '');
       expect(browse.language, '');
       expect(browse.sort, CatalogueSort.popularity);
-      expect(browse.direction, isNull);
+      expect(browse.direction, CatalogueDirection.descending);
     });
 
     test('report what filtersChanged last set', () async {
@@ -428,12 +523,6 @@ void main() {
       expect(browse.language, 'fr');
       expect(browse.sort, CatalogueSort.title);
       expect(browse.direction, CatalogueDirection.descending);
-
-      browse.filtersChanged(direction: null);
-      await pumpEventQueue();
-
-      expect(browse.direction, isNull);
-      expect(browse.category, 'Fiction');
     });
   });
 

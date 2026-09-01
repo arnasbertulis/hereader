@@ -71,24 +71,6 @@ extension on CatalogueSort {
     CatalogueSort.author => 'Author',
     CatalogueSort.issued => 'Date added',
   };
-
-  /// The direction this field searches in when the reader has not flipped
-  /// it — matches `CatalogueService`'s own default (descending for
-  /// popularity, ascending otherwise), so the reverse toggle below has
-  /// something to invert.
-  CatalogueDirection get defaultDirection => this == CatalogueSort.popularity
-      ? CatalogueDirection.descending
-      : CatalogueDirection.ascending;
-
-  /// [defaultDirection], flipped when the reader has reversed this sort.
-  CatalogueDirection direction({required bool reversed}) =>
-      reversed ? defaultDirection.opposite : defaultDirection;
-}
-
-extension on CatalogueDirection {
-  CatalogueDirection get opposite => this == CatalogueDirection.ascending
-      ? CatalogueDirection.descending
-      : CatalogueDirection.ascending;
 }
 
 /// Browsing and importing from the Gutenberg Catalogue.
@@ -141,9 +123,7 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
   /// Whether the reader has flipped the active sort off its own default
   /// direction, read back off [_browse] rather than tracked here — the
   /// reverse button is a toggle and needs to know which way it is pointing.
-  bool get _reversed =>
-      _browse.direction != null &&
-      _browse.direction != _browse.sort.defaultDirection;
+  bool get _reversed => _browse.reversed;
 
   /// The Category and Language browse lists, with their counts — fetched
   /// once and independent of [_browse]: a failure here costs the reader the
@@ -237,20 +217,16 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
     setState(() => _browse.filtersChanged(language: language));
   }
 
-  /// Picking a sort field drops any reversal with it — `direction: null` is
-  /// "this sort's own default", the same reasoning `library_screen.dart`'s
-  /// `_chooseSort` gives: "Oldest first" carried over onto Title is not the
-  /// request the reader made by picking Title.
+  /// Picking a sort field drops any reversal with it — [CatalogueBrowse]
+  /// resets direction to the new sort's own default, the same reasoning
+  /// `library_screen.dart`'s `_chooseSort` gives: "Oldest first" carried
+  /// over onto Title is not the request the reader made by picking Title.
   void _onSortChanged(CatalogueSort sort) {
     if (sort == _browse.sort) return;
-    setState(() => _browse.filtersChanged(sort: sort, direction: null));
+    setState(() => _browse.filtersChanged(sort: sort));
   }
 
-  void _onFlipDirection() => setState(
-    () => _browse.filtersChanged(
-      direction: _reversed ? null : _browse.sort.defaultDirection.opposite,
-    ),
-  );
+  void _onFlipDirection() => setState(_browse.toggleDirection);
 
   Future<bool> _checkInLibrary(String bookId) =>
       _inLibrary.putIfAbsent(bookId, () => widget.repository.hasBook(bookId));
@@ -331,6 +307,7 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
               onLanguage: _onLanguageChanged,
               sort: _browse.sort,
               onSort: _onSortChanged,
+              direction: _browse.direction,
               reversed: _reversed,
               onFlip: _onFlipDirection,
             ),
@@ -515,6 +492,7 @@ class _FiltersRow extends StatelessWidget {
   final ValueChanged<String> onLanguage;
   final CatalogueSort sort;
   final ValueChanged<CatalogueSort> onSort;
+  final CatalogueDirection direction;
   final bool reversed;
   final VoidCallback onFlip;
 
@@ -527,6 +505,7 @@ class _FiltersRow extends StatelessWidget {
     required this.onLanguage,
     required this.sort,
     required this.onSort,
+    required this.direction,
     required this.reversed,
     required this.onFlip,
   });
@@ -600,9 +579,7 @@ class _FiltersRow extends StatelessWidget {
           // per field, not two, so there is no "Oldest first" to swap in.
           IconButton(
             key: freeBooksReverseSortButtonKey,
-            tooltip:
-                sort.direction(reversed: reversed) ==
-                    CatalogueDirection.ascending
+            tooltip: direction == CatalogueDirection.ascending
                 ? 'Ascending'
                 : 'Descending',
             isSelected: reversed,
