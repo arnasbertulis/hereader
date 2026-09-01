@@ -275,8 +275,9 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
   void _failImport(CatalogueEntry entry, String message) {
     if (!mounted) return;
     setState(() => _importing.remove(entry.bookId));
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
