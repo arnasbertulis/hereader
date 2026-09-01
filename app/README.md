@@ -610,7 +610,7 @@ A second quirk, found the same way: `scrollUntilVisible` resolves its default
 finds several. A screen with a `TextField` on it has two, since `EditableText`
 builds its own. Name the scrollable rather than letting it default.
 
-A third: a widget test awaiting `BookImporter`'s real `compute()` isolate
+A third: a widget test awaiting `BookParser`'s real `compute()` isolate
 never sees it resolve under ordinary `pump()` calls, however many or however
 long — the isolate's message port is not something the test binding wakes on
 by itself. `tester.runAsync` is the documented way out, but the tap that

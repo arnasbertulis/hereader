@@ -92,14 +92,14 @@ class FreeBooksScreen extends StatefulWidget {
   /// Parses a download into a [LibraryBook]. Overridable so a test can stand
   /// in for it: the default runs a real parse through `compute()`, which
   /// spawns an isolate a widget test has no way to wait on cheaply.
-  final BookImporter bookImporter;
+  final BookParser bookImporter;
 
   const FreeBooksScreen({
     super.key,
     required this.client,
     required this.repository,
     required this.sync,
-    this.bookImporter = const BookImporter(),
+    this.bookImporter = const BookParser(),
   });
 
   @override
@@ -245,7 +245,7 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
 
     // Painted before the download and the parse, not after: the download is
     // a real network await and yields to the event loop, but the parse
-    // behind it runs inline on the UI thread on web (`BookImporter.import`),
+    // behind it runs inline on the UI thread on web (`BookParser.import`),
     // and by then a spinner scheduled here has already had its frame.
     setState(() => _importing.add(entry.bookId));
 

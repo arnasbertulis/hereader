@@ -73,7 +73,7 @@ class BookOpener {
       // Re-parsed rather than cached: the parser is the single source of
       // truth for block ids and offsets, so a normalizer change applies to
       // books already in the library instead of invalidating them.
-      final parsed = await const BookImporter().reopenStored(
+      final parsed = await const BookParser().reopenStored(
         stored.bytes,
         sourceFormat: BookSourceFormat.fromName(stored.sourceFormat),
         id: bookId,

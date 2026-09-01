@@ -62,7 +62,7 @@ void main() {
 
   Future<void> pump(
     WidgetTester tester, {
-    BookImporter bookImporter = const BookImporter(),
+    BookParser bookImporter = const BookParser(),
   }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(800, 600);
@@ -447,7 +447,7 @@ void main() {
     );
     await pump(
       tester,
-      bookImporter: StubBookImporter(_bookFor(entry.bookId, entry.title)),
+      bookImporter: StubBookParser(_bookFor(entry.bookId, entry.title)),
     );
     await tester.pumpAndSettle();
 
@@ -467,7 +467,7 @@ void main() {
   testWidgets('an entry already on this device is marked as such, without '
       'being handed to the importer', (tester) async {
     // Tapping this tile is not exercised here: it opens the book through
-    // BookOpener's own real BookImporter, which — like the fresh import
+    // BookOpener's own real BookParser, which — like the fresh import
     // above — reparses on a real isolate via `compute()`, and this widget
     // test harness has no way to observe that isolate finish (confirmed by
     // hand: the tap alone left a run hanging past ninety seconds of real

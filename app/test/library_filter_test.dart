@@ -307,7 +307,7 @@ void main() {
     // The save-and-open path itself — filtered to Books, tapping through
     // Write a note, entering text, tapping Save and read, confirming the
     // shelf lands on All with the new note visible — is not covered by an
-    // automated test here. It routes through BookImporter.openNote's real
+    // automated test here. It routes through BookParser.openNote's real
     // compute() isolate, and while tester.runAsync is the documented way to
     // let a widget test await a real isolate, doing so across this route's
     // full depth (add-menu dialog, the editor, BookOpener's own sync and

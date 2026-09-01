@@ -89,7 +89,7 @@ void main() {
             bookTitle: 'A Note',
             repository: repository,
             sync: sync,
-            bookImporter: StubBookImporter(book),
+            bookImporter: StubBookParser(book),
           ),
         ),
       ),

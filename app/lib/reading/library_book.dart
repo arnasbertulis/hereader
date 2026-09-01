@@ -265,7 +265,7 @@ LibraryBook _parseNote(({Uint8List bytes, String id, String title}) input) {
   );
 
   // Reuses EpubException rather than a note-specific type: it is already
-  // what BookImporter throws and every caller already catches, and a note
+  // what BookParser throws and every caller already catches, and a note
   // with no readable words is the same failure for the reader either way.
   if (text.isEmpty) {
     throw const EpubException('The note contains no readable words.');
@@ -380,10 +380,10 @@ String _idFor(EpubMetadata metadata) {
   return '${metadata.title}|${metadata.author ?? ""}';
 }
 
-/// Imports EPUB files into the library, and parses notes on write and on
-/// every reopen.
-class BookImporter {
-  const BookImporter();
+/// Parses EPUB files and notes into a [LibraryBook], on write and on
+/// every reopen. Landing the result in the Library is the caller's job.
+class BookParser {
+  const BookParser();
 
   /// Parses freshly picked EPUB [bytes] off the UI isolate on native
   /// targets, and on it on web.

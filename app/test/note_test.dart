@@ -59,8 +59,8 @@ void main() {
     });
   });
 
-  group('BookImporter.openNote', () {
-    const importer = BookImporter();
+  group('BookParser.openNote', () {
+    const importer = BookParser();
 
     test('a blank line separates two paragraphs into two blocks', () async {
       final book = await importer.openNote(
@@ -144,8 +144,8 @@ void main() {
     });
   });
 
-  group('BookImporter.reopenStored', () {
-    const importer = BookImporter();
+  group('BookParser.reopenStored', () {
+    const importer = BookParser();
 
     test(
       'dispatches a note to openNote using the caller-supplied title',

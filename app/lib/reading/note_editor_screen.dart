@@ -89,7 +89,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     setState(() => _busy = true);
 
     try {
-      final parsed = await const BookImporter().openNote(
+      final parsed = await const BookParser().openNote(
         bytes,
         id: id,
         title: effectiveTitle,

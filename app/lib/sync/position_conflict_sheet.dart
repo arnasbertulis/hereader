@@ -64,9 +64,9 @@ class PositionConflictSheet extends StatefulWidget {
   final SyncEngine sync;
 
   /// Overridable so a test can resolve a candidate's position without going
-  /// through the real [BookImporter]'s `compute()` isolate, the way
+  /// through the real [BookParser]'s `compute()` isolate, the way
   /// `FreeBooksScreen.bookImporter` already does.
-  final BookImporter bookImporter;
+  final BookParser bookImporter;
 
   const PositionConflictSheet({
     super.key,
@@ -74,7 +74,7 @@ class PositionConflictSheet extends StatefulWidget {
     required this.bookTitle,
     required this.repository,
     required this.sync,
-    this.bookImporter = const BookImporter(),
+    this.bookImporter = const BookParser(),
   });
 
   /// Shows the sheet and settles the conflict with whatever is chosen.

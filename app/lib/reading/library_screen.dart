@@ -277,7 +277,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     setState(() => _busy = true);
 
     try {
-      final book = await const BookImporter().import(bytes);
+      final book = await const BookParser().import(bytes);
 
       await _repo.addBook(book, bytes);
 

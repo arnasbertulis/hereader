@@ -335,14 +335,14 @@ LibraryBook fixtureBook({
   );
 }
 
-/// Stands in for the real [BookImporter], which parses through `compute()` —
+/// Stands in for the real [BookParser], which parses through `compute()` —
 /// a real isolate a widget test has no cheap way to wait on. Returns [book]
 /// regardless of the bytes handed to it, the way [FakeCatalogueClient]
 /// answers regardless of the request it was asked.
-class StubBookImporter extends BookImporter {
+class StubBookParser extends BookParser {
   final LibraryBook book;
 
-  const StubBookImporter(this.book);
+  const StubBookParser(this.book);
 
   @override
   Future<LibraryBook> import(Uint8List bytes) async => book;
