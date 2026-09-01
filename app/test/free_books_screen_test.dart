@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:app/catalogue/catalogue_client.dart';
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
+import 'package:app/reading/book_importer.dart';
 import 'package:app/reading/free_books_screen.dart';
 import 'package:app/reading/library_book.dart';
 import 'package:app/sync/api_client.dart';
@@ -60,10 +61,7 @@ void main() {
     await db.close();
   });
 
-  Future<void> pump(
-    WidgetTester tester, {
-    BookParser bookImporter = const BookParser(),
-  }) async {
+  Future<void> pump(WidgetTester tester, {BookImporter? bookImporter}) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(800, 600);
     addTearDown(tester.view.reset);
@@ -447,7 +445,10 @@ void main() {
     );
     await pump(
       tester,
-      bookImporter: StubBookParser(_bookFor(entry.bookId, entry.title)),
+      bookImporter: BookImporter(
+        repository: repository,
+        parser: StubBookParser(_bookFor(entry.bookId, entry.title)),
+      ),
     );
     await tester.pumpAndSettle();
 

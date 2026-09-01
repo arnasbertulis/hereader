@@ -3,25 +3,11 @@ import 'dart:typed_data';
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
 import 'package:app/reading/book_importer.dart';
-import 'package:app/reading/library_book.dart';
-import 'package:epub_reader/epub_reader.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';
 import 'test_database.dart';
-
-/// Fails every parse, the way a corrupt EPUB would. Kept local to this file
-/// rather than in `fakes.dart`, since no other suite needs a parser that
-/// only ever throws.
-class _ThrowingBookParser extends BookParser {
-  const _ThrowingBookParser();
-
-  @override
-  Future<LibraryBook> import(Uint8List bytes) async {
-    throw const EpubException('The file could not be read as an EPUB.');
-  }
-}
 
 void main() {
   late AppDatabase db;
@@ -96,7 +82,7 @@ void main() {
     final importer = BookImporter(
       repository: repository,
       pickBytes: () async => Uint8List.fromList([1, 2, 3]),
-      parser: const _ThrowingBookParser(),
+      parser: const ThrowingBookParser(),
     );
 
     final outcome = await importer.importPickedFile(context);

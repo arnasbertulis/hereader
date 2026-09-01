@@ -5,6 +5,7 @@ import 'package:app/catalogue/catalogue_client.dart';
 import 'package:app/reading/library_book.dart';
 import 'package:app/sync/api_client.dart';
 import 'package:app/sync/auth_store.dart';
+import 'package:epub_reader/epub_reader.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
@@ -353,4 +354,17 @@ class StubBookParser extends BookParser {
     required String id,
     required String title,
   }) async => book;
+}
+
+/// Fails every parse, the way a corrupt EPUB would, with the message a
+/// caller is expected to surface. Shared rather than local to one suite:
+/// both the importer's own suite and the library's filter suite need a
+/// failing import, and a second copy is a second message to keep in step.
+class ThrowingBookParser extends BookParser {
+  const ThrowingBookParser();
+
+  @override
+  Future<LibraryBook> import(Uint8List bytes) async {
+    throw const EpubException('The file could not be read as an EPUB.');
+  }
 }

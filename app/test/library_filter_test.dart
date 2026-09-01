@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
+import 'package:app/reading/book_importer.dart';
 import 'package:app/reading/library_book.dart';
 import 'package:app/reading/library_screen.dart';
 import 'package:app/reading/note_editor_screen.dart';
@@ -71,7 +72,7 @@ void main() {
         Uint8List.fromList(utf8.encode('Some note text.')),
       );
 
-  Future<void> pump(WidgetTester tester) async {
+  Future<void> pump(WidgetTester tester, {BookImporter? bookImporter}) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(900, 900);
     addTearDown(tester.view.reset);
@@ -86,6 +87,7 @@ void main() {
             issueStamp: () async => '0000000000001-00000-test',
           ),
           catalogue: catalogue,
+          bookImporter: bookImporter,
         ),
       ),
     );
@@ -346,5 +348,72 @@ void main() {
         await _disposeTree(tester);
       },
     );
+  });
+
+  group('adding an EPUB resets a mismatched filter', () {
+    // A stubbed BookImporter, unlike BookParser.openNote above, never
+    // touches compute()'s isolate, so the full add-menu-to-shelf path is
+    // exercised here rather than read by hand.
+    testWidgets(
+      'a successful import shows the shelf that contains the new book',
+      (tester) async {
+        await addNote('note-1', title: 'A Note');
+
+        await pump(
+          tester,
+          bookImporter: BookImporter(
+            repository: repository,
+            pickBytes: () async => Uint8List.fromList([1, 2, 3]),
+            parser: StubBookParser(
+              fixtureBook(id: 'epub-1', title: 'Pride and Prejudice'),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('All'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Notes').last);
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(libraryAddButtonKey));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Add an EPUB'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('All'), findsOneWidget);
+        expect(find.text('Notes'), findsNothing);
+        expect(find.text('Pride and Prejudice'), findsOneWidget);
+
+        await _disposeTree(tester);
+      },
+    );
+
+    testWidgets('a failed import leaves the filter alone', (tester) async {
+      await addNote('note-1', title: 'A Note');
+
+      await pump(
+        tester,
+        bookImporter: BookImporter(
+          repository: repository,
+          pickBytes: () async => Uint8List.fromList([1, 2, 3]),
+          parser: const ThrowingBookParser(),
+        ),
+      );
+
+      await tester.tap(find.text('All'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Notes').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(libraryAddButtonKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add an EPUB'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Notes'), findsOneWidget);
+      expect(find.text('All'), findsNothing);
+
+      await _disposeTree(tester);
+    });
   });
 }
