@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:epub_reader/epub_reader.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import 'package:rsvp_engine/rsvp_engine.dart';
@@ -14,10 +12,10 @@ import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import 'add_menu.dart';
 import 'book_cover.dart';
+import 'book_importer.dart';
 import 'book_opener.dart';
 import 'book_progress.dart';
 import 'free_books_screen.dart';
-import 'library_book.dart';
 import 'note_editor_screen.dart';
 import 'paste_reader_screen.dart';
 import 'profile_presentation.dart';
@@ -75,6 +73,11 @@ class HomeScreen extends StatefulWidget {
   /// from.
   final CatalogueClient catalogue;
 
+  /// Carries a picked EPUB onto the shelf. Overridable so a test can stand
+  /// in for the real file dialog and parse; the default builds a real
+  /// [BookImporter] against [repository].
+  final BookImporter? bookImporter;
+
   const HomeScreen({
     super.key,
     required this.repository,
@@ -82,6 +85,7 @@ class HomeScreen extends StatefulWidget {
     required this.onSeeAll,
     required this.display,
     required this.catalogue,
+    this.bookImporter,
   });
 
   @override
@@ -94,6 +98,11 @@ class _HomeScreenState extends State<HomeScreen> {
   /// The same sequence the library runs, not a second copy of it. ADR 0011
   /// names the shape: two paths writing one fact is how they come apart.
   late final BookOpener _opener;
+
+  /// The same module the library and Free books carry. Built from
+  /// [HomeScreen.bookImporter] when a test supplies one, so the default real
+  /// picker and parse are only ever constructed once, in [initState].
+  late final BookImporter _importer;
 
   /// One future per book, kept so a rebuild does not re-read the blob. Home
   /// draws at most seven covers, so this stays small without eviction.
@@ -121,6 +130,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _opener = BookOpener(repository: widget.repository, sync: widget.sync);
+    _importer =
+        widget.bookImporter ?? BookImporter(repository: widget.repository);
 
     _profile = _repo.watchActiveProfile().listen((profile) {
       if (mounted) setState(() => _pacing = estimationPacing(profile));
@@ -196,26 +207,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _import() async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['epub'],
-    );
-
-    final picked = result.singleOrNull;
-    if (picked == null) return;
-    final bytes = await picked.readAsBytes();
-    if (!mounted) return;
-
     setState(() => _busy = true);
 
     try {
-      final book = await const BookParser().import(bytes);
+      final outcome = await _importer.importPickedFile(context);
 
-      await _repo.addBook(book, bytes);
-
-      _covers.clear();
-    } on EpubException catch (e) {
-      _report(e.message);
+      if (outcome == ImportOutcome.imported) _covers.clear();
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -238,13 +235,6 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (_) => NoteEditorScreen(repository: _repo, sync: widget.sync),
       ),
     );
-  }
-
-  void _report(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override

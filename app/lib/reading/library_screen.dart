@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:epub_reader/epub_reader.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
@@ -14,6 +12,7 @@ import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import 'add_menu.dart';
 import 'book_cover.dart';
+import 'book_importer.dart';
 import 'book_opener.dart';
 import 'book_progress.dart';
 import 'free_books_screen.dart';
@@ -99,12 +98,18 @@ class LibraryScreen extends StatefulWidget {
   /// from.
   final CatalogueClient catalogue;
 
+  /// Carries a picked EPUB onto the shelf. Overridable so a test can stand
+  /// in for the real file dialog and parse; the default builds a real
+  /// [BookImporter] against [repository].
+  final BookImporter? bookImporter;
+
   const LibraryScreen({
     super.key,
     required this.repository,
     required this.sync,
     required this.display,
     required this.catalogue,
+    this.bookImporter,
   });
 
   @override
@@ -120,6 +125,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// The one path into the reader. Home's continue card takes the same
   /// object rather than its own copy of the sequence.
   late final BookOpener _opener;
+
+  /// The same module Home and Free books carry, for the same reason.
+  late final BookImporter _importer;
 
   /// One future per book, kept so a rebuild does not re-read the blob.
   /// `FutureBuilder` restarts whenever it is handed a new future, and a grid
@@ -147,6 +155,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
   void initState() {
     super.initState();
     _opener = BookOpener(repository: widget.repository, sync: widget.sync);
+    _importer =
+        widget.bookImporter ?? BookImporter(repository: widget.repository);
     unawaited(_restorePreferences());
 
     _profile = _repo.watchActiveProfile().listen((profile) {
@@ -262,24 +272,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   Future<void> _import() async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: const ['epub'],
-    );
-
-    final picked = result.singleOrNull;
-    if (picked == null) return;
-    // Bytes rather than a path: the web has no file behind the dialog, and
-    // the bytes are what gets stored anyway.
-    final bytes = await picked.readAsBytes();
-    if (!mounted) return;
-
     setState(() => _busy = true);
 
     try {
-      final book = await const BookParser().import(bytes);
-
-      await _repo.addBook(book, bytes);
+      final outcome = await _importer.importPickedFile(context);
+      if (outcome != ImportOutcome.imported || !mounted) return;
 
       // Re-importing an id already in the library replaces its cover, and a
       // memoized future would keep handing out the old one. Cheaper to drop
@@ -293,8 +290,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
       if (_filter == _LibraryFilter.note) {
         await _chooseFilter(_LibraryFilter.all);
       }
-    } on EpubException catch (e) {
-      _report(e.message);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -405,13 +400,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
       unawaited(_covers.remove(summary.id));
       await _repo.removeBook(summary.id);
     }
-  }
-
-  void _report(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override

@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 
-import 'package:epub_reader/epub_reader.dart';
 import 'package:flutter/material.dart';
 
 import '../catalogue/catalogue_browse.dart';
@@ -12,8 +11,8 @@ import '../sync/sync_engine.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import 'book_cover.dart';
+import 'book_importer.dart';
 import 'book_opener.dart';
-import 'library_book.dart';
 
 /// Identifies the search field for tests, which have no button label to
 /// match against — the field carries no text of its own until the reader
@@ -89,17 +88,18 @@ class FreeBooksScreen extends StatefulWidget {
   final LibraryRepository repository;
   final SyncEngine sync;
 
-  /// Parses a download into a [LibraryBook]. Overridable so a test can stand
-  /// in for it: the default runs a real parse through `compute()`, which
-  /// spawns an isolate a widget test has no way to wait on cheaply.
-  final BookParser bookImporter;
+  /// Parses a download and writes the result onto the shelf. Overridable so
+  /// a test can stand in for the parse: the default runs a real one through
+  /// `compute()`, which spawns an isolate a widget test has no way to wait
+  /// on cheaply.
+  final BookImporter? bookImporter;
 
   const FreeBooksScreen({
     super.key,
     required this.client,
     required this.repository,
     required this.sync,
-    this.bookImporter = const BookParser(),
+    this.bookImporter,
   });
 
   @override
@@ -111,6 +111,12 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
     repository: widget.repository,
     sync: widget.sync,
   );
+
+  /// The same module Home and the Library carry. Free books never picks a
+  /// file — a tap hands [_openOrImport] bytes off a Catalogue download — so
+  /// only [BookImporter.importBytes] is ever called on it.
+  late final BookImporter _importer =
+      widget.bookImporter ?? BookImporter(repository: widget.repository);
 
   final _searchController = TextEditingController();
 
@@ -251,17 +257,22 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
 
     try {
       final bytes = await widget.client.download(entry.gutenbergId);
-      final book = await widget.bookImporter.import(bytes);
-
-      await widget.repository.addBook(book, bytes);
-
       if (!mounted) return;
-      setState(() {
-        _importing.remove(entry.bookId);
-        _justImported.add(entry.bookId);
-      });
-    } on EpubException catch (e) {
-      _failImport(entry, e.message);
+
+      final outcome = await _importer.importBytes(context, bytes);
+      if (!mounted) return;
+
+      if (outcome == ImportOutcome.imported) {
+        setState(() {
+          _importing.remove(entry.bookId);
+          _justImported.add(entry.bookId);
+        });
+      } else {
+        // A parse failure already reported itself through the module — this
+        // tap's own message would only repeat it. Just clear the spinner so
+        // the same tap can be retried immediately.
+        setState(() => _importing.remove(entry.bookId));
+      }
     } on NetworkException {
       _failImport(entry, 'No internet connection. Try again.');
     } on ApiException {
