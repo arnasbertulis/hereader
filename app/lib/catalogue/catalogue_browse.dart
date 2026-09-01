@@ -73,14 +73,22 @@ final class BrowseReady extends BrowseState {
       BrowseReady(entries: entries, hasMore: hasMore, loadMoreProblem: problem);
 }
 
-/// Marks a [CatalogueBrowse.filtersChanged] argument as not passed, so a
-/// caller can still set [CatalogueDirection] explicitly to `null` — which
-/// means "this sort's own default direction", not "leave direction alone".
-class _Unset {
-  const _Unset();
+/// The direction [CatalogueSort] searches in when a Free books reader has
+/// not reversed it. Free books' own presentation choice — "open on a shelf
+/// of what people are reading, most-read first" — not a fact read back from
+/// the server: `CatalogueService` documents the same default independently,
+/// and the two are free to drift apart without either end noticing (#217).
+extension on CatalogueSort {
+  CatalogueDirection get defaultDirection => this == CatalogueSort.popularity
+      ? CatalogueDirection.descending
+      : CatalogueDirection.ascending;
 }
 
-const _unset = _Unset();
+extension on CatalogueDirection {
+  CatalogueDirection get opposite => this == CatalogueDirection.ascending
+      ? CatalogueDirection.descending
+      : CatalogueDirection.ascending;
+}
 
 /// Owns one query-and-filters session against the Catalogue — the query,
 /// Category, Language, sort, direction and pagination position that used to
@@ -116,7 +124,7 @@ class CatalogueBrowse {
   String _category = '';
   String _language = '';
   CatalogueSort _sort = CatalogueSort.popularity;
-  CatalogueDirection? _direction;
+  CatalogueDirection _direction = CatalogueSort.popularity.defaultDirection;
   int _page = 0;
 
   /// The filters this Browse is running under, so the screen's controls can
@@ -126,9 +134,13 @@ class CatalogueBrowse {
   String get language => _language;
   CatalogueSort get sort => _sort;
 
-  /// `null` means this sort's own default direction, the same way it does in
-  /// [filtersChanged] — not "no direction".
-  CatalogueDirection? get direction => _direction;
+  /// The direction every search is run in. Always explicit — deferring to
+  /// the server's own default is not a state this Browse can be in.
+  CatalogueDirection get direction => _direction;
+
+  /// Whether [direction] differs from [sort]'s own default — what the
+  /// reverse-sort button paints and what [toggleDirection] flips.
+  bool get reversed => _direction != _sort.defaultDirection;
 
   /// Kicks off the first load; nothing before this reaches the network.
   /// Also the entry point for retrying a failed first load, restarting from
@@ -148,20 +160,23 @@ class CatalogueBrowse {
   /// deliberate, discrete action.
   ///
   /// Only the arguments passed are changed; the rest keep their current
-  /// value. [direction] is the one field where `null` is itself a value
-  /// (the sort's own default direction), so it defaults to [_unset] rather
-  /// than `null` to tell "not passed" apart from "set to null".
+  /// value. Changing [sort] without also passing [direction] resets
+  /// direction to the new sort's own default, so a reversal made on one
+  /// field does not silently carry over onto another (#217) — "oldest
+  /// first" landing on Title as "Z to A" would be a request nobody made.
   void filtersChanged({
     String? category,
     String? language,
     CatalogueSort? sort,
-    Object? direction = _unset,
+    CatalogueDirection? direction,
   }) {
     if (category != null) _category = category;
     if (language != null) _language = language;
-    if (sort != null) _sort = sort;
-    if (!identical(direction, _unset)) {
-      _direction = direction as CatalogueDirection?;
+    if (sort != null) {
+      _sort = sort;
+      _direction = direction ?? sort.defaultDirection;
+    } else if (direction != null) {
+      _direction = direction;
     }
     // A filter can land while a query's debounce is still pending; without
     // this the stale timer fires its own reset later, behind the reader's
@@ -169,6 +184,12 @@ class CatalogueBrowse {
     _debounceTimer?.cancel();
     _load(reset: true);
   }
+
+  /// Flips [direction] between [sort]'s own default and its opposite — the
+  /// reverse-sort button's one action.
+  void toggleDirection() => filtersChanged(
+    direction: reversed ? _sort.defaultDirection : _direction.opposite,
+  );
 
   /// Asks for the next page. A no-op while a load is already in flight,
   /// once there is no further page, or while a load-more error is already

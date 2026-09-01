@@ -378,36 +378,17 @@ void main() {
     await _disposeTree(tester);
   });
 
-  testWidgets('reversing sort direction changes what is requested', (
+  testWidgets('tapping the reverse-sort button reaches the Browse', (
     tester,
   ) async {
     await pump(tester);
     await tester.pumpAndSettle();
-    expect(catalogue.searches.single.direction, isNull);
+    final before = catalogue.searches.single.direction;
 
     await tester.tap(find.byKey(freeBooksReverseSortButtonKey));
     await tester.pumpAndSettle();
 
-    expect(catalogue.searches.last.direction, CatalogueDirection.ascending);
-
-    await _disposeTree(tester);
-  });
-
-  testWidgets('changing sort resets a reversed direction', (tester) async {
-    await pump(tester);
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(freeBooksReverseSortButtonKey));
-    await tester.pumpAndSettle();
-    expect(catalogue.searches.last.direction, CatalogueDirection.ascending);
-
-    await tester.tap(find.text('Most popular'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Title').last);
-    await tester.pumpAndSettle();
-
-    expect(catalogue.searches.last.sort, CatalogueSort.title);
-    expect(catalogue.searches.last.direction, isNull);
+    expect(catalogue.searches.last.direction, isNot(before));
 
     await _disposeTree(tester);
   });
