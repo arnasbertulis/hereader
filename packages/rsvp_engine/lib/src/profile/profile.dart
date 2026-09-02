@@ -532,4 +532,51 @@ class ReadingProfile {
       rewindWords: coerceInt(json['rewindWords'], 2, min: 0),
     );
   }
+
+  /// Two profiles are equal when every field they carry — identity, name,
+  /// pacing, presentation and the rewind — is the same.
+  ///
+  /// Compares [toJson] rather than the five fields by hand. [pacing] and
+  /// [presentation] define no `==` of their own, so a field-by-field compare
+  /// would fall back to identity on them and call two profiles unequal even
+  /// when every value they hold matches. Routing through [toJson] also means
+  /// a field added there is covered here for free, for any field whose JSON
+  /// is a primitive or another such map — the shape every field of this
+  /// package writes today. A field that started serialising to a `List`
+  /// would need [_deepEquals] extended to match; see its own doc comment.
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ReadingProfile && _deepEquals(toJson(), other.toJson()));
+
+  @override
+  int get hashCode => _deepHash(toJson());
+}
+
+/// Structural equality for the `Map<String, dynamic>` shape [ReadingProfile],
+/// [PacingConfig] and [PresentationConfig] serialise to: string keys, and
+/// values that are either a primitive (`String`, `num`, `bool`) or another
+/// such map. `Map` itself does not override `==`, so two maps built from
+/// equal field values would otherwise only compare as identical objects.
+bool _deepEquals(Object? a, Object? b) {
+  if (a is Map && b is Map) {
+    if (a.length != b.length) return false;
+    for (final key in a.keys) {
+      if (!b.containsKey(key) || !_deepEquals(a[key], b[key])) return false;
+    }
+    return true;
+  }
+  return a == b;
+}
+
+/// A hash consistent with [_deepEquals]: order-independent over map entries,
+/// so it agrees with equality regardless of the order [Map.toJson] happens to
+/// write keys in.
+int _deepHash(Object? value) {
+  if (value is Map) {
+    return Object.hashAllUnordered(
+      value.entries.map((e) => Object.hash(e.key, _deepHash(e.value))),
+    );
+  }
+  return value.hashCode;
 }
