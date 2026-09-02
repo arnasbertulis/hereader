@@ -1066,9 +1066,10 @@ class LibraryRepository {
   /// Writes an app-wide setting.
   ///
   /// [sync] defaults to false, and the default is the point of the parameter.
-  /// Sync bookkeeping lives in this table, and `sync.last_seq` reaching
-  /// another device would have it skip events it had never pulled. The active
-  /// profile pointer is device-local for its own reasons, below.
+  /// Nothing that goes through this table today is meant to leave the
+  /// device: sync's own bookkeeping no longer lives here at all (see
+  /// [SyncCursor]), and the active profile pointer is device-local for its
+  /// own reasons, below.
   ///
   /// Before this parameter existed the method simply never enqueued, so every
   /// preference was device-local by omission rather than by decision. Stating

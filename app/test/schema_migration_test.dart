@@ -37,6 +37,19 @@ Future<List<String>> _tableNames(AppDatabase db) async {
 /// a database built from the current schema already had what the step was
 /// about to add. A step that only takes something away hides that.
 Future<void> _revertTo(AppDatabase db, int version) async {
+  if (version < 11) {
+    await db.customStatement('drop table sync_cursor');
+
+    // What a version 10 install actually had: three keys living in
+    // Preferences, the same table as every reader preference.
+    await db.customStatement(
+      "insert into preferences (key, value, hlc) values "
+      "('sync.last_seq', '42', 'stamp-1'), "
+      "('sync.last_hlc', '0000000000001-00000-old', 'stamp-1'), "
+      "('sync.last_synced_at', '2024-01-01T00:00:00.000Z', 'stamp-1')",
+    );
+  }
+
   if (version < 10) {
     await db.customStatement(
       'alter table reading_positions drop column chapter_title',
@@ -393,10 +406,69 @@ void main() {
     },
   );
 
+  test('upgrading from version 10 moves sync bookkeeping into SyncCursor and '
+      'out of Preferences', () async {
+    final legacy = AppDatabase(NativeDatabase(file));
+    final legacyRepo = LibraryRepository(legacy);
+
+    // An unrelated reader preference, to prove the migration takes only
+    // the three keys named and leaves everything else in Preferences
+    // alone.
+    await legacyRepo.setPreference(
+      'theme',
+      'dark',
+      hlc: '0000000000001-00000-old',
+    );
+
+    await _revertTo(legacy, 10);
+    await legacy.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+
+    final cursor = await upgraded.select(upgraded.syncCursor).getSingle();
+    expect(cursor.lastSeq, 42);
+    expect(cursor.lastHlc, '0000000000001-00000-old');
+    // toUtc() rather than a direct DateTime comparison: Drift reads a
+    // stored instant back as local time, and DateTime's own == treats a
+    // UTC and a local DateTime as unequal even when they name the same
+    // instant.
+    expect(cursor.lastSyncedAt?.toUtc(), DateTime.utc(2024));
+
+    final prefs = await upgraded.select(upgraded.preferences).get();
+    expect(
+      prefs.map((p) => p.key),
+      isNot(
+        anyOf(
+          contains('sync.last_seq'),
+          contains('sync.last_hlc'),
+          contains('sync.last_synced_at'),
+        ),
+      ),
+      reason:
+          'moved and deleted in the same step, never held in both '
+          'places at once',
+    );
+
+    // The reader preference that shares the table survives untouched.
+    final theme = prefs.singleWhere((p) => p.key == 'theme');
+    expect(theme.value, 'dark');
+  });
+
   test('a fresh database is never given sync_state', () async {
     final db = AppDatabase(NativeDatabase(file));
     addTearDown(db.close);
 
     expect(await _tableNames(db), isNot(contains('sync_state')));
+  });
+
+  test('a fresh database already has its sync cursor', () async {
+    final db = AppDatabase(NativeDatabase(file));
+    addTearDown(db.close);
+
+    final cursor = await db.select(db.syncCursor).getSingle();
+    expect(cursor.lastSeq, 0);
+    expect(cursor.lastHlc, isNull);
+    expect(cursor.lastSyncedAt, isNull);
   });
 }

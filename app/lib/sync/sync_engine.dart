@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/database.dart' hide PositionConflict;
 import '../data/library_repository.dart';
+import '../data/sync_cursor_dao.dart';
 import 'api_client.dart';
 import 'auth_store.dart';
 
@@ -50,19 +52,20 @@ class SyncEngine {
   final AuthStore auth;
   final AppDatabase database;
 
+  /// Sync's own bookkeeping: how far it has pulled, the clock stamp to
+  /// restore on restart, and when it last ran.
+  ///
+  /// Settings and the sync screen read [SyncCursorDao.read] directly for the
+  /// bootstrap value that `SyncState.lastSyncedAt` cannot give them: that
+  /// field is set on the successful emit and null on every other status, so
+  /// a device whose last run failed would report never having synced at
+  /// all.
+  final SyncCursorDao cursor;
+
   /// How many events go in one push. Small enough that a failure costs
   /// little, large enough that a month of offline reading does not take
   /// a hundred round trips.
   static const int batchSize = 100;
-
-  /// Where the time of the last finished run is kept.
-  ///
-  /// Named rather than written as a literal in two files. Settings reads it
-  /// to say how long ago sync ran, and `SyncState.lastSyncedAt` cannot
-  /// answer that: it is set on the successful emit and null on every other
-  /// status, so a device whose last run failed would report never having
-  /// synced at all.
-  static const String lastSyncedAtKey = 'sync.last_synced_at';
 
   final _state = StreamController<SyncState>.broadcast();
 
@@ -75,7 +78,7 @@ class SyncEngine {
     required this.api,
     required this.auth,
     required this.database,
-  });
+  }) : cursor = SyncCursorDao(database);
 
   Stream<SyncState> get state => _state.stream;
 
@@ -87,7 +90,7 @@ class SyncEngine {
     final deviceId = await auth.deviceId();
     final clock = HybridLogicalClock(deviceId: deviceId);
 
-    final stored = await repository.preference('sync.last_hlc');
+    final stored = (await cursor.read()).lastHlc;
     final last = stored == null ? null : HlcStamp.tryParse(stored);
     if (last != null) clock.restoreFrom(last);
 
@@ -110,11 +113,7 @@ class SyncEngine {
     }
 
     final stamp = clock.issue();
-    await repository.setPreference(
-      'sync.last_hlc',
-      stamp.toString(),
-      hlc: stamp.toString(),
-    );
+    await cursor.write(lastHlc: Value(stamp.toString()));
 
     return stamp.toString();
   }
@@ -143,11 +142,7 @@ class SyncEngine {
 
       await _recordConflicts(await api.conflicts());
 
-      await repository.setPreference(
-        lastSyncedAtKey,
-        DateTime.now().toUtc().toIso8601String(),
-        hlc: await issueStamp(),
-      );
+      await cursor.write(lastSyncedAt: Value(DateTime.now().toUtc()));
 
       _emit(
         SyncStatus.upToDate,
@@ -253,11 +248,7 @@ class SyncEngine {
 
       since = result.events.isEmpty ? result.lastSeq : result.events.last.seq;
 
-      await repository.setPreference(
-        'sync.last_seq',
-        '$since',
-        hlc: await issueStamp(),
-      );
+      await cursor.write(lastSeq: Value(since));
 
       // A service reporting more to come while sending nothing would spin
       // this loop forever, with the indicator running the whole time.
@@ -404,10 +395,7 @@ class SyncEngine {
 
   // -- plumbing ------------------------------------------------------
 
-  Future<int> _lastSeq() async {
-    final stored = await repository.preference('sync.last_seq');
-    return int.tryParse(stored ?? '') ?? 0;
-  }
+  Future<int> _lastSeq() async => (await cursor.read()).lastSeq;
 
   void _emit(SyncStatus status, {DateTime? lastSyncedAt, String? message}) {
     if (_state.isClosed) return;

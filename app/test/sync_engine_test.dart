@@ -86,7 +86,7 @@ void main() {
       // repeat one already used.
       final issued = await sync.issueStamp();
 
-      expect(await repository.preference('sync.last_hlc'), issued);
+      expect((await sync.cursor.read()).lastHlc, issued);
     });
 
     test('survive a restart', () async {
@@ -284,7 +284,8 @@ void main() {
         await sync.syncNow();
 
         // Sending it back would loop, with each round trip producing another
-        // event. Only the sync bookkeeping preferences may be queued.
+        // event. Sync's own bookkeeping is written through SyncCursorDao,
+        // which cannot queue anything at all.
         final queued = await repository.pendingEvents();
         expect(queued.where((e) => e.entityType == 'position'), isEmpty);
       },

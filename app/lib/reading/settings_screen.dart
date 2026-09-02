@@ -81,15 +81,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // Resolved rather than read raw, so a pointer at a profile deleted on
     // another device names Standard instead of nothing.
     final active = await widget.repository.activeProfile();
-    final synced = await widget.repository.preference(
-      SyncEngine.lastSyncedAtKey,
-    );
+    final synced = (await widget.sync.cursor.read()).lastSyncedAt;
 
     if (!mounted) return;
 
     setState(() {
       _activeProfileName = active.name;
-      _lastSynced = DateTime.tryParse(synced ?? '');
+      _lastSynced = synced;
     });
   }
 

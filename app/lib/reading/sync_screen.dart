@@ -49,12 +49,10 @@ class _SyncScreenState extends State<SyncScreen> {
   /// every other status, so a screen reading only the stream would tell a
   /// reader whose last run failed that they had never synced at all.
   Future<void> _load() async {
-    final stored = await widget.repository.preference(
-      SyncEngine.lastSyncedAtKey,
-    );
+    final stored = (await widget.sync.cursor.read()).lastSyncedAt;
     if (!mounted) return;
 
-    setState(() => _lastSynced = DateTime.tryParse(stored ?? ''));
+    setState(() => _lastSynced = stored);
   }
 
   Future<void> _syncNow() async {
