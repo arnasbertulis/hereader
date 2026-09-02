@@ -407,7 +407,9 @@ The active profile is a pointer in `preferences` naming a row in
 `stored_profiles`, so anything derived from it watches both tables.
 `watchActiveProfile` does that with one query whose stream drift invalidates
 on a write to either. The library screen holds the same subscription, since
-its tiles carry the same figure.
+its tiles carry the same figure, and the reader screen holds it too, so the
+reading surface follows a profile change made anywhere rather than only the
+ones it pushed a route for.
 
 ## Sync
 

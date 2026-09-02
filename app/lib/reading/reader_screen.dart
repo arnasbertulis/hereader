@@ -196,6 +196,13 @@ class _ReaderScreenState extends State<ReaderScreen>
   bool _wasPlayingAtDown = false;
   StreamSubscription<PlaybackUpdate>? _sub;
 
+  /// The same subscription Home, Library and the full profiles screen hold:
+  /// a pointer in `preferences` naming a row in `stored_profiles`, so a
+  /// change written anywhere — a route this sheet pushes, another screen,
+  /// another device, a background sync — reaches [_profile] and the session
+  /// without this screen reloading anything by hand.
+  StreamSubscription<ReadingProfile>? _profileSub;
+
   /// The frame the reading surface is drawing.
   ///
   /// A notifier rather than a field behind `setState`, because a word
@@ -362,7 +369,23 @@ class _ReaderScreenState extends State<ReaderScreen>
     // annoying until this screen started writing the place down.
     _lifecycle = AppLifecycleListener(onHide: _onHide, onPause: _onHide);
 
-    _restoreProfile();
+    // The fact is pushed rather than fetched: this is the one place the
+    // screen's copy of the active profile changes, whether the write came
+    // from this sheet, another screen, or another device. `_profile` opens
+    // on `Presets.standard` above and is swapped in here as soon as the
+    // stored choice loads, unconditionally — the profile already in use can
+    // be edited without its id moving, and that edit has to reach the
+    // session too.
+    _profileSub = widget.repository.watchActiveProfile().listen((profile) {
+      if (!mounted) return;
+
+      setState(() {
+        _profile = profile;
+        _session.profile = profile;
+      });
+      _syncClock();
+    });
+
     _restoreStep();
   }
 
@@ -387,36 +410,6 @@ class _ReaderScreenState extends State<ReaderScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _syncClock();
-  }
-
-  Future<void> _restoreProfile() async {
-    final profile = await widget.repository.activeProfile();
-    if (!mounted || profile.id == _profile.id) return;
-
-    setState(() {
-      _profile = profile;
-      _session.profile = profile;
-    });
-    _syncClock();
-  }
-
-  /// Re-reads the active profile and adopts it unconditionally.
-  ///
-  /// [_restoreProfile] short-circuits when the id has not changed, which is
-  /// right for the one read at open and wrong here: the editor, reached from
-  /// the profile sheet, can save changes to the profile already in use, and
-  /// the id then never moves even though the config underneath it did. Every
-  /// route the sheet pushes calls this on return so the surface reflects
-  /// whatever it comes back to, edited or not.
-  Future<void> _adoptActiveProfile() async {
-    final profile = await widget.repository.activeProfile();
-    if (!mounted) return;
-
-    setState(() {
-      _profile = profile;
-      _session.profile = profile;
-    });
     _syncClock();
   }
 
@@ -476,6 +469,10 @@ class _ReaderScreenState extends State<ReaderScreen>
     _saveTimer?.cancel();
     _lifecycle?.dispose();
     _sub?.cancel();
+    // Cancelled before the session and the clock it feeds are torn down, so
+    // a late emission from the stream cannot reach either after they are
+    // gone.
+    _profileSub?.cancel();
     _clock.dispose();
     _session.dispose();
     _current.dispose();
@@ -805,14 +802,14 @@ class _ReaderScreenState extends State<ReaderScreen>
 
     switch (intent) {
       case _SelectProfile(:final profile):
-        setState(() {
-          _profile = profile;
-          _session.profile = profile;
-        });
         // Remembered on this device only. Which profile is in use is not
         // synced: a phone read outdoors and a desktop in a dim room can want
         // different ones, and a shared pointer would have each undo the
         // other.
+        //
+        // A plain write: the subscription in `initState` delivers it back to
+        // `_profile` and the session, the same way it delivers a change
+        // written anywhere else.
         await widget.repository.setActiveProfile(
           profile.id,
           hlc: await widget.issueStamp(),
@@ -831,25 +828,25 @@ class _ReaderScreenState extends State<ReaderScreen>
         if (!mounted) return;
         if (result != null && result.id != profile.id) {
           // The editor forked a preset. Same rule as ProfilesScreen: what
-          // was just created is what the reader continues with.
+          // was just created is what the reader continues with. Writing the
+          // pointer is enough; the subscription delivers the result, edited
+          // or forked.
           await widget.repository.setActiveProfile(
             result.id,
             hlc: await widget.issueStamp(),
           );
         }
-        await _adoptActiveProfile();
 
       case _CopyProfile(:final profile):
+        // ProfileActions.duplicate writes the fork's own pointer; the
+        // subscription picks it up without a reload here.
         await _profileActions.duplicate(context, profile);
-        if (!mounted) return;
-        await _adoptActiveProfile();
 
       case _DeleteProfile(:final profile):
-        final deleted = await _profileActions.delete(context, profile);
-        if (!deleted || !mounted) return;
         // Deleting the active profile clears the pointer in the repository,
-        // so this reads back as Standard rather than as a dangling id.
-        await _adoptActiveProfile();
+        // and the subscription resolves that back to Standard rather than a
+        // dangling id.
+        await _profileActions.delete(context, profile);
 
       case _SetMode(:final mode):
         await _setMode(mode);
@@ -863,8 +860,6 @@ class _ReaderScreenState extends State<ReaderScreen>
             ),
           ),
         );
-        if (!mounted) return;
-        await _adoptActiveProfile();
     }
   }
 
@@ -909,9 +904,7 @@ class _ReaderScreenState extends State<ReaderScreen>
           profile.id,
           hlc: await widget.issueStamp(),
         );
-        if (!mounted) return;
       }
-      await _adoptActiveProfile();
       return;
     }
 
@@ -929,8 +922,6 @@ class _ReaderScreenState extends State<ReaderScreen>
           existing.id,
           hlc: await widget.issueStamp(),
         );
-        if (!mounted) return;
-        await _adoptActiveProfile();
         return;
       }
     }
@@ -953,9 +944,7 @@ class _ReaderScreenState extends State<ReaderScreen>
         saved.id,
         hlc: await widget.issueStamp(),
       );
-      if (!mounted) return;
     }
-    await _adoptActiveProfile();
   }
 
   static String _modeSuffix(PresentationMode mode) => switch (mode) {
