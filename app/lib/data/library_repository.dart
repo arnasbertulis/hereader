@@ -1033,10 +1033,7 @@ class LibraryRepository {
   /// actually moved the answer — either the pointer now names a different
   /// profile, or the active profile's own row changed under it.
   ///
-  /// Compared by serialised form ([ReadingProfile.toJson]), which is
-  /// deliberately the cheap answer: it covers every field a profile has
-  /// without this package defining `==` on one. #281 replaces it with real
-  /// equality on [ReadingProfile].
+  /// Compared with [ReadingProfile]'s own value equality.
   Stream<ReadingProfile> watchActiveProfile() {
     final pointer = _db.select(_db.preferences)
       ..where((p) => p.key.equals(activeProfileKey));
@@ -1049,10 +1046,7 @@ class LibraryRepository {
       ),
     ]);
 
-    return query
-        .watch()
-        .asyncMap((_) => activeProfile())
-        .distinct((a, b) => jsonEncode(a.toJson()) == jsonEncode(b.toJson()));
+    return query.watch().asyncMap((_) => activeProfile()).distinct();
   }
 
   Future<void> _clearActiveProfile() => (_db.delete(
