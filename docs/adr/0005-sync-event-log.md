@@ -137,13 +137,29 @@ entity's conflict rule, not which direction is implemented. Only the
 inbound path exists today: `_applyPreference` writes what another device
 sent. `setPreference`'s `sync` parameter, added when profile editing
 landed, defaults to `false`, because nothing that currently goes through
-it — sync bookkeeping (`sync.last_seq`, `sync.last_hlc`,
-`sync.last_synced_at`) and the device-local active-profile pointer (ADR
-0008) — is meant to leave the device. There is no outstanding gap this
-creates: no preference today needs the outbound path. This is unused
-capability, not a bug, and is recorded here because both ADR 0008 and the
-README flagged the mismatch against this document without correcting it
-at the source.
+it — the device-local active-profile pointer (ADR 0008) — is meant to
+leave the device. There is no outstanding gap this creates: no preference
+today needs the outbound path. This is unused capability, not a bug, and
+is recorded here because both ADR 0008 and the README flagged the
+mismatch against this document without correcting it at the source.
+
+**Sync's own bookkeeping does not live in `Preferences`.** This document
+originally described `sync.last_seq`, `sync.last_hlc`, and
+`sync.last_synced_at` as three more keys behind the same `sync: false`
+default as the active-profile pointer above. #282 corrected that: Drift
+invalidates a watched query on any write to a table it joins, not on the
+specific key that changed, so a stream over a reader preference was woken
+by sync's own housekeeping every time sync ran, as though the preference
+itself had changed. The three values now live in their own table,
+`SyncCursor`, behind its own accessor, `SyncCursorDao` — one-shot
+`read()`/`write()` over a single row, with no method that can reach the
+outbox at all. The guarantee that this bookkeeping never leaves the device
+is now a fact about the type rather than a convention enforced at each
+call site by a default parameter. This reverses the schema-version-5
+migration that folded a dedicated `sync_state` table into `Preferences` in
+the first place, on grounds — a single read/write path for every setting —
+that no longer hold once a watched stream is joined against that table;
+that migration's own comment now points here.
 
 The divergence hint is for the service and not for the reader. Building the client made the distinction sharper than this document originally put it.
 
