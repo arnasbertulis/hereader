@@ -123,5 +123,43 @@ void main() {
 
       await disposeTree(tester);
     });
+
+    testWidgets(
+      'the full profiles screen follows a pointer written from outside',
+      (tester) async {
+        await tester.pumpWidget(reader());
+        await tester.pumpAndSettle();
+
+        await openProfileSheet(tester);
+
+        await tester.drag(find.byType(ListView).last, const Offset(0, -400));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Reading profiles'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(ProfilesScreen), findsOneWidget);
+
+        ListTile tileFor(String name) => tester.widget<ListTile>(
+          find.ancestor(of: find.text(name), matching: find.byType(ListTile)),
+        );
+
+        expect(tileFor('Standard').selected, isTrue);
+        expect(tileFor('Central field loss').selected, isFalse);
+
+        // The path a reader never takes from this screen: another device
+        // writing the pointer directly through the repository, not a tap.
+        await repository.setActiveProfile(
+          Presets.centralFieldLoss.id,
+          hlc: await _stamp(),
+        );
+        await tester.pumpAndSettle();
+
+        expect(tileFor('Standard').selected, isFalse);
+        expect(tileFor('Central field loss').selected, isTrue);
+
+        await disposeTree(tester);
+      },
+    );
   });
 }
