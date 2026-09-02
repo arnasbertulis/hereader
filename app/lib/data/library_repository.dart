@@ -1024,11 +1024,19 @@ class LibraryRepository {
   /// query stream when any table it reads is written — and the row itself
   /// is discarded, because a built-in preset has no row to return.
   ///
-  /// Emits on any write to either table rather than only on a change to
-  /// this profile, because a filter would need an equality [ReadingProfile]
-  /// does not define. That makes what each emission costs the thing worth
-  /// keeping small, which is why [activeProfile] resolves one row by id
-  /// instead of reading and decoding every profile the reader has.
+  /// Drift reruns the query on any write to either table, not only one that
+  /// changes the answer: `preferences` takes a write from sync bookkeeping
+  /// every few minutes, and that alone used to republish the profile as
+  /// though it had changed. [distinct] compares each re-read against the
+  /// last one it emitted and drops a re-read that resolved to the same
+  /// profile, so the only writes that reach a listener are ones that
+  /// actually moved the answer — either the pointer now names a different
+  /// profile, or the active profile's own row changed under it.
+  ///
+  /// Compared by serialised form ([ReadingProfile.toJson]), which is
+  /// deliberately the cheap answer: it covers every field a profile has
+  /// without this package defining `==` on one. #281 replaces it with real
+  /// equality on [ReadingProfile].
   Stream<ReadingProfile> watchActiveProfile() {
     final pointer = _db.select(_db.preferences)
       ..where((p) => p.key.equals(activeProfileKey));
@@ -1041,7 +1049,10 @@ class LibraryRepository {
       ),
     ]);
 
-    return query.watch().asyncMap((_) => activeProfile());
+    return query
+        .watch()
+        .asyncMap((_) => activeProfile())
+        .distinct((a, b) => jsonEncode(a.toJson()) == jsonEncode(b.toJson()));
   }
 
   Future<void> _clearActiveProfile() => (_db.delete(
