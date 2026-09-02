@@ -3,8 +3,9 @@ import 'dart:convert';
 import 'package:rsvp_engine/rsvp_engine.dart';
 import 'package:test/test.dart';
 
-/// These classes define no `==`, so round trips compare their JSON. If value
-/// equality is added later, these can compare objects directly.
+/// `PacingConfig` and `PresentationConfig` define no `==`, so their round
+/// trips compare JSON. `ReadingProfile` has value equality; its round trip
+/// below compares the objects directly.
 void main() {
   group('PacingConfig serialization', () {
     test('round trips through JSON', () {
@@ -104,7 +105,7 @@ void main() {
 
     test('round trips through JSON', () {
       final restored = ReadingProfile.fromJson(profile.toJson());
-      expect(restored.toJson(), equals(profile.toJson()));
+      expect(restored, equals(profile));
       expect(restored.pacing.baseWpm, 190);
       expect(restored.presentation.fontSizePt, 44);
       expect(restored.rewindWords, 4);
@@ -138,6 +139,75 @@ void main() {
     test('fork accepts an explicit name', () {
       final forked = Presets.standard.fork(id: 'user.002', name: 'Evenings');
       expect(forked.name, 'Evenings');
+    });
+  });
+
+  group('ReadingProfile equality', () {
+    const base = ReadingProfile(
+      id: 'test.profile',
+      name: 'Test',
+      pacing: PacingConfig(baseWpm: 190),
+      presentation: PresentationConfig(fontSizePt: 44),
+      rewindWords: 4,
+    );
+
+    ReadingProfile identicalCopy() => const ReadingProfile(
+      id: 'test.profile',
+      name: 'Test',
+      pacing: PacingConfig(baseWpm: 190),
+      presentation: PresentationConfig(fontSizePt: 44),
+      rewindWords: 4,
+    );
+
+    test('profiles built with identical field values compare equal and hash '
+        'equal', () {
+      final other = identicalCopy();
+      expect(other, equals(base));
+      expect(other.hashCode, equals(base.hashCode));
+    });
+
+    test('a profile compares equal to itself', () {
+      expect(base, equals(base));
+    });
+
+    test('a profile compares unequal to a fork of itself', () {
+      final forked = base.fork(id: 'user.forked');
+      expect(forked, isNot(equals(base)));
+    });
+
+    test('a difference in id makes profiles unequal', () {
+      expect(base.copyWith(id: 'other.id'), isNot(equals(base)));
+    });
+
+    test('a difference in name makes profiles unequal', () {
+      expect(base.copyWith(name: 'Other'), isNot(equals(base)));
+    });
+
+    test('a difference in pacing makes profiles unequal', () {
+      expect(
+        base.copyWith(pacing: const PacingConfig(baseWpm: 300)),
+        isNot(equals(base)),
+      );
+    });
+
+    test('a difference in presentation makes profiles unequal', () {
+      expect(
+        base.copyWith(presentation: const PresentationConfig(fontSizePt: 60)),
+        isNot(equals(base)),
+      );
+    });
+
+    test('a difference in rewindWords makes profiles unequal', () {
+      expect(base.copyWith(rewindWords: 0), isNot(equals(base)));
+    });
+
+    test('equality agrees with what the profile serialises to', () {
+      // A round trip through JSON produces a distinct object graph — new
+      // PacingConfig and PresentationConfig instances — that must still
+      // compare equal, because equality is defined in terms of toJson.
+      final restored = ReadingProfile.fromJson(base.toJson());
+      expect(restored, equals(base));
+      expect(restored.toJson(), equals(base.toJson()));
     });
   });
 
