@@ -47,6 +47,17 @@ Block _block(String id, String href, int index, String text) => Block(
   );
 }
 
+/// Tears the tree down explicitly rather than letting the test end with one
+/// still standing.
+///
+/// `ReaderScreen` now holds a subscription to `watchActiveProfile()`
+/// alongside its periodic save timer; leaving either running past the end of
+/// a test reports as a leaked timer. See #280.
+Future<void> disposeTree(WidgetTester tester) async {
+  await tester.pumpWidget(const SizedBox());
+  await tester.pump(const Duration(milliseconds: 1));
+}
+
 void main() {
   group('chaptersOf', () {
     test('resolves each entry to the first token of its block', () {
@@ -204,6 +215,8 @@ void main() {
       // The surface is showing the chapter's first token, paused, rather
       // than having resumed playback somewhere the reader has not looked.
       expect(find.text('Delta'), findsOneWidget);
+
+      await disposeTree(tester);
     });
 
     testWidgets('opening the panel reveals the chapter being read', (
@@ -241,6 +254,8 @@ void main() {
       // sitting, and a lazy list does not build a tile it has scrolled past,
       // so its absence is what says a scroll happened at all.
       expect(find.text('Chapter 0'), findsNothing);
+
+      await disposeTree(tester);
     });
 
     testWidgets('it reveals the new chapter on a second open, not the first', (
@@ -277,6 +292,8 @@ void main() {
 
       expect(current, greaterThan(0));
       expect(current, lessThan(height));
+
+      await disposeTree(tester);
     });
 
     testWidgets('a book that declares no chapters offers no button', (
@@ -288,6 +305,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byTooltip('Chapters'), findsNothing);
+
+      await disposeTree(tester);
     });
 
     testWidgets(
@@ -327,6 +346,8 @@ void main() {
         await tester.pump();
 
         expect(find.text('Delta'), findsOneWidget);
+
+        await disposeTree(tester);
       },
     );
   });
@@ -390,6 +411,8 @@ void main() {
 
         expect(find.text('Licence'), findsOneWidget);
         expect(find.byTooltip('Stop advancing'), findsOneWidget);
+
+        await disposeTree(tester);
       },
     );
   });
