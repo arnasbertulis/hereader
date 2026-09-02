@@ -43,8 +43,6 @@ class ProfilesScreen extends StatefulWidget {
 }
 
 class _ProfilesScreenState extends State<ProfilesScreen> {
-  String? _activeId;
-
   late final ProfileActions _profileActions;
 
   @override
@@ -54,30 +52,22 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       repository: widget.repository,
       issueStamp: widget.issueStamp,
     );
-    _loadActive();
-  }
-
-  Future<void> _loadActive() async {
-    // Resolved rather than read raw, so a pointer at a profile deleted on
-    // another device shows Standard selected instead of nothing.
-    final active = await widget.repository.activeProfile();
-    if (!mounted) return;
-    setState(() => _activeId = active.id);
   }
 
   Future<void> _select(ReadingProfile profile) async {
+    // A plain write. The row moves when `watchActiveProfile` re-emits, the
+    // same way it moves for a change written from another device — there is
+    // no local copy of the pointer left to also update.
     await widget.repository.setActiveProfile(
       profile.id,
       hlc: await widget.issueStamp(),
     );
-    if (!mounted) return;
-    setState(() => _activeId = profile.id);
   }
 
   Future<void> _duplicate(ReadingProfile source) async {
+    // ProfileActions.duplicate writes the fork's own pointer; the
+    // subscription below picks it up without a reload here.
     await _profileActions.duplicate(context, source);
-    if (!mounted) return;
-    await _loadActive();
   }
 
   Future<void> _edit(ReadingProfile profile) async {
@@ -95,86 +85,97 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
 
     // The editor forked a preset. Same rule ProfileActions.duplicate
     // follows: a profile just created by editing is the one to read with,
-    // regardless of what was active when the fork happened.
+    // regardless of what was active when the fork happened. Writing the
+    // pointer is enough; the subscription below delivers the result.
     if (result != null && result.id != profile.id) {
-      await _select(result);
-      return;
+      await widget.repository.setActiveProfile(
+        result.id,
+        hlc: await widget.issueStamp(),
+      );
     }
-
-    await _loadActive();
   }
 
   Future<void> _delete(ReadingProfile profile) async {
-    final deleted = await _profileActions.delete(context, profile);
-    if (!deleted || !mounted) return;
-
-    // Deleting the active profile clears the pointer in the repository, so
-    // this reads back as Standard rather than as a dangling id.
-    await _loadActive();
+    // Deleting the active profile clears the pointer in the repository, and
+    // `watchActiveProfile` resolves that back to Standard; no reload needed.
+    await _profileActions.delete(context, profile);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Reading profiles')),
-      body: StreamBuilder<List<ReadingProfile>>(
-        stream: widget.repository.watchProfiles(),
-        builder: (context, snapshot) {
-          final profiles = snapshot.data;
-          if (profiles == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: StreamBuilder<ReadingProfile>(
+        // The same subscription Home and Library hold: a pointer in
+        // `preferences` naming a row in `stored_profiles`, so a change
+        // written anywhere — including another device — reaches the
+        // selected row without this screen reloading anything by hand.
+        stream: widget.repository.watchActiveProfile(),
+        builder: (context, activeSnapshot) {
+          // Null until the first emission, so no row reads as selected
+          // before the pointer is actually known — never the wrong one.
+          final activeId = activeSnapshot.data?.id;
 
-          final presets = profiles.where((p) => p.isBuiltIn).toList();
-          final mine = profiles.where((p) => !p.isBuiltIn).toList();
+          return StreamBuilder<List<ReadingProfile>>(
+            stream: widget.repository.watchProfiles(),
+            builder: (context, snapshot) {
+              final profiles = snapshot.data;
+              if (profiles == null) {
+                return const Center(child: CircularProgressIndicator());
+              }
 
-          return ListView(
-            children: [
-              const _SectionHeader('Your profiles'),
-              if (mine.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                  child: Text(
-                    'None yet. Copy a preset below to make one you can '
-                    'change.',
+              final presets = profiles.where((p) => p.isBuiltIn).toList();
+              final mine = profiles.where((p) => !p.isBuiltIn).toList();
+
+              return ListView(
+                children: [
+                  const _SectionHeader('Your profiles'),
+                  if (mine.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: Text(
+                        'None yet. Copy a preset below to make one you can '
+                        'change.',
+                      ),
+                    ),
+                  for (final profile in mine)
+                    ProfileRow(
+                      profile: profile,
+                      selected: profile.id == activeId,
+                      onSelect: () => _select(profile),
+                      onEdit: () => _edit(profile),
+                      onDuplicate: () => _duplicate(profile),
+                      onDelete: () => _delete(profile),
+                    ),
+
+                  const _SectionHeader('Presets'),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Text(
+                      'Starting points that ship with the app. Copy one to '
+                      'change it.',
+                    ),
                   ),
-                ),
-              for (final profile in mine)
-                ProfileRow(
-                  profile: profile,
-                  selected: profile.id == _activeId,
-                  onSelect: () => _select(profile),
-                  onEdit: () => _edit(profile),
-                  onDuplicate: () => _duplicate(profile),
-                  onDelete: () => _delete(profile),
-                ),
+                  for (final profile in presets)
+                    ProfileRow(
+                      profile: profile,
+                      selected: profile.id == activeId,
+                      onSelect: () => _select(profile),
+                      onEdit: () => _edit(profile),
+                      onDuplicate: () => _duplicate(profile),
+                    ),
 
-              const _SectionHeader('Presets'),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Text(
-                  'Starting points that ship with the app. Copy one to '
-                  'change it.',
-                ),
-              ),
-              for (final profile in presets)
-                ProfileRow(
-                  profile: profile,
-                  selected: profile.id == _activeId,
-                  onSelect: () => _select(profile),
-                  onEdit: () => _edit(profile),
-                  onDuplicate: () => _duplicate(profile),
-                ),
-
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 24, 16, 32),
-                child: Text(
-                  'Your profiles follow you between devices. Which one is '
-                  'selected does not: a phone read outdoors and a desktop in '
-                  'a dim room can want different ones.',
-                ),
-              ),
-            ],
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 24, 16, 32),
+                    child: Text(
+                      'Your profiles follow you between devices. Which one '
+                      'is selected does not: a phone read outdoors and a '
+                      'desktop in a dim room can want different ones.',
+                    ),
+                  ),
+                ],
+              );
+            },
           );
         },
       ),
