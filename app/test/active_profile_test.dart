@@ -125,6 +125,71 @@ void main() {
     );
   });
 
+  group('watchActiveProfile', () {
+    test('the first emission after subscribing is always delivered', () async {
+      final seen = <ReadingProfile>[];
+      final sub = repo.watchActiveProfile().listen(seen.add);
+
+      await pumpEventQueue();
+
+      expect(seen, hasLength(1));
+      expect(seen.single.id, Presets.standard.id);
+      await sub.cancel();
+    });
+
+    test(
+      'emits when the pointer naming the active profile is written',
+      () async {
+        final seen = <ReadingProfile>[];
+        final sub = repo.watchActiveProfile().listen(seen.add);
+        await pumpEventQueue();
+
+        await repo.setActiveProfile(Presets.centralFieldLoss.id, hlc: stamp(1));
+        await pumpEventQueue();
+
+        expect(seen.map((p) => p.id), [
+          Presets.standard.id,
+          Presets.centralFieldLoss.id,
+        ]);
+        await sub.cancel();
+      },
+    );
+
+    test("emits when the active profile's own row is written, even though its "
+        'id has not changed', () async {
+      final profile = fork();
+      await repo.saveProfile(profile, hlc: stamp(1));
+      await repo.setActiveProfile(profile.id, hlc: stamp(2));
+
+      final seen = <ReadingProfile>[];
+      final sub = repo.watchActiveProfile().listen(seen.add);
+      await pumpEventQueue();
+
+      final edited = profile.copyWith(pacing: const PacingConfig(baseWpm: 321));
+      await repo.saveProfile(edited, hlc: stamp(3));
+      await pumpEventQueue();
+
+      expect(seen.map((p) => p.id), [profile.id, profile.id]);
+      expect(seen.last.pacing.baseWpm, 321);
+      await sub.cancel();
+    });
+
+    test(
+      'does not emit again when an unrelated preference is written',
+      () async {
+        final seen = <ReadingProfile>[];
+        final sub = repo.watchActiveProfile().listen(seen.add);
+        await pumpEventQueue();
+
+        await repo.setPreference('theme', 'dark', hlc: stamp(1));
+        await pumpEventQueue();
+
+        expect(seen, hasLength(1));
+        await sub.cancel();
+      },
+    );
+  });
+
   group('setPreference', () {
     test('is device-local unless asked otherwise', () async {
       await repo.setPreference('theme', 'dark', hlc: stamp(1));
