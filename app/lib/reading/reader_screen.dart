@@ -881,8 +881,16 @@ class _ReaderScreenState extends State<ReaderScreen>
   /// Named after the change rather than "(copy)". `_CopyProfile` produces a
   /// duplicate and is correctly named as one; a reader who flipped one switch
   /// did not ask for a copy of anything. See ADR 0025.
+  ///
+  /// Binds the active profile once, here, and every decision below reads
+  /// only [profile] — never `_profile` again. `_profile` is the reading
+  /// screen's own copy, and once the active profile arrives on a stream an
+  /// await inside this method is a point where that copy can move out from
+  /// under it. Re-reading it after one of those awaits would let the wrong
+  /// profile decide what to fork, or worse, what to delete.
   Future<void> _setMode(PresentationMode mode) async {
-    final origin = presetBehind(_profile);
+    final profile = _profile;
+    final origin = presetBehind(profile);
 
     // Off, on a fork that has not been made the reader's own: go back to the
     // preset it came from. The fork is removed only where nothing would be
@@ -898,7 +906,7 @@ class _ReaderScreenState extends State<ReaderScreen>
 
       if (!origin.caretOnly) {
         await widget.repository.deleteProfile(
-          _profile.id,
+          profile.id,
           hlc: await widget.issueStamp(),
         );
         if (!mounted) return;
@@ -909,9 +917,9 @@ class _ReaderScreenState extends State<ReaderScreen>
 
     // On, from a preset: reuse the fork this reader already has for it rather
     // than leaving a second one behind every time the switch goes round.
-    if (mode == PresentationMode.continuousScroll && _profile.isBuiltIn) {
+    if (mode == PresentationMode.continuousScroll && profile.isBuiltIn) {
       final existing = slidingForkOf(
-        _profile,
+        profile,
         await widget.repository.allProfiles(),
       );
       if (!mounted) return;
@@ -927,20 +935,20 @@ class _ReaderScreenState extends State<ReaderScreen>
       }
     }
 
-    final changed = _profile.copyWith(
-      presentation: _profile.presentation.copyWith(mode: mode),
+    final changed = profile.copyWith(
+      presentation: profile.presentation.copyWith(mode: mode),
     );
-    final saved = _profile.isBuiltIn
+    final saved = profile.isBuiltIn
         ? changed.fork(
             id: ReadingProfile.newId(),
-            name: '${_profile.name} ${_modeSuffix(mode)}',
+            name: '${profile.name} ${_modeSuffix(mode)}',
           )
         : changed;
 
     await widget.repository.saveProfile(saved, hlc: await widget.issueStamp());
     if (!mounted) return;
 
-    if (saved.id != _profile.id) {
+    if (saved.id != profile.id) {
       await widget.repository.setActiveProfile(
         saved.id,
         hlc: await widget.issueStamp(),
