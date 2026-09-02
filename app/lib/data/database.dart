@@ -208,10 +208,14 @@ class StoredProfiles extends Table {
 
 /// App-wide settings that are not part of a profile.
 ///
-/// Sync bookkeeping lives here too — `sync.last_seq`, `sync.last_hlc`,
-/// `sync.last_synced_at` — under the same read and write path as anything
-/// else the app remembers. It is one row per key rather than one wide row,
-/// so a new piece of bookkeeping costs an insert rather than a migration.
+/// One row per key rather than one wide row, so a new setting costs an
+/// insert rather than a migration.
+///
+/// Sync's own bookkeeping does not live here (see [SyncCursor]): a stream
+/// watching this table for a reader preference would otherwise be woken by
+/// sync's housekeeping every time sync ran, since Drift invalidates a
+/// watched query on any write to a table it joins, not on the specific key
+/// that changed.
 class Preferences extends Table {
   TextColumn get key => text()();
   TextColumn get value => text()();
@@ -219,6 +223,44 @@ class Preferences extends Table {
 
   @override
   Set<Column> get primaryKey => {key};
+}
+
+/// Sync's own bookkeeping: how far it has pulled, the clock stamp to
+/// restore on restart, and when it last ran.
+///
+/// A single row, present from [AppDatabase.migration]'s `onCreate`. Kept out
+/// of [Preferences] on purpose — see that table's own comment — so that a
+/// stream over a reader preference is disturbed only by a reader preference
+/// actually changing.
+///
+/// No `hlc` column. That column on [Preferences] and [StoredProfiles] exists
+/// to support entities that sync, and rows here never do: see
+/// [SyncCursorDao], whose accessor has no code path that can reach
+/// [OutboxEvents] at all.
+@DataClassName('SyncCursorRow')
+class SyncCursor extends Table {
+  /// Always `0`. A table rather than a wider row on some other table so a
+  /// stream can watch reader preferences without watching this too.
+  ///
+  /// `withDefault` alone does not make an omitted insert land on `0`: a
+  /// lone `INTEGER PRIMARY KEY` column is a SQLite rowid alias, and an
+  /// insert that leaves it out gets the next free rowid (1, 2, ...) rather
+  /// than the column default. Every insert into this table passes
+  /// `id: const Value(0)` explicitly.
+  IntColumn get id => integer().withDefault(const Constant(0))();
+
+  /// How far this device has pulled. `0` before the first successful pull.
+  IntColumn get lastSeq => integer().withDefault(const Constant(0))();
+
+  /// The hybrid-logical-clock stamp to restore on restart, or null before
+  /// this device has ever issued one.
+  TextColumn get lastHlc => text().nullable()();
+
+  /// When sync last completed, or null before it ever has.
+  DateTimeColumn get lastSyncedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
 }
 
 /// Changes waiting to be sent to the server.
@@ -286,6 +328,7 @@ class PositionConflicts extends Table {
     BookCovers,
     StoredProfiles,
     Preferences,
+    SyncCursor,
     OutboxEvents,
     PositionConflicts,
   ],
@@ -325,12 +368,18 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (m) async {
       await m.createAll();
+
+      // The single row SyncCursorDao reads and writes for the rest of the
+      // app's life. createAll() only creates the (empty) table.
+      await into(
+        syncCursor,
+      ).insert(SyncCursorCompanion.insert(id: const Value(0)));
     },
     onUpgrade: (m, from, to) async {
       // An install several versions behind runs these in order and keeps its
@@ -359,6 +408,10 @@ class AppDatabase extends _$AppDatabase {
         // put a table in every existing install that no schema mentions and
         // no code explains, which is a worse artefact than the dead table
         // this removes. Nothing references it, so the drop cannot cascade.
+        //
+        // Reversed by the version 11 step below, once a watched query over
+        // Preferences made sharing that table with this bookkeeping a
+        // problem this migration's own reasoning did not anticipate.
         await m.deleteTable('sync_state');
       }
       if (from < 6) {
@@ -399,6 +452,63 @@ class AppDatabase extends _$AppDatabase {
         // from another device and never had a chapter to carry.
         await m.addColumn(readingPositions, readingPositions.chapterTitle);
         await m.addColumn(readingPositions, readingPositions.chapterEndIndex);
+      }
+      if (from < 11) {
+        // The reverse of the version 5 step above: sync's bookkeeping moves
+        // back out of Preferences into its own table, SyncCursor, because a
+        // stream over a reader preference joined against Preferences was
+        // woken by sync's housekeeping every time sync ran, not only when a
+        // preference actually changed. Version 5 shared the table for a
+        // single read/write path; that reasoning does not survive a watched
+        // query.
+        //
+        // Existing values move rather than reset, so updating does not cost
+        // an install its progress and force a full resync. Moved and
+        // deleted in the same step, so the fact is never held in two places
+        // at once.
+        await m.createTable(syncCursor);
+
+        final rows =
+            await (select(preferences)..where(
+                  (p) => p.key.isIn(const [
+                    'sync.last_seq',
+                    'sync.last_hlc',
+                    'sync.last_synced_at',
+                  ]),
+                ))
+                .get();
+
+        int? lastSeq;
+        String? lastHlc;
+        DateTime? lastSyncedAt;
+        for (final row in rows) {
+          switch (row.key) {
+            case 'sync.last_seq':
+              lastSeq = int.tryParse(row.value);
+            case 'sync.last_hlc':
+              lastHlc = row.value;
+            case 'sync.last_synced_at':
+              lastSyncedAt = DateTime.tryParse(row.value);
+          }
+        }
+
+        await into(syncCursor).insert(
+          SyncCursorCompanion.insert(
+            id: const Value(0),
+            lastSeq: Value(lastSeq ?? 0),
+            lastHlc: Value(lastHlc),
+            lastSyncedAt: Value(lastSyncedAt),
+          ),
+        );
+
+        await (delete(preferences)..where(
+              (p) => p.key.isIn(const [
+                'sync.last_seq',
+                'sync.last_hlc',
+                'sync.last_synced_at',
+              ]),
+            ))
+            .go();
       }
     },
     beforeOpen: (details) async {
