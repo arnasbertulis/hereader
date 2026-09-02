@@ -1,5 +1,7 @@
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
+import 'package:app/data/sync_cursor_dao.dart';
+import 'package:drift/drift.dart' hide isNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
@@ -188,6 +190,28 @@ void main() {
         await sub.cancel();
       },
     );
+
+    test(
+      'does not emit at all when sync writes through SyncCursorDao',
+      () async {
+        // Distinct from the case above: an unrelated Preferences write is
+        // still deduped rather than suppressed at source, because #277's
+        // filter remains correct defense against any other non-answer
+        // -changing write to Preferences or StoredProfiles. A write here
+        // cannot even reach that filter, because SyncCursor is not part of
+        // the query watchActiveProfile() joins.
+        final cursor = SyncCursorDao(db);
+        final seen = <ReadingProfile>[];
+        final sub = repo.watchActiveProfile().listen(seen.add);
+        await pumpEventQueue();
+
+        await cursor.write(lastSeq: const Value(1));
+        await pumpEventQueue();
+
+        expect(seen, hasLength(1));
+        await sub.cancel();
+      },
+    );
   });
 
   group('setPreference', () {
@@ -208,14 +232,9 @@ void main() {
       expect(queued.single.deleted, isFalse);
     });
 
-    test('sync bookkeeping keys stay put', () async {
-      // These are the ones that must never travel: another device applying
-      // this device's last_seq would skip events it had never pulled.
-      await repo.setPreference('sync.last_seq', '42', hlc: stamp(1));
-      await repo.setPreference('sync.last_hlc', stamp(1), hlc: stamp(1));
-
-      expect(await repo.pendingEvents(), isEmpty);
-    });
+    // Sync's own bookkeeping no longer goes through setPreference at all —
+    // see sync_cursor_dao_test.dart, where "writing through it never
+    // reaches the outbox" replaces the guarantee this used to prove here.
   });
 
   group('PacingConfig.copyWith', () {
