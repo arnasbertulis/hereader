@@ -272,7 +272,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
 
     if (choice == null || !mounted) return;
-    await _dispatch(() => _dispatcher.act(context, choice));
+    await _dispatch(choice);
   }
 
   /// Shows the library's busy state around the shared open path.
@@ -290,22 +290,32 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   /// Wraps a call onto [_dispatcher] in the same busy flag [_open] carries
-  /// on its own. Only [AddChoice.epub] is slow enough for a reader to
-  /// notice — see [AddMenuDispatcher.act] — so the other three flip the flag
-  /// back before the next frame.
+  /// on its own.
+  ///
+  /// Raises busy from [AddMenuDispatcher.act]'s `onImportStarted`, which
+  /// only fires once an EPUB pick has bytes — see
+  /// [BookImporter.importPickedFile]'s `onPicked` — so cancelling the file
+  /// chooser never toggles `_busy`, and the top bar, filter, sort and add
+  /// controls never repaint for one (#269). The other three choices never
+  /// call it: none is slow enough for a reader to notice, so busy never
+  /// needs to cover them.
   ///
   /// A successful import that the current filter would hide resets it to
   /// All — see the [_bookLanded] subscription in [initState]. It reacts to
   /// [LibraryRepository.addBook] directly rather than to anything read here,
   /// so a failed import never touches the filter: nothing was written for it
   /// to react to.
-  Future<void> _dispatch(Future<void> Function() action) async {
-    setState(() => _busy = true);
-
+  Future<void> _dispatch(AddChoice choice) async {
     try {
-      await action();
+      await _dispatcher.act(
+        context,
+        choice,
+        onImportStarted: () {
+          if (mounted) setState(() => _busy = true);
+        },
+      );
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted && _busy) setState(() => _busy = false);
     }
   }
 
@@ -341,9 +351,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       _LibraryFilter.all => null,
     };
 
-    return choice == null
-        ? _openAddMenu()
-        : _dispatch(() => _dispatcher.act(context, choice));
+    return choice == null ? _openAddMenu() : _dispatch(choice);
   }
 
   Future<void> _confirmRemove(BookSummary summary) async {

@@ -162,4 +162,37 @@ void main() {
 
     await _disposeTree(tester);
   });
+
+  testWidgets(
+    'cancelling the file chooser never disables the add button (#269)',
+    (tester) async {
+      await pump(
+        tester,
+        dispatcher: AddMenuDispatcher(
+          repository: repository,
+          sync: sync,
+          catalogue: catalogue,
+          importer: BookImporter(
+            repository: repository,
+            pickBytes: () async => null,
+            parser: StubBookParser(
+              fixtureBook(id: 'epub-1', title: 'Pride and Prejudice'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Add something to read'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(addMenuEpubKey));
+      await tester.pumpAndSettle();
+
+      final button = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Add something to read'),
+      );
+      expect(button.onPressed, isNotNull);
+
+      await _disposeTree(tester);
+    },
+  );
 }
