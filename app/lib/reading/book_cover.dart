@@ -68,10 +68,11 @@ class BookCoverImage extends StatelessWidget {
 
 /// A book's cover once its bytes have been read.
 ///
-/// Takes a future rather than bytes, so the caller decides how long a read
-/// is remembered. The library memoizes one future per book because a grid
-/// rebuilds its tiles on every scroll and text-scale change; Home keeps a
-/// much smaller map for the few books it draws.
+/// Takes a future rather than bytes, so a widget rebuild does not force a
+/// fresh read. Neither shelf memoizes this itself: `LibraryRepository`
+/// already remembers one future per book id and clears it the moment a
+/// write could have changed the cover, so a grid rebuilding its tiles on
+/// every scroll and text-scale change gets the same future back for free.
 class BookCoverFuture extends StatelessWidget {
   final String bookId;
   final Future<Uint8List?> cover;
