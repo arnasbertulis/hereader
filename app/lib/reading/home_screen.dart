@@ -104,10 +104,6 @@ class _HomeScreenState extends State<HomeScreen> {
   /// picker and parse are only ever constructed once, in [initState].
   late final BookImporter _importer;
 
-  /// One future per book, kept so a rebuild does not re-read the blob. Home
-  /// draws at most seven covers, so this stays small without eviction.
-  final _covers = <String, Future<Uint8List?>>{};
-
   LibraryRepository get _repo => widget.repository;
 
   /// Pacing of the profile the reader has active, for the time estimate.
@@ -150,9 +146,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void _onDisplayChanged() {
     if (mounted) setState(() {});
   }
-
-  Future<Uint8List?> _coverOf(String bookId) =>
-      _covers.putIfAbsent(bookId, () => _repo.coverOf(bookId));
 
   /// Opens a book, showing busy inside the continue card.
   ///
@@ -210,9 +203,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _busy = true);
 
     try {
-      final outcome = await _importer.importPickedFile(context);
-
-      if (outcome == ImportOutcome.imported) _covers.clear();
+      await _importer.importPickedFile(context);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -299,7 +290,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           _ContinueSection(
                             book: recent.first,
-                            cover: _coverOf(recent.first.id),
+                            cover: _repo.coverOf(recent.first.id),
                             pacing: _pacing,
                             scope: widget.display.timeLeftScope,
                             busy: _busy,
@@ -332,7 +323,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             const SizedBox(height: AppSpacing.sm),
                             _RecentRow(
                               books: recent.skip(1).take(_recentCount).toList(),
-                              coverOf: _coverOf,
+                              coverOf: _repo.coverOf,
                               onOpen: _busy ? null : _open,
                             ),
                           ],
