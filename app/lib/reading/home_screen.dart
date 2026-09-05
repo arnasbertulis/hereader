@@ -180,23 +180,30 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (choice == null || !mounted) return;
-    await _dispatch(() => _dispatcher.act(context, choice));
+    await _dispatch(choice);
   }
 
   /// Wraps a call onto [_dispatcher] in Home's own busy flag.
   ///
-  /// Only [AddChoice.epub] is slow enough for a reader to notice — see
-  /// [AddMenuDispatcher.act] — so the other three flip the flag back before
-  /// the next frame. A failed import is reported once, by
+  /// Raises busy from [AddMenuDispatcher.act]'s `onImportStarted`, which
+  /// only fires once an EPUB pick has bytes — see
+  /// [BookImporter.importPickedFile]'s `onPicked` — so cancelling the file
+  /// chooser never toggles `_busy` at all (#269). The other three choices
+  /// never call it: none is slow enough for a reader to notice, so busy
+  /// never needs to cover them. A failed import is reported once, by
   /// [AddMenuDispatcher]'s own [BookImporter]; this only covers how long the
   /// spinner in the continue tile's glyph shows.
-  Future<void> _dispatch(Future<void> Function() action) async {
-    setState(() => _busy = true);
-
+  Future<void> _dispatch(AddChoice choice) async {
     try {
-      await action();
+      await _dispatcher.act(
+        context,
+        choice,
+        onImportStarted: () {
+          if (mounted) setState(() => _busy = true);
+        },
+      );
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted && _busy) setState(() => _busy = false);
     }
   }
 

@@ -40,14 +40,20 @@ class AddMenuDispatcher {
 
   /// Opens the Add menu and acts on whatever it comes back with. A dismissed
   /// menu (null) does nothing.
-  Future<void> showAndAct(BuildContext context) async {
+  ///
+  /// [onImportStarted] is forwarded to [act] — see its own comment for what
+  /// it's for.
+  Future<void> showAndAct(
+    BuildContext context, {
+    VoidCallback? onImportStarted,
+  }) async {
     final choice = await showDialog<AddChoice>(
       context: context,
       builder: (_) => const AddMenu(),
     );
 
     if (choice == null || !context.mounted) return;
-    await act(context, choice);
+    await act(context, choice, onImportStarted: onImportStarted);
   }
 
   /// Acts on a given answer directly, without showing the menu.
@@ -59,15 +65,24 @@ class AddMenuDispatcher {
   /// its own push, but nothing read that wait — a note lands in the Library
   /// through [LibraryRepository.addBook] the moment it's saved, not through
   /// this route's result — so dropping it is a deliberate move to "navigate
-  /// immediately" for all three, not a leftover. A caller wrapping this
-  /// call in a busy flag only ever sees that flag held for the import's
-  /// duration.
-  Future<void> act(BuildContext context, AddChoice choice) async {
+  /// immediately" for all three, not a leftover.
+  ///
+  /// [onImportStarted], for the [AddChoice.epub] branch only, is
+  /// [BookImporter.importPickedFile]'s `onPicked` — it fires once bytes
+  /// exist and before the parse starts, never on a cancel. A caller raising
+  /// its own busy flag from it, rather than from the top of this call, never
+  /// sees that flag toggle for the time the file chooser itself is open
+  /// (#269).
+  Future<void> act(
+    BuildContext context,
+    AddChoice choice, {
+    VoidCallback? onImportStarted,
+  }) async {
     switch (choice) {
       case AddChoice.freeBooks:
         _openFreeBooks(context);
       case AddChoice.epub:
-        await importer.importPickedFile(context);
+        await importer.importPickedFile(context, onPicked: onImportStarted);
       case AddChoice.paste:
         _openPaste(context);
       case AddChoice.note:

@@ -117,6 +117,55 @@ void main() {
     expect(find.byType(PasteReaderScreen), findsNothing);
   });
 
+  testWidgets(
+    'onImportStarted fires for epub, once bytes exist, and never on a cancel '
+    '(#269)',
+    (tester) async {
+      final context = await pumpContext(tester);
+      var started = false;
+
+      await dispatcher(
+        importer: BookImporter(
+          repository: repository,
+          pickBytes: () async => null,
+        ),
+      ).act(context, AddChoice.epub, onImportStarted: () => started = true);
+      await tester.pumpAndSettle();
+
+      expect(started, isFalse);
+
+      started = false;
+      await dispatcher(
+        importer: _RecordingImporter(repository: repository),
+      ).act(context, AddChoice.epub, onImportStarted: () => started = true);
+      await tester.pumpAndSettle();
+
+      expect(started, isTrue);
+    },
+  );
+
+  testWidgets('onImportStarted is never called for the other three choices', (
+    tester,
+  ) async {
+    final context = await pumpContext(tester);
+    var started = false;
+
+    for (final choice in [
+      AddChoice.freeBooks,
+      AddChoice.paste,
+      AddChoice.note,
+    ]) {
+      await dispatcher().act(
+        context,
+        choice,
+        onImportStarted: () => started = true,
+      );
+      await tester.pumpAndSettle();
+    }
+
+    expect(started, isFalse);
+  });
+
   testWidgets('showAndAct opens the menu and acts on the tapped option', (
     tester,
   ) async {
@@ -160,8 +209,12 @@ class _RecordingImporter extends BookImporter {
   _RecordingImporter({required super.repository});
 
   @override
-  Future<ImportOutcome> importPickedFile(BuildContext context) async {
+  Future<ImportOutcome> importPickedFile(
+    BuildContext context, {
+    VoidCallback? onPicked,
+  }) async {
     called = true;
+    onPicked?.call();
     return ImportOutcome.imported;
   }
 }
