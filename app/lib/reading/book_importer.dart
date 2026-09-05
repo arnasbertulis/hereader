@@ -96,10 +96,7 @@ class BookImporter {
   /// of a Catalogue download without inventing a file that was never on
   /// disk. Kept for a caller that is certain its [context] is still mounted
   /// — see [writeBytes] for one that is not.
-  Future<ImportOutcome> importBytes(
-    BuildContext context,
-    Uint8List bytes,
-  ) {
+  Future<ImportOutcome> importBytes(BuildContext context, Uint8List bytes) {
     return writeBytes(
       bytes,
       onFailed: (message) {

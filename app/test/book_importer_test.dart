@@ -173,22 +173,25 @@ void main() {
     expect(await repository.hasBook('book-1'), isTrue);
   });
 
-  test('writeBytes reports a parse failure through onFailed, not a context', () async {
-    final importer = BookImporter(
-      repository: repository,
-      pickBytes: () => throw StateError('picker should not be called'),
-      parser: const ThrowingBookParser(),
-    );
+  test(
+    'writeBytes reports a parse failure through onFailed, not a context',
+    () async {
+      final importer = BookImporter(
+        repository: repository,
+        pickBytes: () => throw StateError('picker should not be called'),
+        parser: const ThrowingBookParser(),
+      );
 
-    String? reported;
-    final outcome = await importer.writeBytes(
-      Uint8List.fromList([1, 2, 3]),
-      onFailed: (message) => reported = message,
-    );
+      String? reported;
+      final outcome = await importer.writeBytes(
+        Uint8List.fromList([1, 2, 3]),
+        onFailed: (message) => reported = message,
+      );
 
-    expect(outcome, ImportOutcome.failed);
-    expect(reported, 'The file could not be read as an EPUB.');
-  });
+      expect(outcome, ImportOutcome.failed);
+      expect(reported, 'The file could not be read as an EPUB.');
+    },
+  );
 
   test('cancelled and failed are distinct outcomes', () {
     expect(ImportOutcome.cancelled, isNot(ImportOutcome.failed));
