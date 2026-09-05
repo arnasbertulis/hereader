@@ -26,6 +26,43 @@ Future<void> _disposeTree(WidgetTester tester) async {
   await tester.pump(const Duration(milliseconds: 1));
 }
 
+/// Pumps in bounded real-time steps until [finder] finds something.
+///
+/// The save-and-open path shows an indeterminate spinner while busy, and an
+/// indeterminate spinner's own animation keeps requesting frames forever —
+/// exactly what makes `pumpAndSettle` time out rather than return once the
+/// real `compute()` work behind it actually finishes. Must run inside
+/// `tester.runAsync`, the same real zone as the async work it waits on.
+Future<void> _pumpUntilFound(
+  WidgetTester tester,
+  Finder finder, {
+  int maxTries = 100,
+}) async {
+  for (var i = 0; i < maxTries; i++) {
+    if (finder.evaluate().isNotEmpty) return;
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+  throw StateError('Timed out waiting for $finder');
+}
+
+/// The pop transition back off [NoteEditorScreen] keeps its `EditableText`
+/// mounted for a beat, and `EditableText` is itself a match for `find.text`,
+/// so a shelf assertion taken mid-transition can find the new title twice —
+/// once as the tile's own [Text], once as the editor's field on its way out.
+Future<void> _pumpUntilExactlyOne(
+  WidgetTester tester,
+  Finder finder, {
+  int maxTries = 100,
+}) async {
+  for (var i = 0; i < maxTries; i++) {
+    if (finder.evaluate().length == 1) return;
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+  throw StateError('Timed out waiting for exactly one $finder');
+}
+
 void main() {
   late AppDatabase db;
   late LibraryRepository repository;
@@ -307,21 +344,15 @@ void main() {
   });
 
   group('writing a note resets a mismatched filter', () {
-    // The save-and-open path itself — filtered to Books, tapping through
-    // Write a note, entering text, tapping Save and read, confirming the
-    // shelf lands on All with the new note visible — is not covered by an
-    // automated test here. It routes through BookParser.openNote's real
-    // compute() isolate, and while tester.runAsync is the documented way to
-    // let a widget test await a real isolate, doing so across this route's
-    // full depth (add-menu dialog, the editor, BookOpener's own sync and
-    // conflict checks, then the reader it pushes) reliably hung rather than
-    // resolving even with a generous real-time delay inside it, for reasons
-    // that did not resolve with the time budget available. The condition
-    // this test would have checked was read by hand instead: _import and
-    // _openNote each reset the filter to All exactly when the format just
-    // added would not appear under the filter as it stood, which the
-    // "cancelling" test below at least confirms is not triggered by a
-    // no-op path through the same screens.
+    // The save-and-open path runs BookParser.openNote and
+    // BookParser.reopenStored on the real compute() isolate and pushes a
+    // real ReaderScreen, so every test below drives the tap and the
+    // subsequent pumps inside tester.runAsync, which escapes the FakeAsync
+    // zone testWidgets otherwise runs in. Backing out through the reader's
+    // own "Back to library" control (rather than popping the route directly)
+    // is what lets BookOpener.open's own await resolve, which is what lets
+    // NoteEditorScreen pop(true), which is what lets the filter-reset rule
+    // run at all.
     testWidgets(
       'cancelling the editor without saving does not touch the filter',
       (tester) async {
@@ -345,6 +376,95 @@ void main() {
 
         expect(find.text('Books'), findsOneWidget);
         expect(find.text('All'), findsNothing);
+
+        await _disposeTree(tester);
+      },
+    );
+
+    testWidgets(
+      'filtered to Books, a saved note shows the shelf that contains it',
+      (tester) async {
+        await addBook('book-1', title: 'Romeo and Juliet');
+
+        await pump(tester);
+
+        await tester.tap(find.text('All'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Books').last);
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(libraryAddButtonKey));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(addMenuNoteKey));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(find.byType(TextField).first, 'A New Note');
+        await tester.enterText(
+          find.byType(TextField).last,
+          'Something worth reading.',
+        );
+        await tester.pump();
+
+        await tester.runAsync(() async {
+          await tester.tap(find.text('Save and read'));
+          await _pumpUntilFound(tester, find.byTooltip('Back to library'));
+          await tester.pump(const Duration(milliseconds: 300));
+
+          // The reader is open; leaving it is what lets BookOpener.open's
+          // own await resolve so the save-and-open chain can finish.
+          await tester.tap(find.byTooltip('Back to library'));
+          await _pumpUntilFound(tester, find.byKey(libraryAddButtonKey));
+          await _pumpUntilExactlyOne(tester, find.text('A New Note'));
+        });
+
+        expect(find.text('All'), findsOneWidget);
+        expect(find.text('Books'), findsNothing);
+        expect(find.text('A New Note'), findsOneWidget);
+
+        await _disposeTree(tester);
+      },
+    );
+
+    testWidgets(
+      'filtered to Notes, a saved note leaves the filter alone',
+      (tester) async {
+        await addNote('note-1', title: 'An Old Note');
+
+        await pump(tester);
+
+        await tester.tap(find.text('All'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Notes').last);
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(libraryAddButtonKey));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(addMenuNoteKey));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(find.byType(TextField).first, 'A New Note');
+        await tester.enterText(
+          find.byType(TextField).last,
+          'Something else worth reading.',
+        );
+        await tester.pump();
+
+        await tester.runAsync(() async {
+          await tester.tap(find.text('Save and read'));
+          await _pumpUntilFound(tester, find.byTooltip('Back to library'));
+          await tester.pump(const Duration(milliseconds: 300));
+
+          await tester.tap(find.byTooltip('Back to library'));
+          await _pumpUntilFound(tester, find.byKey(libraryAddButtonKey));
+          await _pumpUntilExactlyOne(tester, find.text('A New Note'));
+        });
+
+        // Still Notes: the format that landed is exactly the one this
+        // filter already shows, so the rule this ticket exists to unify
+        // never fires.
+        expect(find.text('Notes'), findsOneWidget);
+        expect(find.text('All'), findsNothing);
+        expect(find.text('A New Note'), findsOneWidget);
 
         await _disposeTree(tester);
       },
@@ -416,5 +536,80 @@ void main() {
 
       await _disposeTree(tester);
     });
+
+    testWidgets(
+      'filtered to Books, a successful import leaves the filter alone',
+      (tester) async {
+        await addBook('book-1', title: 'Romeo and Juliet');
+
+        await pump(
+          tester,
+          bookImporter: BookImporter(
+            repository: repository,
+            pickBytes: () async => Uint8List.fromList([1, 2, 3]),
+            parser: StubBookParser(
+              fixtureBook(id: 'epub-2', title: 'Pride and Prejudice'),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('All'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Books').last);
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(libraryAddButtonKey));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(addMenuEpubKey));
+        await tester.pumpAndSettle();
+
+        // Still Books: the format that landed is exactly the one this filter
+        // already shows, so the rule this ticket exists to unify never fires.
+        expect(find.text('Books'), findsOneWidget);
+        expect(find.text('All'), findsNothing);
+        expect(find.text('Pride and Prejudice'), findsOneWidget);
+
+        await _disposeTree(tester);
+      },
+    );
+
+    testWidgets(
+      'a cancelled import leaves the filter alone, shows no message and '
+      'does not repaint the shelf',
+      (tester) async {
+        await addNote('note-1', title: 'A Note');
+
+        await pump(
+          tester,
+          bookImporter: BookImporter(
+            repository: repository,
+            // A null pick is the file dialog reporting the reader backed
+            // out. importPickedFile reports cancelled without ever calling
+            // the parser, so there is nothing for it to build a book from.
+            pickBytes: () async => null,
+            parser: const ThrowingBookParser(),
+          ),
+        );
+
+        await tester.tap(find.text('All'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Notes').last);
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(libraryAddButtonKey));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(addMenuEpubKey));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Notes'), findsOneWidget);
+        expect(find.text('All'), findsNothing);
+        expect(find.byType(SnackBar), findsNothing);
+        // The shelf still shows exactly the note it started with — nothing
+        // else landed for a cancelled pick to have made visible.
+        expect(find.text('A Note'), findsOneWidget);
+
+        await _disposeTree(tester);
+      },
+    );
   });
 }

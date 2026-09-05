@@ -58,11 +58,21 @@ enum _LibraryFilter {
   static _LibraryFilter byName(String? name) =>
       values.firstWhere((f) => f.name == name, orElse: () => all);
 
-  bool matches(BookSummary book) {
+  bool matches(BookSummary book) =>
+      matchesFormat(BookSourceFormat.fromName(book.sourceFormat));
+
+  /// The same shelf test as [matches], answered from a source format alone.
+  ///
+  /// What just landed is known by format before there is a [BookSummary] to
+  /// hand [matches] — an import or a saved note reports its format the
+  /// moment it lands, not a full row back from the stream. Both forms are
+  /// kept because a caller with a summary in hand (the shelf itself) should
+  /// not have to unwrap it first.
+  bool matchesFormat(BookSourceFormat format) {
     if (this == all) return true;
 
     final wants = this == epub ? BookSourceFormat.epub : BookSourceFormat.note;
-    return BookSourceFormat.fromName(book.sourceFormat) == wants;
+    return format == wants;
   }
 }
 
@@ -262,6 +272,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
+  /// What just landed is not on the shelf you are looking at: switch to All.
+  ///
+  /// One rule, asked once, rather than a branch per filter-and-format pair —
+  /// an import and a saved note both land a format, and neither cares which
+  /// filter it happens to displace. [_LibraryFilter.matchesFormat] is the
+  /// same test the shelf itself uses to decide what's on screen.
+  Future<void> _showShelfFor(BookSourceFormat format) async {
+    if (!_filter.matchesFormat(format)) {
+      await _chooseFilter(_LibraryFilter.all);
+    }
+  }
+
   Future<void> _import() async {
     setState(() => _busy = true);
 
@@ -269,13 +291,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       final outcome = await _importer.importPickedFile(context);
       if (outcome != ImportOutcome.imported || !mounted) return;
 
-      // Filtered to Notes, an EPUB import would otherwise land on a shelf
-      // that excludes it — the reader taps Add, picks a file, and sees
-      // nothing happen. Showing everything is the confirmation that
-      // something did.
-      if (_filter == _LibraryFilter.note) {
-        await _chooseFilter(_LibraryFilter.all);
-      }
+      await _showShelfFor(BookSourceFormat.epub);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -313,13 +329,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
       ),
     );
 
-    // Guarded by `saved`, unlike the import branch's own reset: backing out
-    // of the editor without writing anything pops null, and resetting the
-    // filter on a cancelled add would be the same wrong surprise this fix
-    // exists to remove — just triggered by nothing happening rather than by
-    // something happening the reader could not see.
-    if (saved == true && _filter == _LibraryFilter.epub) {
-      await _chooseFilter(_LibraryFilter.all);
+    // Guarded by `saved`: backing out of the editor without writing anything
+    // pops null, and resetting the filter on a cancelled add would be the
+    // same wrong surprise this rule exists to remove — just triggered by
+    // nothing happening rather than by something happening the reader could
+    // not see.
+    if (saved == true) {
+      await _showShelfFor(BookSourceFormat.note);
     }
   }
 
