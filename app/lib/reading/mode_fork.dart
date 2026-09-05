@@ -36,15 +36,20 @@ import 'package:rsvp_engine/rsvp_engine.dart';
 /// safe to remove once the reader leaves it.
 ///
 /// [discardable] is false when the fork differs from its preset in the caret
-/// settings as well as the mode. Those settings only exist under sliding and
-/// only appear in the editor there, so adjusting them is the expected thing
-/// to do inside a fork and must not cost the reader the fork itself.
+/// settings, in the mode, or in the name the switch gave it. Caret settings
+/// only exist under sliding and only appear in the editor there, so
+/// adjusting them is the expected thing to do inside a fork and must not
+/// cost the reader the fork itself. A rename is the loudest signal a reader
+/// can give that they have adopted a fork, so it earns the same protection.
 typedef ModeFork = ({ReadingProfile preset, bool discardable});
 
 /// The preset [profile] is a sliding fork of, or null if it is its own thing.
 ///
 /// Null for a preset, for a profile matching none of them, and for one the
-/// reader has changed in any way beyond the mode and the caret.
+/// reader has changed in any way beyond the mode and the caret. Pairing
+/// ignores the name — it is what lets [slidingForkOf] find a renamed fork
+/// again — but [ModeFork.discardable] does not: it is true only when
+/// [profile] still carries the name the switch gave it.
 ModeFork? presetBehind(ReadingProfile profile) {
   if (profile.isBuiltIn) return null;
 
@@ -53,7 +58,9 @@ ModeFork? presetBehind(ReadingProfile profile) {
 
   for (final preset in Presets.all) {
     if (exact == _fingerprint(preset, ignoreCaret: false)) {
-      return (preset: preset, discardable: true);
+      final discardable =
+          profile.name == generatedForkName(preset, profile.presentation.mode);
+      return (preset: preset, discardable: discardable);
     }
     if (loose == _fingerprint(preset, ignoreCaret: true)) {
       return (preset: preset, discardable: false);
@@ -200,10 +207,19 @@ ModeDecision decideMode({
   return ForkAndSelect(
     changed.fork(
       id: ReadingProfile.newId(),
-      name: '${profile.name} ${_modeSuffix(mode)}',
+      name: generatedForkName(profile, mode),
     ),
   );
 }
+
+/// The name the sliding switch gives a fork of [preset] for [mode].
+///
+/// The single source both [decideMode] names a fresh fork with and
+/// [presetBehind] recognises a fork by, so the two cannot drift: a suffix
+/// changed in one place and not the other would otherwise make every
+/// existing fork look renamed, or every renamed fork look generated.
+String generatedForkName(ReadingProfile preset, PresentationMode mode) =>
+    '${preset.name} ${_modeSuffix(mode)}';
 
 /// The suffix a fork made by the sliding switch is named with.
 ///
