@@ -59,6 +59,49 @@ void main() {
     expect(find.byType(SnackBar), findsNothing);
   });
 
+  testWidgets('a cancelled pick never calls onPicked', (tester) async {
+    await mountContext(tester);
+
+    final importer = BookImporter(
+      repository: repository,
+      pickBytes: () async => null,
+      parser: StubBookParser(fixtureBook(id: 'book-1', title: 'A Book')),
+    );
+
+    var pickedCalls = 0;
+    final outcome = await importer.importPickedFile(
+      context,
+      onPicked: () => pickedCalls++,
+    );
+
+    expect(outcome, ImportOutcome.cancelled);
+    expect(pickedCalls, 0);
+  });
+
+  testWidgets('a successful pick calls onPicked before the write lands', (
+    tester,
+  ) async {
+    await mountContext(tester);
+
+    final calls = <String>[];
+    final importer = BookImporter(
+      repository: repository,
+      pickBytes: () async {
+        calls.add('picked');
+        return Uint8List.fromList([1, 2, 3]);
+      },
+      parser: StubBookParser(fixtureBook(id: 'book-1', title: 'A Book')),
+    );
+
+    final outcome = await importer.importPickedFile(
+      context,
+      onPicked: () => calls.add('onPicked'),
+    );
+
+    expect(outcome, ImportOutcome.imported);
+    expect(calls, ['picked', 'onPicked']);
+  });
+
   testWidgets('a successful pick lands the Book', (tester) async {
     await mountContext(tester);
 
@@ -115,6 +158,36 @@ void main() {
 
     expect(outcome, ImportOutcome.imported);
     expect(await repository.hasBook('book-1'), isTrue);
+  });
+
+  test('writeBytes lands a Book without a BuildContext', () async {
+    final importer = BookImporter(
+      repository: repository,
+      pickBytes: () => throw StateError('picker should not be called'),
+      parser: StubBookParser(fixtureBook(id: 'book-1', title: 'A Book')),
+    );
+
+    final outcome = await importer.writeBytes(Uint8List.fromList([1, 2, 3]));
+
+    expect(outcome, ImportOutcome.imported);
+    expect(await repository.hasBook('book-1'), isTrue);
+  });
+
+  test('writeBytes reports a parse failure through onFailed, not a context', () async {
+    final importer = BookImporter(
+      repository: repository,
+      pickBytes: () => throw StateError('picker should not be called'),
+      parser: const ThrowingBookParser(),
+    );
+
+    String? reported;
+    final outcome = await importer.writeBytes(
+      Uint8List.fromList([1, 2, 3]),
+      onFailed: (message) => reported = message,
+    );
+
+    expect(outcome, ImportOutcome.failed);
+    expect(reported, 'The file could not be read as an EPUB.');
   });
 
   test('cancelled and failed are distinct outcomes', () {
