@@ -228,6 +228,25 @@ class LibraryRepository {
   /// else can make one.
   final _covers = <String, Future<Uint8List?>>{};
 
+  /// Fires the format of every Book [addBook] writes, insert and
+  /// conflict-update alike.
+  ///
+  /// A live signal, not a log: [StreamController.broadcast] keeps no
+  /// history, so a listener that subscribes after a Book has landed has
+  /// missed nothing it could not already read off [watchLibrary]. This is
+  /// the one seam every path that puts a Book on the shelf shares — a file
+  /// import, a Free books download and a saved Note all call [addBook] and
+  /// nothing else does — so one listener here covers all three, and a fourth
+  /// path added later needs no wiring of its own.
+  ///
+  /// Owned for the app's lifetime. Nothing here gains its own teardown: nobody
+  /// closes this controller, the same way nobody closes the drift streams
+  /// [watchLibrary] and [watchActiveProfile] already hand out.
+  final _bookLanded = StreamController<BookSourceFormat>.broadcast();
+
+  /// Announces the format of a Book just written by [addBook].
+  Stream<BookSourceFormat> get bookLanded => _bookLanded.stream;
+
   // -- books ---------------------------------------------------------
 
   /// Library contents, most recently imported first, without book bytes.
@@ -400,6 +419,11 @@ class LibraryRepository {
     // The write above may have replaced the cover this id used to have;
     // a memoized future would keep handing out the old bytes.
     unawaited(_covers.remove(book.id));
+
+    // After the transaction commits, not inside it: a listener that reacts
+    // by reading the library back out (as [watchLibrary]'s own drift stream
+    // does) should see the row that is already there.
+    _bookLanded.add(book.sourceFormat);
   }
 
   /// Rewrites a stored note's title and text.
