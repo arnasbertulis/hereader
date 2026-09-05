@@ -141,9 +141,16 @@ class _ManageProfiles extends _ProfileIntent {
 /// with a book open — a chapter of dense prose reads differently one word at
 /// a time than sliding — and reaching it otherwise means the editor, two
 /// screens away. See ADR 0025.
+///
+/// Carries [profiles] rather than letting the screen query them back. The
+/// sheet is already built on a stream of every profile, so the list is in
+/// scope at the moment the switch is tapped; riding it along here is what
+/// lets [_ReaderScreenState._setMode] decide without an await between
+/// binding the active profile and deciding its fate.
 class _SetMode extends _ProfileIntent {
   final PresentationMode mode;
-  const _SetMode(this.mode);
+  final List<ReadingProfile> profiles;
+  const _SetMode(this.mode, this.profiles);
 }
 
 /// Full-screen reading surface for a book.
@@ -781,6 +788,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                         on
                             ? PresentationMode.continuousScroll
                             : PresentationMode.fixedSingle,
+                        profiles,
                       ),
                     ),
                   ),
@@ -848,8 +856,8 @@ class _ReaderScreenState extends State<ReaderScreen>
         // dangling id.
         await _profileActions.delete(context, profile);
 
-      case _SetMode(:final mode):
-        await _setMode(mode);
+      case _SetMode(:final mode, :final profiles):
+        await _setMode(mode, profiles);
 
       case _ManageProfiles():
         await Navigator.of(context).push<void>(
@@ -863,99 +871,73 @@ class _ReaderScreenState extends State<ReaderScreen>
     }
   }
 
-  /// Puts the active profile into [mode], forking or unforking as needed.
+  /// Puts the active profile into [mode], performing whatever [decideMode]
+  /// says that takes, given the reader's other [profiles].
   ///
-  /// A switch the reader can flip has to be a switch: flipping it back must
-  /// land them where they started. A preset cannot be saved, so turning
-  /// sliding on forks it — the rule this repo already has for "the reader
-  /// changed a preset", and what the editor and `ProfilesScreen` both do.
-  /// Turning it off again has to undo that, or the reader is left reading one
-  /// word at a time under a profile named "(sliding)", which is what they
-  /// reported.
-  ///
-  /// Named after the change rather than "(copy)". `_CopyProfile` produces a
-  /// duplicate and is correctly named as one; a reader who flipped one switch
-  /// did not ask for a copy of anything. See ADR 0025.
-  ///
-  /// Binds the active profile once, here, and every decision below reads
-  /// only [profile] — never `_profile` again. `_profile` is the reading
+  /// Binds the active profile once, here, and passes only [profile] to
+  /// [decideMode] — never `_profile` again. `_profile` is the reading
   /// screen's own copy, and once the active profile arrives on a stream an
   /// await inside this method is a point where that copy can move out from
   /// under it. Re-reading it after one of those awaits would let the wrong
-  /// profile decide what to fork, or worse, what to delete.
-  Future<void> _setMode(PresentationMode mode) async {
+  /// profile decide what to fork, or worse, what to delete. [decideMode]
+  /// itself is synchronous, so binding [profile] and deciding its fate has
+  /// no such gap between them; [profiles] arrives with the intent rather
+  /// than through a query here for the same reason.
+  ///
+  /// This method only performs the writes [decideMode] describes — the
+  /// `setState`, the session update and the mounted checks aside, it decides
+  /// nothing. See ADR 0025 and `mode_fork.dart` for the policy.
+  Future<void> _setMode(
+    PresentationMode mode,
+    List<ReadingProfile> profiles,
+  ) async {
     final profile = _profile;
-    final origin = presetBehind(profile);
+    final decision = decideMode(
+      profile: profile,
+      mode: mode,
+      profiles: profiles,
+    );
 
-    // Off, on a fork that has not been made the reader's own: go back to the
-    // preset it came from. The fork is removed only where nothing would be
-    // lost with it — a fork carrying caret settings the reader chose is kept
-    // and simply left unselected, because those settings are the reason to
-    // come back to it.
-    if (mode != PresentationMode.continuousScroll && origin != null) {
-      await widget.repository.setActiveProfile(
-        origin.preset.id,
-        hlc: await widget.issueStamp(),
-      );
-      if (!mounted) return;
+    switch (decision) {
+      case ReturnToPreset(:final preset, :final discard):
+        await widget.repository.setActiveProfile(
+          preset.id,
+          hlc: await widget.issueStamp(),
+        );
+        if (!mounted) return;
 
-      if (!origin.caretOnly) {
-        await widget.repository.deleteProfile(
+        if (discard != null) {
+          await widget.repository.deleteProfile(
+            discard.id,
+            hlc: await widget.issueStamp(),
+          );
+        }
+
+      case SelectExistingFork(:final fork):
+        await widget.repository.setActiveProfile(
+          fork.id,
+          hlc: await widget.issueStamp(),
+        );
+
+      case SaveInPlace(:final profile):
+        await widget.repository.saveProfile(
+          profile,
+          hlc: await widget.issueStamp(),
+        );
+
+      case ForkAndSelect(:final profile):
+        await widget.repository.saveProfile(
+          profile,
+          hlc: await widget.issueStamp(),
+        );
+        if (!mounted) return;
+
+        await widget.repository.setActiveProfile(
           profile.id,
           hlc: await widget.issueStamp(),
         );
-      }
-      return;
-    }
-
-    // On, from a preset: reuse the fork this reader already has for it rather
-    // than leaving a second one behind every time the switch goes round.
-    if (mode == PresentationMode.continuousScroll && profile.isBuiltIn) {
-      final existing = slidingForkOf(
-        profile,
-        await widget.repository.allProfiles(),
-      );
-      if (!mounted) return;
-
-      if (existing != null) {
-        await widget.repository.setActiveProfile(
-          existing.id,
-          hlc: await widget.issueStamp(),
-        );
-        return;
-      }
-    }
-
-    final changed = profile.copyWith(
-      presentation: profile.presentation.copyWith(mode: mode),
-    );
-    final saved = profile.isBuiltIn
-        ? changed.fork(
-            id: ReadingProfile.newId(),
-            name: '${profile.name} ${_modeSuffix(mode)}',
-          )
-        : changed;
-
-    await widget.repository.saveProfile(saved, hlc: await widget.issueStamp());
-    if (!mounted) return;
-
-    if (saved.id != profile.id) {
-      await widget.repository.setActiveProfile(
-        saved.id,
-        hlc: await widget.issueStamp(),
-      );
     }
   }
-
-  static String _modeSuffix(PresentationMode mode) => switch (mode) {
-    PresentationMode.continuousScroll => '(sliding)',
-    // Neither of these forks in practice — a preset only leaves
-    // `fixedSingle` by way of the switch, and comes back by way of the
-    // branch above. Named rather than defaulted so a fourth mode is a
-    // compile error here.
-    PresentationMode.fixedSingle ||
-    PresentationMode.shiftingWindow => '(one word)',
-  };
 
   /// Stops, records the place, and leaves.
   ///

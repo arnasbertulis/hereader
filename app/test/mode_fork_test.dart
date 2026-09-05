@@ -64,11 +64,13 @@ void main() {
 
   group('slidingForkOf', () {
     test('finds a matching sliding fork already in the list', () {
-      final fork = Presets.standard.fork(id: 'fork').copyWith(
-        presentation: Presets.standard.presentation.copyWith(
-          mode: PresentationMode.continuousScroll,
-        ),
-      );
+      final fork = Presets.standard
+          .fork(id: 'fork')
+          .copyWith(
+            presentation: Presets.standard.presentation.copyWith(
+              mode: PresentationMode.continuousScroll,
+            ),
+          );
 
       expect(slidingForkOf(Presets.standard, [fork])?.id, 'fork');
     });
@@ -114,29 +116,32 @@ void main() {
       expect(forked.name, '${Presets.standard.name} (sliding)');
     });
 
-    test('turning sliding off on the reader\'s own profile edits it in place', () {
-      // A baseWpm distinct from every preset's, so this matches none of them
-      // and the switch treats it like any other setting rather than a fork.
-      final mine = ReadingProfile(
-        id: 'mine',
-        name: 'Mine',
-        pacing: const PacingConfig(baseWpm: 123),
-        presentation: const PresentationConfig(
-          mode: PresentationMode.continuousScroll,
-        ),
-      );
+    test(
+      'turning sliding off on the reader\'s own profile edits it in place',
+      () {
+        // A baseWpm distinct from every preset's, so this matches none of them
+        // and the switch treats it like any other setting rather than a fork.
+        final mine = ReadingProfile(
+          id: 'mine',
+          name: 'Mine',
+          pacing: const PacingConfig(baseWpm: 123),
+          presentation: const PresentationConfig(
+            mode: PresentationMode.continuousScroll,
+          ),
+        );
 
-      final decision = decideMode(
-        profile: mine,
-        mode: PresentationMode.fixedSingle,
-        profiles: [mine],
-      );
+        final decision = decideMode(
+          profile: mine,
+          mode: PresentationMode.fixedSingle,
+          profiles: [mine],
+        );
 
-      expect(decision, isA<SaveInPlace>());
-      final saved = (decision as SaveInPlace).profile;
-      expect(saved.id, 'mine');
-      expect(saved.presentation.mode, PresentationMode.fixedSingle);
-    });
+        expect(decision, isA<SaveInPlace>());
+        final saved = (decision as SaveInPlace).profile;
+        expect(saved.id, 'mine');
+        expect(saved.presentation.mode, PresentationMode.fixedSingle);
+      },
+    );
 
     test('a fork carrying caret settings is kept, and reused', () {
       final fork = Presets.standard.fork(
