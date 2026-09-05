@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
@@ -220,6 +221,13 @@ class LibraryRepository {
 
   LibraryRepository(this._db);
 
+  /// One future per book id, live between the write that could have changed
+  /// it and the next one. [addBook] and [removeBook] are the only writes
+  /// that touch a cover, so they are the only two methods that clear an
+  /// entry; nothing else needs to know a cover went stale because nothing
+  /// else can make one.
+  final _covers = <String, Future<Uint8List?>>{};
+
   // -- books ---------------------------------------------------------
 
   /// Library contents, most recently imported first, without book bytes.
@@ -302,9 +310,16 @@ class LibraryRepository {
 
   /// The stored cover for a book, or null when it has none.
   ///
-  /// One book at a time rather than a stream of every cover. A library of
-  /// forty books is forty images, and the grid needs the ones on screen.
-  Future<Uint8List?> coverOf(String bookId) async {
+  /// One book at a time rather than a stream of every cover: a library of
+  /// forty books is forty images, and a screen only ever needs the ones it
+  /// is drawing. That is an argument against reading every cover up front,
+  /// not against remembering the one a caller already asked for — this is
+  /// the only path that can put a byte in [_covers] or take one out, so a
+  /// second call for the same id is served from there instead of storage.
+  Future<Uint8List?> coverOf(String bookId) =>
+      _covers.putIfAbsent(bookId, () => _readCover(bookId));
+
+  Future<Uint8List?> _readCover(String bookId) async {
     final row = await (_db.select(
       _db.bookCovers,
     )..where((c) => c.bookId.equals(bookId))).getSingleOrNull();
@@ -381,6 +396,10 @@ class LibraryRepository {
 
       await _drainPendingPosition(book.id);
     });
+
+    // The write above may have replaced the cover this id used to have;
+    // a memoized future would keep handing out the old bytes.
+    unawaited(_covers.remove(book.id));
   }
 
   /// Rewrites a stored note's title and text.
@@ -444,8 +463,10 @@ class LibraryRepository {
   /// Any position held for this book stays. It is only reachable again if
   /// the reader re-imports the same edition, which is when they would want
   /// their place back.
-  Future<void> removeBook(String bookId) =>
-      (_db.delete(_db.books)..where((b) => b.id.equals(bookId))).go();
+  Future<void> removeBook(String bookId) async {
+    await (_db.delete(_db.books)..where((b) => b.id.equals(bookId))).go();
+    unawaited(_covers.remove(bookId));
+  }
 
   /// Whether this device holds the book itself, not merely a position in it.
   ///

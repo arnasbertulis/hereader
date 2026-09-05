@@ -129,12 +129,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// The same module Home and Free books carry, for the same reason.
   late final BookImporter _importer;
 
-  /// One future per book, kept so a rebuild does not re-read the blob.
-  /// `FutureBuilder` restarts whenever it is handed a new future, and a grid
-  /// hands its tiles new widgets on every scroll, resize and text-scale
-  /// change.
-  final _covers = <String, Future<Uint8List?>>{};
-
   /// Pacing of the profile the reader has active, for the time on each tile.
   ///
   /// The same subscription Home holds, and for the same reason: the active
@@ -230,9 +224,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     await _repo.setPreference(_sortReversedKey, '$_reversed', hlc: hlc);
   }
 
-  Future<Uint8List?> _coverOf(String bookId) =>
-      _covers.putIfAbsent(bookId, () => _repo.coverOf(bookId));
-
   /// Asks what the reader wants to read, then does it.
   ///
   /// One entry point for both routes in. The empty state's button and the
@@ -278,11 +269,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
       final outcome = await _importer.importPickedFile(context);
       if (outcome != ImportOutcome.imported || !mounted) return;
 
-      // Re-importing an id already in the library replaces its cover, and a
-      // memoized future would keep handing out the old one. Cheaper to drop
-      // every entry on an import than to work out which id changed.
-      _covers.clear();
-
       // Filtered to Notes, an EPUB import would otherwise land on a shelf
       // that excludes it — the reader taps Add, picks a file, and sees
       // nothing happen. Showing everything is the confirmation that
@@ -326,11 +312,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
         builder: (_) => NoteEditorScreen(repository: _repo, sync: widget.sync),
       ),
     );
-
-    // A saved note is a new book, and its cover slot (there is none) should
-    // not be missing from the memoized map the way a stale one would be.
-    // Cheap enough to always clear: the same guard _import already applies.
-    _covers.clear();
 
     // Guarded by `saved`, unlike the import branch's own reset: backing out
     // of the editor without writing anything pops null, and resetting the
@@ -397,7 +378,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
 
     if (confirmed == true) {
-      unawaited(_covers.remove(summary.id));
       await _repo.removeBook(summary.id);
     }
   }
@@ -495,7 +475,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   onRefresh: widget.sync.syncNow,
                   child: _BookShelf(
                     books: filtered,
-                    coverOf: _coverOf,
+                    coverOf: _repo.coverOf,
                     pacing: _pacing,
                     scope: widget.display.timeLeftScope,
                     onOpen: _busy ? null : _open,
