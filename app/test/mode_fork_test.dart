@@ -60,6 +60,43 @@ void main() {
 
       expect(presetBehind(mine), isNull);
     });
+
+    test('a renamed sliding fork is still paired, but not discardable', () {
+      final fork = Presets.standard.fork(
+        id: 'fork',
+        name: '${Presets.standard.name} (sliding)',
+      );
+      final renamed = fork
+          .copyWith(
+            presentation: fork.presentation.copyWith(
+              mode: PresentationMode.continuousScroll,
+            ),
+          )
+          .copyWith(name: 'My reading style');
+
+      final origin = presetBehind(renamed);
+      expect(origin?.preset.id, Presets.standard.id);
+      expect(origin?.discardable, isFalse);
+    });
+
+    test('a fork renamed and drifted in caret settings is not discardable', () {
+      final fork = Presets.standard.fork(
+        id: 'fork',
+        name: '${Presets.standard.name} (sliding)',
+      );
+      final renamed = fork
+          .copyWith(
+            presentation: fork.presentation.copyWith(
+              mode: PresentationMode.continuousScroll,
+              caretStyle: CaretStyle.chevron,
+            ),
+          )
+          .copyWith(name: 'My reading style');
+
+      final origin = presetBehind(renamed);
+      expect(origin?.preset.id, Presets.standard.id);
+      expect(origin?.discardable, isFalse);
+    });
   });
 
   group('slidingForkOf', () {
@@ -201,5 +238,84 @@ void main() {
         expect(returned.discard?.id, fork.id);
       },
     );
+
+    test('a renamed sliding fork survives being turned off, and is reused '
+        'rather than forked again', () {
+      final fork = Presets.standard.fork(
+        id: 'fork',
+        name: '${Presets.standard.name} (sliding)',
+      );
+      final renamed = fork
+          .copyWith(
+            presentation: fork.presentation.copyWith(
+              mode: PresentationMode.continuousScroll,
+            ),
+          )
+          .copyWith(name: 'My reading style');
+
+      // Off: the rename protects the fork from deletion.
+      final off = decideMode(
+        profile: renamed,
+        mode: PresentationMode.fixedSingle,
+        profiles: [renamed],
+      );
+      expect(off, isA<ReturnToPreset>());
+      final returned = off as ReturnToPreset;
+      expect(returned.preset.id, Presets.standard.id);
+      expect(returned.discard, isNull);
+
+      // On again, from the preset: the renamed fork is returned to rather
+      // than the preset being forked a second time.
+      final on = decideMode(
+        profile: Presets.standard,
+        mode: PresentationMode.continuousScroll,
+        profiles: [renamed],
+      );
+      expect(on, isA<SelectExistingFork>());
+      expect((on as SelectExistingFork).fork.id, 'fork');
+      expect(on.fork.name, 'My reading style');
+    });
+
+    test('a fork drifted in both name and caret settings survives being '
+        'turned off', () {
+      final fork = Presets.standard.fork(
+        id: 'fork',
+        name: '${Presets.standard.name} (sliding)',
+      );
+      final drifted = fork
+          .copyWith(
+            presentation: fork.presentation.copyWith(
+              mode: PresentationMode.continuousScroll,
+              caretStyle: CaretStyle.chevron,
+            ),
+          )
+          .copyWith(name: 'My reading style');
+
+      final off = decideMode(
+        profile: drifted,
+        mode: PresentationMode.fixedSingle,
+        profiles: [drifted],
+      );
+      expect(off, isA<ReturnToPreset>());
+      final returned = off as ReturnToPreset;
+      expect(returned.preset.id, Presets.standard.id);
+      expect(returned.discard, isNull);
+    });
+  });
+
+  group('generatedForkName', () {
+    test('is the same name decideMode gives a fresh fork', () {
+      final decision = decideMode(
+        profile: Presets.standard,
+        mode: PresentationMode.continuousScroll,
+        profiles: const [],
+      );
+
+      final forked = (decision as ForkAndSelect).profile;
+      expect(
+        forked.name,
+        generatedForkName(Presets.standard, PresentationMode.continuousScroll),
+      );
+    });
   });
 }
