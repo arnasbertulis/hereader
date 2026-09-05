@@ -257,9 +257,22 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
 
     try {
       final bytes = await widget.client.download(entry.gutenbergId);
-      if (!mounted) return;
 
-      final outcome = await _importer.importBytes(context, bytes);
+      // No `mounted` guard between the download and the write: a reader who
+      // navigated away is exactly the case this has to survive (#269).
+      // `writeBytes` takes no `BuildContext`, so the write lands whether or
+      // not this State still has one; `onFailed` only reaches for one after
+      // checking `mounted` itself, the same way `_failImport` below does.
+      final outcome = await _importer.writeBytes(
+        bytes,
+        onFailed: (message) {
+          if (mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(message)));
+          }
+        },
+      );
       if (!mounted) return;
 
       if (outcome == ImportOutcome.imported) {
@@ -268,9 +281,9 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
           _justImported.add(entry.bookId);
         });
       } else {
-        // A parse failure already reported itself through the module — this
-        // tap's own message would only repeat it. Just clear the spinner so
-        // the same tap can be retried immediately.
+        // A parse failure already reported itself through `onFailed` above —
+        // this tap's own message would only repeat it. Just clear the
+        // spinner so the same tap can be retried immediately.
         setState(() => _importing.remove(entry.bookId));
       }
     } on NetworkException {

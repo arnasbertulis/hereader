@@ -465,6 +465,44 @@ void main() {
     await _disposeTree(tester);
   });
 
+  testWidgets(
+    'a download that outlives the screen still lands the Book (#269)',
+    (tester) async {
+      final entry = entryStub();
+      catalogue.searchResponses.add(
+        CatalogueSearchResult(
+          catalogueReady: true,
+          results: [entry.toEntry()],
+          page: 0,
+          hasMore: false,
+        ),
+      );
+      final gate = catalogue.holdNextDownload();
+
+      await pump(
+        tester,
+        bookImporter: BookImporter(
+          repository: repository,
+          parser: StubBookParser(_bookFor(entry.bookId, entry.title)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The tap dispatches and returns; it does not await `_openOrImport`,
+      // which keeps running underneath, waiting on the gate.
+      await tester.tap(find.byKey(freeBooksTileKey(entry.gutenbergId)));
+      await tester.pump();
+
+      // The reader navigated away before the download finished.
+      await _disposeTree(tester);
+
+      gate.complete();
+      await tester.pump(const Duration(milliseconds: 10));
+
+      expect(await repository.hasBook(entry.bookId), isTrue);
+    },
+  );
+
   testWidgets('an entry already on this device is marked as such, without '
       'being handed to the importer', (tester) async {
     // Tapping this tile is not exercised here: it opens the book through

@@ -284,10 +284,24 @@ class FakeCatalogueClient implements CatalogueClient {
     return coverBytes;
   }
 
+  /// Gates queued by [holdNextDownload], taken in call order — see
+  /// [_searchGates] for the same contract applied to `search()`.
+  final List<Completer<void>> _downloadGates = [];
+
+  /// Queues a gate that the next `download()` call will wait on before
+  /// returning, so a test can act — e.g. dispose the screen that started the
+  /// download — while the download is still in flight.
+  Completer<void> holdNextDownload() {
+    final gate = Completer<void>();
+    _downloadGates.add(gate);
+    return gate;
+  }
+
   @override
   Future<Uint8List> download(int gutenbergId) async {
     _maybeThrow();
     downloadRequests.add(gutenbergId);
+    if (_downloadGates.isNotEmpty) await _downloadGates.removeAt(0).future;
     return downloadBytes;
   }
 
