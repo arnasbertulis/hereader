@@ -64,9 +64,8 @@ class PositionConflictSheet extends StatefulWidget {
   final SyncEngine sync;
 
   /// Overridable so a test can resolve a candidate's position without going
-  /// through the real [BookParser]'s `compute()` isolate, the way
-  /// `FreeBooksScreen.bookImporter` already does.
-  final BookParser bookImporter;
+  /// through the real [BookParser]'s `compute()` isolate.
+  final BookParser bookParser;
 
   const PositionConflictSheet({
     super.key,
@@ -74,7 +73,7 @@ class PositionConflictSheet extends StatefulWidget {
     required this.bookTitle,
     required this.repository,
     required this.sync,
-    this.bookImporter = const BookParser(),
+    this.bookParser = const BookParser(),
   });
 
   /// Shows the sheet and settles the conflict with whatever is chosen.
@@ -138,7 +137,7 @@ class _PositionConflictSheetState extends State<PositionConflictSheet> {
         widget.conflict.bookId,
       );
       if (stored != null) {
-        text = (await widget.bookImporter.reopenStored(
+        text = (await widget.bookParser.reopenStored(
           stored.bytes,
           sourceFormat: BookSourceFormat.fromName(stored.sourceFormat),
           id: widget.conflict.bookId,
