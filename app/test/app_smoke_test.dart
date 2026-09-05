@@ -2,6 +2,7 @@ import 'package:app/app_shell.dart';
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
 import 'package:app/main.dart';
+import 'package:app/reading/add_menu.dart';
 import 'package:app/reading/home_screen.dart';
 import 'package:app/reading/library_screen.dart';
 import 'package:app/reading/paste_reader_screen.dart';
@@ -152,9 +153,9 @@ void main() {
       await tester.tap(find.text('Add something to read'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Add an EPUB'), findsOneWidget);
-      expect(find.text('Write a note'), findsOneWidget);
-      expect(find.text('Paste text'), findsOneWidget);
+      expect(find.byKey(addMenuEpubKey), findsOneWidget);
+      expect(find.byKey(addMenuNoteKey), findsOneWidget);
+      expect(find.byKey(addMenuPasteKey), findsOneWidget);
 
       await _disposeTree(tester);
     },
@@ -436,8 +437,8 @@ void main() {
     await tester.pumpAndSettle();
     // Free books now sits above it in the menu, pushing this option below
     // the dialog's own viewport at this window size.
-    await tester.ensureVisible(find.text('Paste text'));
-    await tester.tap(find.text('Paste text'));
+    await tester.ensureVisible(find.byKey(addMenuPasteKey));
+    await tester.tap(find.byKey(addMenuPasteKey));
     await tester.pumpAndSettle();
 
     final pasted = find.byType(PasteReaderScreen);

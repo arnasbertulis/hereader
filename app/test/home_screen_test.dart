@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
+import 'package:app/reading/add_menu.dart';
 import 'package:app/reading/book_importer.dart';
 import 'package:app/reading/home_screen.dart';
 import 'package:app/reading/reading_display.dart';
@@ -91,7 +92,7 @@ void main() {
 
       await tester.tap(find.text('Add something to read'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Add an EPUB'));
+      await tester.tap(find.byKey(addMenuEpubKey));
       await tester.pumpAndSettle();
 
       expect(find.byKey(homeContinueTileKey), findsOneWidget);

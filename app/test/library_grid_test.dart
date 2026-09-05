@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
+import 'package:app/reading/add_menu.dart';
 import 'package:app/reading/book_cover.dart';
 import 'package:app/reading/library_screen.dart';
 import 'package:app/reading/paste_reader_screen.dart';
@@ -315,14 +316,14 @@ void main() {
 
       // Neither is on the shelf itself. The screen has one accent control
       // and it opens this.
-      expect(find.text('Add an EPUB'), findsNothing);
-      expect(find.text('Paste text'), findsNothing);
+      expect(find.byKey(addMenuEpubKey), findsNothing);
+      expect(find.byKey(addMenuPasteKey), findsNothing);
 
       await tester.tap(find.byKey(libraryAddButtonKey));
       await tester.pumpAndSettle();
 
-      expect(find.text('Add an EPUB'), findsOneWidget);
-      expect(find.text('Paste text'), findsOneWidget);
+      expect(find.byKey(addMenuEpubKey), findsOneWidget);
+      expect(find.byKey(addMenuPasteKey), findsOneWidget);
 
       await _disposeTree(tester);
     });
@@ -336,8 +337,8 @@ void main() {
       await tester.pumpAndSettle();
       // Free books now sits above it in the menu, pushing this option below
       // the dialog's own viewport at this window size.
-      await tester.ensureVisible(find.text('Paste text'));
-      await tester.tap(find.text('Paste text'));
+      await tester.ensureVisible(find.byKey(addMenuPasteKey));
+      await tester.tap(find.byKey(addMenuPasteKey));
       await tester.pumpAndSettle();
 
       // The regression this covers is not the navigation. Paste was
@@ -358,8 +359,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Add an EPUB'), findsOneWidget);
-      expect(find.text('Paste text'), findsOneWidget);
+      expect(find.byKey(addMenuEpubKey), findsOneWidget);
+      expect(find.byKey(addMenuPasteKey), findsOneWidget);
 
       await _disposeTree(tester);
     });

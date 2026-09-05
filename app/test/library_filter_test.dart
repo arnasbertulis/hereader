@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
+import 'package:app/reading/add_menu.dart';
 import 'package:app/reading/book_importer.dart';
 import 'package:app/reading/library_book.dart';
 import 'package:app/reading/library_screen.dart';
@@ -335,7 +336,7 @@ void main() {
 
         await tester.tap(find.byKey(libraryAddButtonKey));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Write a note'));
+        await tester.tap(find.byKey(addMenuNoteKey));
         await tester.pumpAndSettle();
 
         // Back out with nothing typed, rather than saving.
@@ -377,7 +378,7 @@ void main() {
 
         await tester.tap(find.byKey(libraryAddButtonKey));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Add an EPUB'));
+        await tester.tap(find.byKey(addMenuEpubKey));
         await tester.pumpAndSettle();
 
         expect(find.text('All'), findsOneWidget);
@@ -407,7 +408,7 @@ void main() {
 
       await tester.tap(find.byKey(libraryAddButtonKey));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Add an EPUB'));
+      await tester.tap(find.byKey(addMenuEpubKey));
       await tester.pumpAndSettle();
 
       expect(find.text('Notes'), findsOneWidget);

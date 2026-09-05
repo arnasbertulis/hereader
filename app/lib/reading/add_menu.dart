@@ -10,6 +10,20 @@ import '../theme/app_tokens.dart';
 /// enum meaning the same thing would only invite the two to drift.
 enum AddChoice { freeBooks, epub, paste, note }
 
+/// Same argument as `readerPlayButtonKey` and `libraryAddButtonKey`: a test
+/// that wants "the Free books option" should not have to spell out the copy
+/// printed on it to get there.
+const Key addMenuFreeBooksKey = Key('add-menu-free-books');
+
+/// See [addMenuFreeBooksKey].
+const Key addMenuEpubKey = Key('add-menu-epub');
+
+/// See [addMenuFreeBooksKey].
+const Key addMenuNoteKey = Key('add-menu-note');
+
+/// See [addMenuFreeBooksKey].
+const Key addMenuPasteKey = Key('add-menu-paste');
+
 /// Four ways to start reading, stacked.
 ///
 /// The library's own add button opens this, and so does Home's empty state —
@@ -71,6 +85,7 @@ class AddMenu extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 _AddMenuOption(
+                  key: addMenuFreeBooksKey,
                   choice: AddChoice.freeBooks,
                   icon: AppIcons.tabLibrary,
                   title: 'Free books',
@@ -82,6 +97,7 @@ class AddMenu extends StatelessWidget {
                 ),
                 const Divider(),
                 _AddMenuOption(
+                  key: addMenuEpubKey,
                   choice: AddChoice.epub,
                   icon: AppIcons.importFile,
                   title: 'Add an EPUB',
@@ -95,6 +111,7 @@ class AddMenu extends StatelessWidget {
                 // contrast.
                 const Divider(),
                 _AddMenuOption(
+                  key: addMenuNoteKey,
                   choice: AddChoice.note,
                   icon: AppIcons.writeNote,
                   title: 'Write a note',
@@ -105,6 +122,7 @@ class AddMenu extends StatelessWidget {
                 ),
                 const Divider(),
                 _AddMenuOption(
+                  key: addMenuPasteKey,
                   choice: AddChoice.paste,
                   icon: AppIcons.pasteText,
                   title: 'Paste text',
@@ -130,6 +148,7 @@ class _AddMenuOption extends StatelessWidget {
   final double minHeight;
 
   const _AddMenuOption({
+    super.key,
     required this.choice,
     required this.icon,
     required this.title,
