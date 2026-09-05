@@ -368,9 +368,12 @@ its own empty state rather than reusing the library's: a reader filtered to
 Notes with none yet is looking at a different fact than an empty library, so
 they get "No notes yet" and a button straight to the editor rather than the
 three-way menu asking them to repeat a choice the filter already made, and
-the controls row stays on screen so All is always one tap back. Saving into
-a filter the result would not appear under resets it to All, but only when
-the save was real and only when the addition would otherwise be invisible.
+the controls row stays on screen so All is always one tap back. Landing a
+Book into a filter that would hide it resets the filter to All, whichever of
+the three ways it arrived — a file import, a Free books download, or a saved
+note — because all three share one repository write, and that write is what
+announces the land; only a real addition the current filter would otherwise
+hide triggers it.
 
 ## What the home screen knows
 
@@ -621,7 +624,11 @@ starts the work and the wait for it to finish have to sit inside *one*
 Confirmed on a minimal probe. Not yet made to work for the note editor's own
 save-and-open flow at its full depth (the add-menu dialog, the editor,
 `BookOpener`'s sync and conflict checks, then the reader it pushes), which is
-why that path has no automated test and the library's filter-reset-on-save
-behaviour is checked by reading the code rather than by a test exercising it
-end to end. `library_filter_test.dart` does cover the cancel path, which
-reaches no isolate.
+why that path has no end-to-end automated test of its own. The filter-reset
+rule itself is general now — the repository announces every landed Book, and
+the library reacts to that announcement rather than to which screen caused
+it — so `library_filter_test.dart` exercises the rule directly by calling
+the repository's write while the library is mounted, the same call each of
+the three add paths makes, rather than driving each screen's full flow.
+`library_filter_test.dart` also covers the cancel path, which reaches no
+isolate.
