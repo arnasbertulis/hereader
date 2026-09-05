@@ -425,50 +425,49 @@ void main() {
       },
     );
 
-    testWidgets(
-      'filtered to Notes, a saved note leaves the filter alone',
-      (tester) async {
-        await addNote('note-1', title: 'An Old Note');
+    testWidgets('filtered to Notes, a saved note leaves the filter alone', (
+      tester,
+    ) async {
+      await addNote('note-1', title: 'An Old Note');
 
-        await pump(tester);
+      await pump(tester);
 
-        await tester.tap(find.text('All'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Notes').last);
-        await tester.pumpAndSettle();
+      await tester.tap(find.text('All'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Notes').last);
+      await tester.pumpAndSettle();
 
-        await tester.tap(find.byKey(libraryAddButtonKey));
-        await tester.pumpAndSettle();
-        await tester.tap(find.byKey(addMenuNoteKey));
-        await tester.pumpAndSettle();
+      await tester.tap(find.byKey(libraryAddButtonKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(addMenuNoteKey));
+      await tester.pumpAndSettle();
 
-        await tester.enterText(find.byType(TextField).first, 'A New Note');
-        await tester.enterText(
-          find.byType(TextField).last,
-          'Something else worth reading.',
-        );
-        await tester.pump();
+      await tester.enterText(find.byType(TextField).first, 'A New Note');
+      await tester.enterText(
+        find.byType(TextField).last,
+        'Something else worth reading.',
+      );
+      await tester.pump();
 
-        await tester.runAsync(() async {
-          await tester.tap(find.text('Save and read'));
-          await _pumpUntilFound(tester, find.byTooltip('Back to library'));
-          await tester.pump(const Duration(milliseconds: 300));
+      await tester.runAsync(() async {
+        await tester.tap(find.text('Save and read'));
+        await _pumpUntilFound(tester, find.byTooltip('Back to library'));
+        await tester.pump(const Duration(milliseconds: 300));
 
-          await tester.tap(find.byTooltip('Back to library'));
-          await _pumpUntilFound(tester, find.byKey(libraryAddButtonKey));
-          await _pumpUntilExactlyOne(tester, find.text('A New Note'));
-        });
+        await tester.tap(find.byTooltip('Back to library'));
+        await _pumpUntilFound(tester, find.byKey(libraryAddButtonKey));
+        await _pumpUntilExactlyOne(tester, find.text('A New Note'));
+      });
 
-        // Still Notes: the format that landed is exactly the one this
-        // filter already shows, so the rule this ticket exists to unify
-        // never fires.
-        expect(find.text('Notes'), findsOneWidget);
-        expect(find.text('All'), findsNothing);
-        expect(find.text('A New Note'), findsOneWidget);
+      // Still Notes: the format that landed is exactly the one this
+      // filter already shows, so the rule this ticket exists to unify
+      // never fires.
+      expect(find.text('Notes'), findsOneWidget);
+      expect(find.text('All'), findsNothing);
+      expect(find.text('A New Note'), findsOneWidget);
 
-        await _disposeTree(tester);
-      },
-    );
+      await _disposeTree(tester);
+    });
   });
 
   group('adding an EPUB resets a mismatched filter', () {
