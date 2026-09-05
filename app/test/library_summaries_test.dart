@@ -1,5 +1,6 @@
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
+import 'package:app/reading/library_book.dart';
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
@@ -139,5 +140,84 @@ void main() {
 
       expect(books.single.position?.charOffset, 42);
     });
+  });
+
+  group('bookLanded', () {
+    test('fires the format of a Book addBook just wrote', () async {
+      final landed = repo.bookLanded.first;
+
+      await addBook('book-1');
+
+      expect(
+        await landed.timeout(const Duration(seconds: 5)),
+        BookSourceFormat.epub,
+      );
+    });
+
+    test('fires for a note the same way it does for an EPUB', () async {
+      final landed = repo.bookLanded.first;
+
+      await repo.addBook(
+        fixtureBook(id: 'note-1', sourceFormat: BookSourceFormat.note),
+        Uint8List.fromList([1, 2, 3]),
+      );
+
+      expect(
+        await landed.timeout(const Duration(seconds: 5)),
+        BookSourceFormat.note,
+      );
+    });
+
+    test('fires again when a re-import replaces an existing Book', () async {
+      await addBook('book-1');
+
+      final landed = repo.bookLanded.first;
+      await addBook('book-1', title: 'Romeo and Juliet, revised');
+
+      // Re-adding an id already on the shelf goes through
+      // insertOnConflictUpdate rather than a fresh insert, but it is the
+      // same write as far as this signal is concerned: a listener gets the
+      // same announcement either way.
+      expect(
+        await landed.timeout(const Duration(seconds: 5)),
+        BookSourceFormat.epub,
+      );
+    });
+
+    test(
+      'is a live signal: a late subscriber does not see a past emission',
+      () async {
+        await addBook('book-1');
+
+        // No replay: this subscribes only after the write above already
+        // happened, and the broadcast controller behind bookLanded keeps no
+        // history for it to catch up on.
+        final subsequent = repo.bookLanded.timeout(
+          const Duration(milliseconds: 200),
+          onTimeout: (sink) => sink.close(),
+        );
+
+        expect(await subsequent.toList(), isEmpty);
+      },
+    );
+
+    test(
+      'is broadcast: two subscribers can each see the same emission',
+      () async {
+        final first = repo.bookLanded.first;
+        final second = repo.bookLanded.first;
+
+        await addBook('book-1');
+
+        expect(
+          await first.timeout(const Duration(seconds: 5)),
+          BookSourceFormat.epub,
+        );
+        expect(
+          await second.timeout(const Duration(seconds: 5)),
+          BookSourceFormat.epub,
+        );
+      },
+    );
   });
 }

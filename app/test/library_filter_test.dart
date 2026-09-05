@@ -306,22 +306,98 @@ void main() {
     );
   });
 
-  group('writing a note resets a mismatched filter', () {
-    // The save-and-open path itself — filtered to Books, tapping through
-    // Write a note, entering text, tapping Save and read, confirming the
-    // shelf lands on All with the new note visible — is not covered by an
-    // automated test here. It routes through BookParser.openNote's real
-    // compute() isolate, and while tester.runAsync is the documented way to
-    // let a widget test await a real isolate, doing so across this route's
-    // full depth (add-menu dialog, the editor, BookOpener's own sync and
-    // conflict checks, then the reader it pushes) reliably hung rather than
-    // resolving even with a generous real-time delay inside it, for reasons
-    // that did not resolve with the time budget available. The condition
-    // this test would have checked was read by hand instead: _import and
-    // _openNote each reset the filter to All exactly when the format just
-    // added would not appear under the filter as it stood, which the
-    // "cancelling" test below at least confirms is not triggered by a
-    // no-op path through the same screens.
+  group('a Book landing resets a mismatched filter, from any path', () {
+    // LibraryScreen's own reset is not wired to any one add flow: it
+    // subscribes to LibraryRepository.bookLanded (see _bookLanded in
+    // initState) and reacts to the format that stream announces, whichever
+    // write produced it. A direct repository.addBook call below stands in
+    // for whichever path landed the Book — a file import, a Free books
+    // download and a saved Note all resolve to that same call — so this is
+    // the one place the general rule is exercised, rather than one test per
+    // path.
+    testWidgets(
+      'a Book landed directly through the repository resets the filter',
+      (tester) async {
+        await addBook('book-1', title: 'Romeo and Juliet');
+
+        await pump(tester);
+
+        await tester.tap(find.text('All'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Books').last);
+        await tester.pumpAndSettle();
+
+        // Stands in for a Free books download: the same write, reached by a
+        // different route than the file-picker path covered below.
+        await addNote('note-1', title: 'My note');
+        await tester.pumpAndSettle();
+
+        expect(find.text('All'), findsOneWidget);
+        expect(find.text('Books'), findsNothing);
+        expect(find.text('My note'), findsOneWidget);
+
+        await _disposeTree(tester);
+      },
+    );
+
+    testWidgets(
+      'a Book of a kind the filter already shows leaves the filter alone',
+      (tester) async {
+        await addBook('book-1', title: 'Romeo and Juliet');
+
+        await pump(tester);
+
+        await tester.tap(find.text('All'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Books').last);
+        await tester.pumpAndSettle();
+
+        await addBook('book-2', title: 'Hamlet');
+        await tester.pumpAndSettle();
+
+        expect(find.text('Books'), findsOneWidget);
+        expect(find.text('All'), findsNothing);
+
+        await _disposeTree(tester);
+      },
+    );
+
+    testWidgets(
+      're-adding a Book already on the shelf resets the filter the same '
+      'way a new one does',
+      (tester) async {
+        await addBook('book-1', title: 'Romeo and Juliet');
+
+        await pump(tester);
+
+        await tester.tap(find.text('All'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Books').last);
+        await tester.pumpAndSettle();
+
+        await addNote('note-1', title: 'My note');
+        await tester.pumpAndSettle();
+        // Back to Books, so the second write below has a mismatched filter
+        // of its own to reset.
+        await tester.tap(find.text('All'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Books').last);
+        await tester.pumpAndSettle();
+
+        // The same id, reimported. insertOnConflictUpdate takes this path
+        // rather than a fresh insert, but the reader gets the same
+        // confirmation either way.
+        await addNote('note-1', title: 'My note, edited');
+        await tester.pumpAndSettle();
+
+        expect(find.text('All'), findsOneWidget);
+        expect(find.text('Books'), findsNothing);
+        expect(find.text('My note, edited'), findsOneWidget);
+
+        await _disposeTree(tester);
+      },
+    );
+
     testWidgets(
       'cancelling the editor without saving does not touch the filter',
       (tester) async {

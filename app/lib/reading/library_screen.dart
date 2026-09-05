@@ -58,12 +58,21 @@ enum _LibraryFilter {
   static _LibraryFilter byName(String? name) =>
       values.firstWhere((f) => f.name == name, orElse: () => all);
 
-  bool matches(BookSummary book) {
-    if (this == all) return true;
+  bool matches(BookSummary book) =>
+      !hides(BookSourceFormat.fromName(book.sourceFormat));
 
-    final wants = this == epub ? BookSourceFormat.epub : BookSourceFormat.note;
-    return BookSourceFormat.fromName(book.sourceFormat) == wants;
-  }
+  /// Whether a Book of [format] would be missing from the shelf under this
+  /// filter.
+  ///
+  /// The one place that answers "does this filter hide this kind": [matches]
+  /// goes through here, and so does the reset [_LibraryScreenState] runs off
+  /// [LibraryRepository.bookLanded]. A filter added later cannot be added
+  /// without answering it.
+  bool hides(BookSourceFormat format) => switch (this) {
+    all => false,
+    epub => format != BookSourceFormat.epub,
+    note => format != BookSourceFormat.note,
+  };
 }
 
 /// Unscaled height of everything under a cover: two lines of title, one of
@@ -143,6 +152,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   StreamSubscription<ReadingProfile>? _profile;
 
+  /// The one reset this screen carries: whenever [LibraryRepository.addBook]
+  /// lands a Book the current filter would hide, this switches back to All so
+  /// the reader sees it, whichever of the three ways it arrived. Cancelled on
+  /// dispose the same way [_profile] is.
+  StreamSubscription<BookSourceFormat>? _bookLanded;
+
   LibraryRepository get _repo => widget.repository;
 
   @override
@@ -157,6 +172,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
       if (mounted) setState(() => _pacing = estimationPacing(profile));
     });
 
+    _bookLanded = _repo.bookLanded.listen((format) {
+      if (mounted && _filter.hides(format)) {
+        unawaited(_chooseFilter(_LibraryFilter.all));
+      }
+    });
+
     widget.display.addListener(_onDisplayChanged);
   }
 
@@ -164,6 +185,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   void dispose() {
     widget.display.removeListener(_onDisplayChanged);
     _profile?.cancel();
+    _bookLanded?.cancel();
     super.dispose();
   }
 
@@ -266,16 +288,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
     setState(() => _busy = true);
 
     try {
-      final outcome = await _importer.importPickedFile(context);
-      if (outcome != ImportOutcome.imported || !mounted) return;
-
-      // Filtered to Notes, an EPUB import would otherwise land on a shelf
-      // that excludes it — the reader taps Add, picks a file, and sees
-      // nothing happen. Showing everything is the confirmation that
-      // something did.
-      if (_filter == _LibraryFilter.note) {
-        await _chooseFilter(_LibraryFilter.all);
-      }
+      // A successful import that the current filter would hide resets it to
+      // All — see the [_bookLanded] subscription in [initState]. It reacts to
+      // [LibraryRepository.addBook] directly rather than to anything read
+      // here, so a failed import (outcome is not [ImportOutcome.imported])
+      // never touches the filter: nothing was written for it to react to.
+      await _importer.importPickedFile(context);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -307,20 +325,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   Future<void> _openNote() async {
-    final saved = await Navigator.of(context).push<bool>(
+    // The result is not read for a filter reset: [NoteEditorScreen] only
+    // pops `true` once [LibraryRepository.addBook] has already run, and the
+    // [_bookLanded] subscription in [initState] reacts to that write
+    // directly. Backing out without saving writes nothing, so there is
+    // nothing for it to react to either.
+    await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => NoteEditorScreen(repository: _repo, sync: widget.sync),
       ),
     );
-
-    // Guarded by `saved`, unlike the import branch's own reset: backing out
-    // of the editor without writing anything pops null, and resetting the
-    // filter on a cancelled add would be the same wrong surprise this fix
-    // exists to remove — just triggered by nothing happening rather than by
-    // something happening the reader could not see.
-    if (saved == true && _filter == _LibraryFilter.epub) {
-      await _chooseFilter(_LibraryFilter.all);
-    }
   }
 
   /// Opens an existing note back up for editing.
