@@ -11,14 +11,12 @@ import '../sync/sync_engine.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import 'add_menu.dart';
+import 'add_menu_dispatcher.dart';
 import 'book_cover.dart';
-import 'book_importer.dart';
 import 'book_opener.dart';
 import 'book_progress.dart';
-import 'free_books_screen.dart';
 import 'library_book.dart';
 import 'note_editor_screen.dart';
-import 'paste_reader_screen.dart';
 import 'profile_presentation.dart';
 import 'reading_display.dart';
 
@@ -107,10 +105,10 @@ class LibraryScreen extends StatefulWidget {
   /// from.
   final CatalogueClient catalogue;
 
-  /// Carries a picked EPUB onto the shelf. Overridable so a test can stand
-  /// in for the real file dialog and parse; the default builds a real
-  /// [BookImporter] against [repository].
-  final BookImporter? bookImporter;
+  /// Acts on the Add menu's answer. Overridable so a test can stand in for
+  /// the real file dialog and parse without a real [AddMenuDispatcher]; the
+  /// default builds one against [repository], [sync] and [catalogue].
+  final AddMenuDispatcher? dispatcher;
 
   const LibraryScreen({
     super.key,
@@ -118,7 +116,7 @@ class LibraryScreen extends StatefulWidget {
     required this.sync,
     required this.display,
     required this.catalogue,
-    this.bookImporter,
+    this.dispatcher,
   });
 
   @override
@@ -135,8 +133,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// object rather than its own copy of the sequence.
   late final BookOpener _opener;
 
-  /// The same module Home and Free books carry, for the same reason.
-  late final BookImporter _importer;
+  /// Acts on the Add menu's answer. Home still carries its own copy of this
+  /// dispatch for now — see [AddMenuDispatcher]'s own comment — and moves
+  /// onto this module in the ticket that follows #302.
+  late final AddMenuDispatcher _dispatcher;
 
   /// Pacing of the profile the reader has active, for the time on each tile.
   ///
@@ -164,8 +164,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
   void initState() {
     super.initState();
     _opener = BookOpener(repository: widget.repository, sync: widget.sync);
-    _importer =
-        widget.bookImporter ?? BookImporter(repository: widget.repository);
+    _dispatcher =
+        widget.dispatcher ??
+        AddMenuDispatcher(
+          repository: widget.repository,
+          sync: widget.sync,
+          catalogue: widget.catalogue,
+        );
     unawaited(_restorePreferences());
 
     _profile = _repo.watchActiveProfile().listen((profile) {
@@ -251,7 +256,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// One entry point for both routes in. The empty state's button and the
   /// add button open this same menu rather than each wiring up its own pair
   /// of actions, which is what kept paste reachable from one screen and not
-  /// the other for as long as it did.
+  /// the other for as long as it did. The switch on the answer itself now
+  /// lives in [AddMenuDispatcher], shared with Home, rather than repeated
+  /// here.
+  ///
+  /// Shows the dialog itself rather than calling
+  /// [AddMenuDispatcher.showAndAct], so [_dispatch]'s busy flag covers only
+  /// acting on the answer — the wait for the reader's tap is not busy, and
+  /// the indeterminate bar it drives must not animate for as long as the
+  /// menu sits open.
   Future<void> _openAddMenu() async {
     final choice = await showDialog<AddChoice>(
       context: context,
@@ -259,44 +272,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
 
     if (choice == null || !mounted) return;
-
-    switch (choice) {
-      case AddChoice.freeBooks:
-        _openFreeBooks();
-      case AddChoice.epub:
-        await _import();
-      case AddChoice.paste:
-        _openPaste();
-      case AddChoice.note:
-        await _openNote();
-    }
-  }
-
-  void _openFreeBooks() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => FreeBooksScreen(
-          client: widget.catalogue,
-          repository: _repo,
-          sync: widget.sync,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _import() async {
-    setState(() => _busy = true);
-
-    try {
-      // A successful import that the current filter would hide resets it to
-      // All — see the [_bookLanded] subscription in [initState]. It reacts to
-      // [LibraryRepository.addBook] directly rather than to anything read
-      // here, so a failed import (outcome is not [ImportOutcome.imported])
-      // never touches the filter: nothing was written for it to react to.
-      await _importer.importPickedFile(context);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    await _dispatch(() => _dispatcher.act(context, choice));
   }
 
   /// Shows the library's busy state around the shared open path.
@@ -313,28 +289,24 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
-  void _openPaste() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => PasteReaderScreen(
-          repository: _repo,
-          issueStamp: widget.sync.issueStamp,
-        ),
-      ),
-    );
-  }
+  /// Wraps a call onto [_dispatcher] in the same busy flag [_open] carries
+  /// on its own. Only [AddChoice.epub] is slow enough for a reader to
+  /// notice — see [AddMenuDispatcher.act] — so the other three flip the flag
+  /// back before the next frame.
+  ///
+  /// A successful import that the current filter would hide resets it to
+  /// All — see the [_bookLanded] subscription in [initState]. It reacts to
+  /// [LibraryRepository.addBook] directly rather than to anything read here,
+  /// so a failed import never touches the filter: nothing was written for it
+  /// to react to.
+  Future<void> _dispatch(Future<void> Function() action) async {
+    setState(() => _busy = true);
 
-  Future<void> _openNote() async {
-    // The result is not read for a filter reset: [NoteEditorScreen] only
-    // pops `true` once [LibraryRepository.addBook] has already run, and the
-    // [_bookLanded] subscription in [initState] reacts to that write
-    // directly. Backing out without saving writes nothing, so there is
-    // nothing for it to react to either.
-    await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => NoteEditorScreen(repository: _repo, sync: widget.sync),
-      ),
-    );
+    try {
+      await action();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   /// Opens an existing note back up for editing.
@@ -361,13 +333,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   Future<void> _addForFilter(_LibraryFilter filter) {
-    return switch (filter) {
-      _LibraryFilter.epub => _import(),
-      _LibraryFilter.note => _openNote(),
+    final choice = switch (filter) {
+      _LibraryFilter.epub => AddChoice.epub,
+      _LibraryFilter.note => AddChoice.note,
       // Unreachable from the filtered-empty state (see _FilteredEmptyState),
       // but the general add menu is the correct fallback if it ever is.
-      _LibraryFilter.all => _openAddMenu(),
+      _LibraryFilter.all => null,
     };
+
+    return choice == null
+        ? _openAddMenu()
+        : _dispatch(() => _dispatcher.act(context, choice));
   }
 
   Future<void> _confirmRemove(BookSummary summary) async {

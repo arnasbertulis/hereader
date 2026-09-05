@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
 import 'package:app/reading/add_menu.dart';
+import 'package:app/reading/add_menu_dispatcher.dart';
 import 'package:app/reading/book_importer.dart';
 import 'package:app/reading/library_book.dart';
 import 'package:app/reading/library_screen.dart';
@@ -73,7 +74,10 @@ void main() {
         Uint8List.fromList(utf8.encode('Some note text.')),
       );
 
-  Future<void> pump(WidgetTester tester, {BookImporter? bookImporter}) async {
+  Future<void> pump(
+    WidgetTester tester, {
+    AddMenuDispatcher? dispatcher,
+  }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(900, 900);
     addTearDown(tester.view.reset);
@@ -88,7 +92,7 @@ void main() {
             issueStamp: () async => '0000000000001-00000-test',
           ),
           catalogue: catalogue,
-          bookImporter: bookImporter,
+          dispatcher: dispatcher,
         ),
       ),
     );
@@ -438,11 +442,16 @@ void main() {
 
         await pump(
           tester,
-          bookImporter: BookImporter(
+          dispatcher: AddMenuDispatcher(
             repository: repository,
-            pickBytes: () async => Uint8List.fromList([1, 2, 3]),
-            parser: StubBookParser(
-              fixtureBook(id: 'epub-1', title: 'Pride and Prejudice'),
+            sync: sync,
+            catalogue: catalogue,
+            importer: BookImporter(
+              repository: repository,
+              pickBytes: () async => Uint8List.fromList([1, 2, 3]),
+              parser: StubBookParser(
+                fixtureBook(id: 'epub-1', title: 'Pride and Prejudice'),
+              ),
             ),
           ),
         );
@@ -470,10 +479,15 @@ void main() {
 
       await pump(
         tester,
-        bookImporter: BookImporter(
+        dispatcher: AddMenuDispatcher(
           repository: repository,
-          pickBytes: () async => Uint8List.fromList([1, 2, 3]),
-          parser: const ThrowingBookParser(),
+          sync: sync,
+          catalogue: catalogue,
+          importer: BookImporter(
+            repository: repository,
+            pickBytes: () async => Uint8List.fromList([1, 2, 3]),
+            parser: const ThrowingBookParser(),
+          ),
         ),
       );
 
