@@ -133,9 +133,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
   /// object rather than its own copy of the sequence.
   late final BookOpener _opener;
 
-  /// Acts on the Add menu's answer. Home still carries its own copy of this
-  /// dispatch for now — see [AddMenuDispatcher]'s own comment — and moves
-  /// onto this module in the ticket that follows #302.
+  /// Acts on the Add menu's answer. Home holds its own instance of the same
+  /// module — see [AddMenuDispatcher]'s own comment — rather than the two
+  /// shelves sharing one.
   late final AddMenuDispatcher _dispatcher;
 
   /// Pacing of the profile the reader has active, for the time on each tile.

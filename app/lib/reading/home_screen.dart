@@ -11,13 +11,10 @@ import '../sync/sync_engine.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import 'add_menu.dart';
+import 'add_menu_dispatcher.dart';
 import 'book_cover.dart';
-import 'book_importer.dart';
 import 'book_opener.dart';
 import 'book_progress.dart';
-import 'free_books_screen.dart';
-import 'note_editor_screen.dart';
-import 'paste_reader_screen.dart';
 import 'profile_presentation.dart';
 import 'reading_display.dart';
 
@@ -73,10 +70,11 @@ class HomeScreen extends StatefulWidget {
   /// from.
   final CatalogueClient catalogue;
 
-  /// Carries a picked EPUB onto the shelf. Overridable so a test can stand
-  /// in for the real file dialog and parse; the default builds a real
-  /// [BookImporter] against [repository].
-  final BookImporter? bookImporter;
+  /// Acts on the Add menu's answer. Overridable so a test can stand in for
+  /// the real file dialog and parse without a real [AddMenuDispatcher]; the
+  /// default builds one against [repository], [sync] and [catalogue] —
+  /// matching the Library's own [dispatcher] field.
+  final AddMenuDispatcher? dispatcher;
 
   const HomeScreen({
     super.key,
@@ -85,7 +83,7 @@ class HomeScreen extends StatefulWidget {
     required this.onSeeAll,
     required this.display,
     required this.catalogue,
-    this.bookImporter,
+    this.dispatcher,
   });
 
   @override
@@ -99,10 +97,11 @@ class _HomeScreenState extends State<HomeScreen> {
   /// names the shape: two paths writing one fact is how they come apart.
   late final BookOpener _opener;
 
-  /// The same module the library and Free books carry. Built from
-  /// [HomeScreen.bookImporter] when a test supplies one, so the default real
-  /// picker and parse are only ever constructed once, in [initState].
-  late final BookImporter _importer;
+  /// Acts on the Add menu's answer. The same module the Library carries —
+  /// see [AddMenuDispatcher]'s own comment — built from
+  /// [HomeScreen.dispatcher] when a test supplies one, so the default real
+  /// importer is only ever constructed once, in [initState].
+  late final AddMenuDispatcher _dispatcher;
 
   LibraryRepository get _repo => widget.repository;
 
@@ -126,8 +125,13 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _opener = BookOpener(repository: widget.repository, sync: widget.sync);
-    _importer =
-        widget.bookImporter ?? BookImporter(repository: widget.repository);
+    _dispatcher =
+        widget.dispatcher ??
+        AddMenuDispatcher(
+          repository: widget.repository,
+          sync: widget.sync,
+          catalogue: widget.catalogue,
+        );
 
     _profile = _repo.watchActiveProfile().listen((profile) {
       if (mounted) setState(() => _pacing = estimationPacing(profile));
@@ -166,7 +170,9 @@ class _HomeScreenState extends State<HomeScreen> {
   ///
   /// The same menu the library's add button opens, not a shorter version of
   /// its own — see [AddMenu]'s own comment for why Home used to carry a
-  /// second, incomplete copy of this choice.
+  /// second, incomplete copy of this choice. The switch on the answer itself
+  /// lives in [AddMenuDispatcher], shared with the Library, rather than
+  /// repeated here.
   Future<void> _openAddMenu() async {
     final choice = await showDialog<AddChoice>(
       context: context,
@@ -174,58 +180,24 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (choice == null || !mounted) return;
-
-    switch (choice) {
-      case AddChoice.freeBooks:
-        _openFreeBooks();
-      case AddChoice.epub:
-        await _import();
-      case AddChoice.paste:
-        _openPaste();
-      case AddChoice.note:
-        _openNote();
-    }
+    await _dispatch(() => _dispatcher.act(context, choice));
   }
 
-  void _openFreeBooks() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => FreeBooksScreen(
-          client: widget.catalogue,
-          repository: _repo,
-          sync: widget.sync,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _import() async {
+  /// Wraps a call onto [_dispatcher] in Home's own busy flag.
+  ///
+  /// Only [AddChoice.epub] is slow enough for a reader to notice — see
+  /// [AddMenuDispatcher.act] — so the other three flip the flag back before
+  /// the next frame. A failed import is reported once, by
+  /// [AddMenuDispatcher]'s own [BookImporter]; this only covers how long the
+  /// spinner in the continue tile's glyph shows.
+  Future<void> _dispatch(Future<void> Function() action) async {
     setState(() => _busy = true);
 
     try {
-      await _importer.importPickedFile(context);
+      await action();
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-
-  void _openPaste() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => PasteReaderScreen(
-          repository: _repo,
-          issueStamp: widget.sync.issueStamp,
-        ),
-      ),
-    );
-  }
-
-  void _openNote() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => NoteEditorScreen(repository: _repo, sync: widget.sync),
-      ),
-    );
   }
 
   @override
