@@ -124,38 +124,35 @@ class ReadingSettingsScreen extends StatelessWidget {
               ),
             ),
             const Divider(),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg,
-                AppSpacing.lg,
-                AppSpacing.lg,
-                AppSpacing.sm,
-              ),
-              child: Text(
+            ExpansionTile(
+              title: Text(
                 'Keys while reading',
                 style: theme.textTheme.titleMedium,
               ),
-            ),
-            for (final shortcut in _shortcuts)
-              ListTile(
-                title: Text(shortcut.action),
-                trailing: Text(
-                  shortcut.keys,
-                  style: theme.textTheme.labelLarge,
+              childrenPadding: EdgeInsets.zero,
+              children: [
+                for (final shortcut in _shortcuts)
+                  ListTile(
+                    title: Text(shortcut.action),
+                    trailing: Text(
+                      shortcut.keys,
+                      style: theme.textTheme.labelLarge,
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.md,
+                    AppSpacing.lg,
+                    AppSpacing.md,
+                  ),
+                  child: Text(
+                    'Ctrl and a digit reach the tabs outside a book. Inside '
+                    'one, the keys above belong to the reader.',
+                    style: theme.textTheme.bodySmall,
+                  ),
                 ),
-              ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg,
-                AppSpacing.md,
-                AppSpacing.lg,
-                0,
-              ),
-              child: Text(
-                'Ctrl and a digit reach the tabs outside a book. Inside one, '
-                'the keys above belong to the reader.',
-                style: theme.textTheme.bodySmall,
-              ),
+              ],
             ),
           ],
         ),
