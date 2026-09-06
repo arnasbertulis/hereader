@@ -1304,9 +1304,19 @@ class _ReaderScreenState extends State<ReaderScreen>
                             ),
                           _Controls(
                             state: state,
+                            bookTitle: widget.book.title,
                             progress: widget.book.text.progressAt(
                               _session.index,
                             ),
+                            // `.length` is the token count, and
+                            // `_session.index` the last one seen — the same
+                            // +1 correction `BookSummary.progress` and
+                            // `tokensLeft` in `book_progress.dart` both make,
+                            // so this reads the same as the Library tile's
+                            // own count would if the reader carried a
+                            // `PacingConfig` to phrase it in minutes instead.
+                            wordsLeft:
+                                widget.book.text.length - (_session.index + 1),
                             presentation: presentation,
                             onClose: _closeOrDismiss,
                             onToggle: _toggle,
@@ -1617,7 +1627,17 @@ Color _dimmed(Color ink) => ink.withValues(alpha: 0.38);
 /// the ramp knows nothing about.
 class _Controls extends StatelessWidget {
   final PlaybackState state;
+
+  /// The reading surface's only other source of the title besides the
+  /// chapter drawer — see issue #367, where the drawer was the sole place it
+  /// appeared.
+  final String bookTitle;
   final double progress;
+
+  /// Tokens after the one just seen, so a finished book (or a book whose
+  /// `TokenizedText` is shorter than expected) reads as "no words left"
+  /// rather than a negative count.
+  final int wordsLeft;
   final ResolvedPresentation presentation;
   final VoidCallback onClose;
   final VoidCallback onToggle;
@@ -1635,7 +1655,9 @@ class _Controls extends StatelessWidget {
 
   const _Controls({
     required this.state,
+    required this.bookTitle,
     required this.progress,
+    required this.wordsLeft,
     required this.presentation,
     required this.onClose,
     required this.onToggle,
@@ -1667,12 +1689,33 @@ class _Controls extends StatelessWidget {
       _ => 'Read',
     };
 
+    // What #367 found missing outright: nothing on the reading surface named
+    // the book, and the only percentage on screen was the one handed to a
+    // screen reader. `wordsLeft` stands in for the Library tile's own
+    // pacing-based "Under a minute left" — this row has no `PacingConfig` to
+    // phrase it in minutes, so it says the same fact in the unit it does
+    // have, in the same words `book_progress.dart`'s own fallback uses.
+    final percent = (progress * 100).round();
+    final progressLabel = wordsLeft > 0
+        ? '$percent% · $wordsLeft words left'
+        : '$percent%';
+
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            Text(
+              bookTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(color: ink),
+            ),
+            const SizedBox(height: AppSpacing.sm),
             // The one accent on this screen, where the accent survives the
             // reader's background. `readerProgressFillFor` drops to the ink
             // on the backgrounds that cannot support one.
@@ -1681,17 +1724,29 @@ class _Controls extends StatelessWidget {
             // semicircular rather than merely rounded. Both colours come
             // from the profile rather than from a scheme surface role: the
             // ramp does not know what is behind this bar.
+            //
+            // `AppRadii.md` rather than `.sm`: #367 measured the `.sm` bar
+            // at about 4px, a hairline next to the type sizes the rest of
+            // this row uses.
             LinearProgressIndicator(
               value: progress,
-              minHeight: AppRadii.sm * 2,
-              borderRadius: BorderRadius.circular(AppRadii.sm),
+              minHeight: AppRadii.md * 2,
+              borderRadius: BorderRadius.circular(AppRadii.md),
               color: readerProgressFillFor(
                 scheme: Theme.of(context).colorScheme,
                 presentation: presentation,
               ),
               backgroundColor: readerTrackFor(presentation),
               semanticsLabel: 'Progress through the book',
-              semanticsValue: '${(progress * 100).round()}%',
+              semanticsValue: '$percent%',
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              progressLabel,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: ink,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
             const SizedBox(height: AppSpacing.lg),
             Row(
