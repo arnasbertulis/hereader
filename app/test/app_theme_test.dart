@@ -220,6 +220,19 @@ void main() {
       expect(theme.cardTheme.elevation, 0);
       expect(theme.navigationBarTheme.elevation, 0);
     });
+
+    // A selected ListTile is the row telling the reader "this is your
+    // current setting". Falling through to colorScheme.primary makes it
+    // the dimmest label on screen once the reader picks a mid-tone accent.
+    test('a selected ListTile label matches onSurface, not the accent', () {
+      final theme = appTheme(brightness: Brightness.light);
+
+      expect(theme.listTileTheme.selectedColor, theme.colorScheme.onSurface);
+      expect(
+        theme.listTileTheme.selectedColor,
+        isNot(theme.colorScheme.primary),
+      );
+    });
   });
 
   group('pushing a route', () {
