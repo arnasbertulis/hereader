@@ -96,7 +96,22 @@ lib/
    │                             HtmlNormalizer directly
    ├─ add_menu.dart             The four-way add dialog (Free books/EPUB/
    │                             note/paste), shared by the library's add
-   │                             button, the library's empty state and Home's
+   │                             button, the library's empty state and Home's,
+   │                             acted on by add_menu_dispatcher.dart
+   ├─ add_menu_dispatcher.dart  Acts on whatever add_menu.dart answers with —
+   │                             three choices navigate, EPUB instead imports
+   │                             straight through its own BookImporter (Home
+   │                             and the Library each build one). Not the
+   │                             dialog itself; that's add_menu.dart
+   ├─ book_importer.dart        Pick-parse-write for an EPUB, on disk or
+   │                             already in hand. importPickedFile and
+   │                             importBytes take a BuildContext per call;
+   │                             writeBytes takes none, so a Catalogue
+   │                             download's write can outlive the screen that
+   │                             started it (#269). Not the choice to open a
+   │                             book already on the shelf instead of
+   │                             importing it again — only Free books faces
+   │                             that, so it stays there
    ├─ free_books_screen.dart    Full-screen Gutenberg Catalogue search and
    │                             browse, opened from AddMenu. Debounced live
    │                             search, most-downloaded default, import
