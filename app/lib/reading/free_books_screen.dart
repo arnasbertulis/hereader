@@ -88,7 +88,7 @@ class FreeBooksScreen extends StatefulWidget {
   final LibraryRepository repository;
   final SyncEngine sync;
 
-  /// Parses a download and writes the result onto the shelf. Overridable so
+  /// Parses a download and writes the result into the Library. Overridable so
   /// a test can stand in for the parse: the default runs a real one through
   /// `compute()`, which spawns an isolate a widget test has no way to wait
   /// on cheaply.

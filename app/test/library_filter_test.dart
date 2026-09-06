@@ -369,7 +369,7 @@ void main() {
     );
 
     testWidgets(
-      're-adding a Book already on the shelf resets the filter the same '
+      're-adding a Book already in the Library resets the filter the same '
       'way a new one does',
       (tester) async {
         await addBook('book-1', title: 'Romeo and Juliet');

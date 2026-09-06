@@ -174,7 +174,7 @@ void main() {
       final landed = repo.bookLanded.first;
       await addBook('book-1', title: 'Romeo and Juliet, revised');
 
-      // Re-adding an id already on the shelf goes through
+      // Re-adding an id already in the Library goes through
       // insertOnConflictUpdate rather than a fresh insert, but it is the
       // same write as far as this signal is concerned: a listener gets the
       // same announcement either way.
