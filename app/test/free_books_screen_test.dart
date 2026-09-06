@@ -669,28 +669,3 @@ void main() {
     await _disposeTree(tester);
   });
 }
-
-/// Builds a [CatalogueEntry] and knows the [bookId] its own import would
-/// land on, so a test can seed the library at that id without repeating the
-/// derivation by hand.
-class CatalogueEntryStub {
-  final int gutenbergId;
-  final String title;
-  final String authors;
-
-  const CatalogueEntryStub({
-    required this.gutenbergId,
-    required this.title,
-    required this.authors,
-  });
-
-  String get bookId => 'http://www.gutenberg.org/$gutenbergId';
-
-  CatalogueEntry toEntry() => CatalogueEntry(
-    gutenbergId: gutenbergId,
-    title: title,
-    authors: authors,
-    language: 'en',
-    subjects: 'Fiction',
-  );
-}
