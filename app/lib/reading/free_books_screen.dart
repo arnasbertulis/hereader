@@ -112,9 +112,12 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
     sync: widget.sync,
   );
 
-  /// The same module Home and the Library carry. Free books never picks a
-  /// file — a tap hands [_openOrImport] bytes off a Catalogue download — so
-  /// only [BookImporter.importBytes] is ever called on it.
+  /// Free books never picks a file — a tap hands [_openOrImport] bytes off a
+  /// Catalogue download — so this only ever calls [BookImporter.writeBytes],
+  /// never [BookImporter.importPickedFile] or [BookImporter.importBytes].
+  /// `writeBytes` holds no [BuildContext]: the download it writes must land
+  /// whether or not the reader stayed on this screen (#269), and a
+  /// context-taking call could not survive that the way `writeBytes` does.
   late final BookImporter _importer =
       widget.bookImporter ?? BookImporter(repository: widget.repository);
 
