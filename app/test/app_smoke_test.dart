@@ -303,15 +303,15 @@ void main() {
       ),
     );
 
-    var button = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Read this'),
-    );
-    expect(button.onPressed, isNull);
+    // Before there is anything to read, "Read this" is not offered at all —
+    // #369 made it appear only once there is text, rather than sit on
+    // screen disabled.
+    expect(find.text('Read this'), findsNothing);
 
     await tester.enterText(find.byType(TextField), 'Labas rytas.');
     await tester.pump();
 
-    button = tester.widget<FilledButton>(
+    final button = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'Read this'),
     );
     expect(button.onPressed, isNotNull);
