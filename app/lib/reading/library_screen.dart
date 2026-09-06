@@ -327,19 +327,28 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   Future<void> _confirmRemove(BookSummary summary) async {
+    final isNote =
+        BookSourceFormat.fromName(summary.sourceFormat) ==
+        BookSourceFormat.note;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Remove ${summary.title}?'),
-        content: const Text(
-          'The file and your place in it are deleted from this device.',
+        content: Text(
+          isNote
+              ? 'It is deleted from this device. This cannot be undone.'
+              : 'The file and your place in it are deleted from this '
+                    'device.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Keep'),
           ),
-          FilledButton(
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Remove'),
           ),
@@ -958,7 +967,10 @@ class _TileMenu extends StatelessWidget {
       itemBuilder: (context) => [
         if (isNote)
           const PopupMenuItem<String>(value: 'edit', child: Text('Edit')),
-        const PopupMenuItem<String>(value: 'remove', child: Text('Remove')),
+        PopupMenuItem<String>(
+          value: 'remove',
+          child: Text('Remove', style: TextStyle(color: scheme.error)),
+        ),
       ],
       icon: DecoratedBox(
         // The icon sits over a cover it knows nothing about, so it carries
