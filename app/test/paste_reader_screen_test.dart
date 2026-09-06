@@ -71,9 +71,7 @@ void main() {
     },
   );
 
-  testWidgets('the field has a visible label, not just a hint', (
-    tester,
-  ) async {
+  testWidgets('the field has a visible label, not just a hint', (tester) async {
     await pump(tester);
 
     expect(find.text('Text to read'), findsOneWidget);
