@@ -10,6 +10,7 @@ import 'package:app/reading/reading_display.dart';
 import 'package:app/sync/api_client.dart';
 import 'package:app/sync/auth_store.dart';
 import 'package:app/sync/sync_engine.dart';
+import 'package:app/theme/app_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
@@ -379,6 +380,23 @@ void main() {
 
     await _disposeTree(tester);
   });
+
+  testWidgets(
+    'a maximized window caps tile width instead of stretching covers',
+    (tester) async {
+      await addBook('book-1', title: 'Romeo and Juliet');
+      await addBook('book-2', title: 'Hamlet');
+
+      await pump(tester, width: 1920);
+
+      // Four columns is the max, so further width becomes margin around the
+      // grid rather than blowing each cover up past AppShelf.tileWidth.
+      final coverSize = tester.getSize(find.byType(BookCoverImage).first);
+      expect(coverSize.width, AppShelf.tileWidth);
+
+      await _disposeTree(tester);
+    },
+  );
 
   testWidgets('the shelf survives doubled text without clipping', (
     tester,
