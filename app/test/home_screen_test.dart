@@ -118,6 +118,40 @@ void main() {
     },
   );
 
+  testWidgets('the continue tile spinner clears once the import lands', (
+    tester,
+  ) async {
+    await pump(
+      tester,
+      dispatcher: AddMenuDispatcher(
+        repository: repository,
+        sync: sync,
+        catalogue: catalogue,
+        importer: BookImporter(
+          repository: repository,
+          pickBytes: () async => Uint8List.fromList([1, 2, 3]),
+          parser: StubBookParser(
+            fixtureBook(id: 'epub-1', title: 'Pride and Prejudice'),
+          ),
+        ),
+      ),
+    );
+
+    await openAddMenu(tester);
+    await tester.tap(find.byKey(addMenuEpubKey));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byKey(homeContinueTileKey),
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsNothing,
+    );
+
+    await _disposeTree(tester);
+  });
+
   // These three, plus the EPUB test above, are the "test that says so for all
   // four" #303 asks for: Home opens the same dispatcher the Library does
   // (add_menu_dispatcher_test.dart), so tapping each option from Home's own

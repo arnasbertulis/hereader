@@ -251,72 +251,42 @@ class _LibraryScreenState extends State<LibraryScreen> {
     await _repo.setPreference(_sortReversedKey, '$_reversed', hlc: hlc);
   }
 
-  /// Asks what the reader wants to read, then does it.
-  ///
-  /// One entry point for both routes in. The empty state's button and the
-  /// add button open this same menu rather than each wiring up its own pair
-  /// of actions, which is what kept paste reachable from one screen and not
-  /// the other for as long as it did. The switch on the answer itself now
-  /// lives in [AddMenuDispatcher], shared with Home, rather than repeated
-  /// here.
-  ///
-  /// Shows the dialog itself rather than calling
-  /// [AddMenuDispatcher.showAndAct], so [_dispatch]'s busy flag covers only
-  /// acting on the answer — the wait for the reader's tap is not busy, and
-  /// the indeterminate bar it drives must not animate for as long as the
-  /// menu sits open.
-  Future<void> _openAddMenu() async {
-    final choice = await showDialog<AddChoice>(
-      context: context,
-      builder: (_) => const AddMenu(),
-    );
+  Future<void> _openAddMenu() =>
+      _dispatcher.showAndAct(context, onBusy: _setBusy);
 
-    if (choice == null || !mounted) return;
-    await _dispatch(choice);
-  }
-
-  /// Shows the library's busy state around the shared open path.
-  ///
-  /// The screen keeps the flag because it decides what busy looks like here:
-  /// a bar along the top while the shelf stays where it is.
   Future<void> _open(BookSummary summary) async {
-    setState(() => _busy = true);
+    _setBusy(true);
 
     try {
       await _opener.open(context, summary.id);
     } finally {
-      if (mounted) setState(() => _busy = false);
+      _setBusy(false);
     }
   }
 
-  /// Wraps a call onto [_dispatcher] in the same busy flag [_open] carries
-  /// on its own.
+  /// Shows busy as a bar along the top while the shelf stays where it is,
+  /// and disables the top bar, filter, sort and add controls for as long as
+  /// it holds.
   ///
-  /// Raises busy from [AddMenuDispatcher.act]'s `onImportStarted`, which
-  /// only fires once an EPUB pick has bytes — see
-  /// [BookImporter.importPickedFile]'s `onPicked` — so cancelling the file
-  /// chooser never toggles `_busy`, and the top bar, filter, sort and add
-  /// controls never repaint for one (#269). The other three choices never
-  /// call it: none is slow enough for a reader to notice, so busy never
-  /// needs to cover them.
+  /// Raised from [AddMenuDispatcher.act]'s `onBusy`, which only fires once an
+  /// EPUB pick has bytes — see [BookImporter.importPickedFile]'s `onPicked`
+  /// — so cancelling the file chooser never shows the bar at all (#269). The
+  /// other three choices never raise it: none is slow enough for a reader to
+  /// notice.
+  ///
+  /// Shared by [_open], [_openAddMenu] and [_addForFilter] — the last two
+  /// reach [_dispatcher] through [AddMenuDispatcher.showAndAct] and
+  /// [AddMenuDispatcher.act] respectively, one showing the menu and one
+  /// acting on a filter's one option directly — so every path into busy
+  /// writes it the same way and guards it with the same `mounted` check.
   ///
   /// A successful import that the current filter would hide resets it to
   /// All — see the [_bookLanded] subscription in [initState]. It reacts to
   /// [LibraryRepository.addBook] directly rather than to anything read here,
   /// so a failed import never touches the filter: nothing was written for it
   /// to react to.
-  Future<void> _dispatch(AddChoice choice) async {
-    try {
-      await _dispatcher.act(
-        context,
-        choice,
-        onImportStarted: () {
-          if (mounted) setState(() => _busy = true);
-        },
-      );
-    } finally {
-      if (mounted && _busy) setState(() => _busy = false);
-    }
+  void _setBusy(bool busy) {
+    if (mounted) setState(() => _busy = busy);
   }
 
   /// Opens an existing note back up for editing.
@@ -351,7 +321,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
       _LibraryFilter.all => null,
     };
 
-    return choice == null ? _openAddMenu() : _dispatch(choice);
+    return choice == null
+        ? _openAddMenu()
+        : _dispatcher.act(context, choice, onBusy: _setBusy);
   }
 
   Future<void> _confirmRemove(BookSummary summary) async {

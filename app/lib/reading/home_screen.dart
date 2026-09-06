@@ -10,7 +10,6 @@ import '../data/library_repository.dart';
 import '../sync/sync_engine.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
-import 'add_menu.dart';
 import 'add_menu_dispatcher.dart';
 import 'book_cover.dart';
 import 'book_opener.dart';
@@ -157,54 +156,31 @@ class _HomeScreenState extends State<HomeScreen> {
   /// busy is different from the library's: the card carries a spinner where
   /// its button was, and everything else on the screen stays put.
   Future<void> _open(BookSummary book) async {
-    setState(() => _busy = true);
+    _setBusy(true);
 
     try {
       await _opener.open(context, book.id);
     } finally {
-      if (mounted) setState(() => _busy = false);
+      _setBusy(false);
     }
   }
 
-  /// Asks what the reader wants to read, then does it.
-  ///
-  /// The same menu the library's add button opens, not a shorter version of
-  /// its own — see [AddMenu]'s own comment for why Home used to carry a
-  /// second, incomplete copy of this choice. The switch on the answer itself
-  /// lives in [AddMenuDispatcher], shared with the Library, rather than
-  /// repeated here.
-  Future<void> _openAddMenu() async {
-    final choice = await showDialog<AddChoice>(
-      context: context,
-      builder: (_) => const AddMenu(),
-    );
+  Future<void> _openAddMenu() =>
+      _dispatcher.showAndAct(context, onBusy: _setBusy);
 
-    if (choice == null || !mounted) return;
-    await _dispatch(choice);
-  }
-
-  /// Wraps a call onto [_dispatcher] in Home's own busy flag.
+  /// Shows busy as a spinner in place of the continue card's glyph, and
+  /// nowhere else on the screen.
   ///
-  /// Raises busy from [AddMenuDispatcher.act]'s `onImportStarted`, which
-  /// only fires once an EPUB pick has bytes — see
-  /// [BookImporter.importPickedFile]'s `onPicked` — so cancelling the file
-  /// chooser never toggles `_busy` at all (#269). The other three choices
-  /// never call it: none is slow enough for a reader to notice, so busy
-  /// never needs to cover them. A failed import is reported once, by
-  /// [AddMenuDispatcher]'s own [BookImporter]; this only covers how long the
-  /// spinner in the continue tile's glyph shows.
-  Future<void> _dispatch(AddChoice choice) async {
-    try {
-      await _dispatcher.act(
-        context,
-        choice,
-        onImportStarted: () {
-          if (mounted) setState(() => _busy = true);
-        },
-      );
-    } finally {
-      if (mounted && _busy) setState(() => _busy = false);
-    }
+  /// Raised from [AddMenuDispatcher.act]'s `onBusy`, which only fires once an
+  /// EPUB pick has bytes — see [BookImporter.importPickedFile]'s `onPicked`
+  /// — so cancelling the file chooser never toggles `_busy` at all (#269),
+  /// and neither does the wait for the reader's tap on the menu itself,
+  /// since nothing is raised until an answer exists. The other three choices
+  /// never raise it: none is slow enough for a reader to notice. A failed
+  /// import is reported once, by [AddMenuDispatcher]'s own [BookImporter];
+  /// this only covers how long the spinner shows.
+  void _setBusy(bool busy) {
+    if (mounted) setState(() => _busy = busy);
   }
 
   @override
@@ -745,7 +721,7 @@ class _RecentTile extends StatelessWidget {
 
 /// What Home shows before there is anything to continue.
 ///
-/// One button opening [AddMenu], matching the library's own empty state,
+/// One button opening the Add menu, matching the library's own empty state,
 /// rather than two buttons of its own. It used to be two — EPUB and paste,
 /// with no way to reach the note editor at all — which was never a decision
 /// to leave notes out of this screen specifically; it was this widget having
