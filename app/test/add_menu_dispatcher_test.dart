@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
@@ -58,17 +59,21 @@ void main() {
     importer: importer,
   );
 
-  /// A `Builder`'s context, inside a `MaterialApp`, so `Navigator.of` and
-  /// `showDialog` have somewhere real to push and show onto.
+  /// A `Builder`'s context, inside a `MaterialApp` and a `Scaffold`, so
+  /// `Navigator.of` and `showDialog` have somewhere real to push and show
+  /// onto, and a parse failure's `ScaffoldMessenger.showSnackBar` has a
+  /// descendant Scaffold to present to.
   Future<BuildContext> pumpContext(WidgetTester tester) async {
     late BuildContext captured;
     await tester.pumpWidget(
       MaterialApp(
-        home: Builder(
-          builder: (context) {
-            captured = context;
-            return const SizedBox();
-          },
+        home: Scaffold(
+          body: Builder(
+            builder: (context) {
+              captured = context;
+              return const SizedBox();
+            },
+          ),
         ),
       ),
     );
@@ -118,52 +123,65 @@ void main() {
   });
 
   testWidgets(
-    'onImportStarted fires for epub, once bytes exist, and never on a cancel '
-    '(#269)',
+    'onBusy fires true then false for epub, once bytes exist, and never on '
+    'a cancel (#269)',
     (tester) async {
       final context = await pumpContext(tester);
-      var started = false;
+      final calls = <bool>[];
 
       await dispatcher(
         importer: BookImporter(
           repository: repository,
           pickBytes: () async => null,
         ),
-      ).act(context, AddChoice.epub, onImportStarted: () => started = true);
+      ).act(context, AddChoice.epub, onBusy: calls.add);
       await tester.pumpAndSettle();
 
-      expect(started, isFalse);
+      expect(calls, isEmpty);
 
-      started = false;
       await dispatcher(
         importer: _RecordingImporter(repository: repository),
-      ).act(context, AddChoice.epub, onImportStarted: () => started = true);
+      ).act(context, AddChoice.epub, onBusy: calls.add);
       await tester.pumpAndSettle();
 
-      expect(started, isTrue);
+      expect(calls, [true, false]);
     },
   );
 
-  testWidgets('onImportStarted is never called for the other three choices', (
+  testWidgets('onBusy fires true then false for a parse failure', (
     tester,
   ) async {
     final context = await pumpContext(tester);
-    var started = false;
+    final calls = <bool>[];
+
+    await dispatcher(
+      importer: BookImporter(
+        repository: repository,
+        pickBytes: () async => Uint8List.fromList([1, 2, 3]),
+        parser: const ThrowingBookParser(),
+      ),
+    ).act(context, AddChoice.epub, onBusy: calls.add);
+    await tester.pumpAndSettle();
+
+    expect(calls, [true, false]);
+  });
+
+  testWidgets('onBusy is never called for the other three choices', (
+    tester,
+  ) async {
+    final context = await pumpContext(tester);
+    final calls = <bool>[];
 
     for (final choice in [
       AddChoice.freeBooks,
       AddChoice.paste,
       AddChoice.note,
     ]) {
-      await dispatcher().act(
-        context,
-        choice,
-        onImportStarted: () => started = true,
-      );
+      await dispatcher().act(context, choice, onBusy: calls.add);
       await tester.pumpAndSettle();
     }
 
-    expect(started, isFalse);
+    expect(calls, isEmpty);
   });
 
   testWidgets('showAndAct opens the menu and acts on the tapped option', (

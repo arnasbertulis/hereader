@@ -41,11 +41,13 @@ class AddMenuDispatcher {
   /// Opens the Add menu and acts on whatever it comes back with. A dismissed
   /// menu (null) does nothing.
   ///
-  /// [onImportStarted] is forwarded to [act] — see its own comment for what
-  /// it's for.
+  /// [onBusy] is forwarded to [act] — see its own comment for what it's for.
+  /// Nothing is raised for the wait on the menu itself: a caller wanting a
+  /// busy state that also covers the dialog would need to raise it before
+  /// this call, not inside [onBusy].
   Future<void> showAndAct(
     BuildContext context, {
-    VoidCallback? onImportStarted,
+    ValueChanged<bool>? onBusy,
   }) async {
     final choice = await showDialog<AddChoice>(
       context: context,
@@ -53,7 +55,7 @@ class AddMenuDispatcher {
     );
 
     if (choice == null || !context.mounted) return;
-    await act(context, choice, onImportStarted: onImportStarted);
+    await act(context, choice, onBusy: onBusy);
   }
 
   /// Acts on a given answer directly, without showing the menu.
@@ -67,22 +69,36 @@ class AddMenuDispatcher {
   /// this route's result — so dropping it is a deliberate move to "navigate
   /// immediately" for all three, not a leftover.
   ///
-  /// [onImportStarted], for the [AddChoice.epub] branch only, is
+  /// [onBusy], for the [AddChoice.epub] branch only, is raised from
   /// [BookImporter.importPickedFile]'s `onPicked` — it fires once bytes
-  /// exist and before the parse starts, never on a cancel. A caller raising
-  /// its own busy flag from it, rather than from the top of this call, never
-  /// sees that flag toggle for the time the file chooser itself is open
-  /// (#269).
+  /// exist and before the parse starts, never on a cancel — and lowered here
+  /// once the import finishes, whether it succeeded or failed. Raising and
+  /// lowering both live in this one call rather than on whichever caller
+  /// happens to invoke it, so a caller reaching [act] directly, such as the
+  /// Library's per-filter empty state, gets the same busy pair as one that
+  /// goes through [showAndAct]. Raising only once bytes exist, rather than
+  /// from the top of this call, means a caller's busy flag never toggles for
+  /// the time the file chooser itself is open (#269); the three fast
+  /// branches never call [onBusy] at all, since none is slow enough for a
+  /// caller to need it.
   Future<void> act(
     BuildContext context,
     AddChoice choice, {
-    VoidCallback? onImportStarted,
+    ValueChanged<bool>? onBusy,
   }) async {
     switch (choice) {
       case AddChoice.freeBooks:
         _openFreeBooks(context);
       case AddChoice.epub:
-        await importer.importPickedFile(context, onPicked: onImportStarted);
+        var started = false;
+        await importer.importPickedFile(
+          context,
+          onPicked: () {
+            started = true;
+            onBusy?.call(true);
+          },
+        );
+        if (started) onBusy?.call(false);
       case AddChoice.paste:
         _openPaste(context);
       case AddChoice.note:
