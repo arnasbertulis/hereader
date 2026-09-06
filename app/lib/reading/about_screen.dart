@@ -1,15 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../theme/app_tokens.dart';
 
+/// Identifies the "View licences" button so tests can find it without
+/// depending on its label text.
+const Key aboutLicenseButtonKey = Key('about-license-button');
+
 /// What this app is, what it is built on, and what it does not claim.
-///
-/// No version number. The app carries no real one: `pubspec.yaml` still says
-/// `1.0.0+1`, which is what `flutter create` wrote, and `package_info_plus`
-/// is not a dependency. A number printed here would be a number nobody
-/// bumps, which is worse than an absent row.
-class AboutScreen extends StatelessWidget {
+class AboutScreen extends StatefulWidget {
   const AboutScreen({super.key});
+
+  @override
+  State<AboutScreen> createState() => _AboutScreenState();
+}
+
+class _AboutScreenState extends State<AboutScreen> {
+  PackageInfo? _resolvedPackageInfo;
+
+  @override
+  void initState() {
+    super.initState();
+    PackageInfo.fromPlatform().then((info) {
+      if (mounted) setState(() => _resolvedPackageInfo = info);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,6 +45,14 @@ class AboutScreen extends StatelessWidget {
           Text(
             'A reader that shows one word at a time in one place, so finding '
             'the next word is not part of reading it.',
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            _resolvedPackageInfo == null
+                ? 'Version —'
+                : 'Version ${_resolvedPackageInfo!.version} '
+                      '(build ${_resolvedPackageInfo!.buildNumber})',
             style: theme.textTheme.bodyMedium,
           ),
 
@@ -88,7 +111,44 @@ class AboutScreen extends StatelessWidget {
           Text(
             'The reading engine and the EPUB parser are plain Dart packages '
             'in that repository, separate from the app.',
-            style: theme.textTheme.bodySmall,
+            style: theme.textTheme.bodyMedium,
+          ),
+
+          const SizedBox(height: AppSpacing.xl),
+          Text('Report a problem', style: theme.textTheme.titleMedium),
+          const SizedBox(height: AppSpacing.sm),
+          SelectableText(
+            'github.com/arnasbertulis/hereader/issues, with the version '
+            'above.',
+            style: theme.textTheme.bodyMedium,
+          ),
+
+          const SizedBox(height: AppSpacing.xl),
+          Text('Licence', style: theme.textTheme.titleMedium),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'hereader is released under the MIT licence. This screen also '
+            'lists the licences of every package it depends on.',
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton(
+              key: aboutLicenseButtonKey,
+              onPressed: () => showLicensePage(
+                context: context,
+                applicationName: 'hereader',
+                applicationVersion: _resolvedPackageInfo == null
+                    ? null
+                    : '${_resolvedPackageInfo!.version}'
+                          ' (build ${_resolvedPackageInfo!.buildNumber})',
+                applicationLegalese:
+                    'MIT License—Copyright (c) 2026 '
+                    'Arnas Bertulis',
+              ),
+              child: const Text('View licences'),
+            ),
           ),
         ],
       ),
