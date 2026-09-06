@@ -97,6 +97,7 @@ class AddMenuDispatcher {
           client: catalogue,
           repository: repository,
           sync: sync,
+          bookImporter: importer,
         ),
       ),
     );
