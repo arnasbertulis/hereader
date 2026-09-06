@@ -9,6 +9,7 @@ import 'profile_presentation.dart';
 import 'reading_surface.dart';
 import 'rgb_sliders.dart';
 import 'scroll_clock.dart';
+import 'section_header.dart';
 import 'setting_slider.dart';
 
 /// Identifies the switch that puts a profile back to following the app theme.
@@ -185,7 +186,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
             if (!_editable) _PresetBanner(onCopy: _makeCopy, name: _draft.name),
 
-            const _SectionHeader('Name'),
+            const SectionHeader(
+              'Name',
+              padding: EdgeInsets.fromLTRB(16, 28, 16, 12),
+            ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: TextField(
@@ -197,7 +201,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             ),
 
             // -- pacing ------------------------------------------------
-            const _SectionHeader('How the text advances'),
+            const SectionHeader(
+              'How the text advances',
+              padding: EdgeInsets.fromLTRB(16, 28, 16, 12),
+            ),
 
             // The whole pacing model is inert under sliding text: velocity
             // comes from the reading speed alone, and `PlaybackSession`
@@ -362,7 +369,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             ),
 
             // -- text --------------------------------------------------
-            const _SectionHeader('Text'),
+            const SectionHeader(
+              'Text',
+              padding: EdgeInsets.fromLTRB(16, 28, 16, 12),
+            ),
 
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -631,7 +641,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               ),
 
             // -- colour ------------------------------------------------
-            const _SectionHeader('Colour'),
+            const SectionHeader(
+              'Colour',
+              padding: EdgeInsets.fromLTRB(16, 28, 16, 12),
+            ),
 
             SwitchListTile(
               key: profileFollowAppKey,
@@ -721,17 +734,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 }
 
 // -- pieces -------------------------------------------------------------
-
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  const _SectionHeader(this.title);
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 28, 16, 12),
-    child: Text(title, style: Theme.of(context).textTheme.titleMedium),
-  );
-}
 
 class _PresetBanner extends StatelessWidget {
   final String name;

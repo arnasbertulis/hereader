@@ -5,6 +5,7 @@ import '../data/library_repository.dart';
 import 'profile_actions.dart';
 import 'profile_edit_screen.dart';
 import 'profile_row.dart';
+import 'section_header.dart';
 
 /// Reading profiles: which one is in use, and editing the reader's own.
 ///
@@ -129,7 +130,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
 
               return ListView(
                 children: [
-                  const _SectionHeader('Your profiles'),
+                  const SectionHeader('Your profiles'),
                   if (mine.isEmpty)
                     const Padding(
                       padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -148,7 +149,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                       onDelete: () => _delete(profile),
                     ),
 
-                  const _SectionHeader('Presets'),
+                  const SectionHeader('Presets'),
                   const Padding(
                     padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
                     child: Text(
@@ -181,15 +182,4 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
       ),
     );
   }
-}
-
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  const _SectionHeader(this.title);
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-    child: Text(title, style: Theme.of(context).textTheme.titleSmall),
-  );
 }

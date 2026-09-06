@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import 'reading_display.dart';
+import 'section_header.dart';
 import 'setting_slider.dart';
 
 /// What the app does while a book is open — one setting, and the rest stated
@@ -36,7 +37,7 @@ class ReadingSettingsScreen extends StatelessWidget {
         builder: (context, _) => ListView(
           padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
           children: [
-            const _SectionHeader('Step'),
+            const SectionHeader('Step'),
             SettingSlider(
               label: 'One step moves',
               value: display.stepWords.toDouble(),
@@ -54,7 +55,7 @@ class ReadingSettingsScreen extends StatelessWidget {
               onChanged: (v) => display.setStepWords(v.round()),
             ),
             const Divider(),
-            const _SectionHeader('Time left counts'),
+            const SectionHeader('Time left counts'),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: SegmentedButton<TimeLeftScope>(
@@ -159,23 +160,6 @@ class ReadingSettingsScreen extends StatelessWidget {
       ),
     );
   }
-}
-
-class _SectionHeader extends StatelessWidget {
-  final String title;
-
-  const _SectionHeader(this.title);
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(
-      AppSpacing.lg,
-      AppSpacing.xl,
-      AppSpacing.lg,
-      AppSpacing.sm,
-    ),
-    child: Text(title, style: Theme.of(context).textTheme.titleMedium),
-  );
 }
 
 class _Shortcut {
