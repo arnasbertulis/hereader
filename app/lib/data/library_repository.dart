@@ -335,8 +335,34 @@ class LibraryRepository {
   /// not against remembering the one a caller already asked for — this is
   /// the only path that can put a byte in [_covers] or take one out, so a
   /// second call for the same id is served from there instead of storage.
-  Future<Uint8List?> coverOf(String bookId) =>
-      _covers.putIfAbsent(bookId, () => _readCover(bookId));
+  ///
+  /// [_covers] holds answers, not attempts: a read that completes with an
+  /// error drops its own entry before any later caller can see it, so the
+  /// caller that asked for it still gets the error, but the next call starts
+  /// a fresh read instead of replaying it. A successful read is unaffected
+  /// and stays memoized exactly as before.
+  Future<Uint8List?> coverOf(String bookId) => _covers.putIfAbsent(bookId, () {
+    final future = _readCover(bookId);
+
+    // Attached once, here, rather than on every call to coverOf: a cache hit
+    // reuses this same future straight from the map without going through
+    // this closure again, so a second error listener is never added.
+    unawaited(
+      future.then(
+        (_) {},
+        onError: (Object _, StackTrace _) {
+          // Only if this is still the entry — a later write, or a later
+          // failure resolved after this one started, may have already
+          // removed or replaced it.
+          if (identical(_covers[bookId], future)) {
+            _covers.remove(bookId);
+          }
+        },
+      ),
+    );
+
+    return future;
+  });
 
   Future<Uint8List?> _readCover(String bookId) async {
     final row = await (_db.select(
