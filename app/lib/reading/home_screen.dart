@@ -156,40 +156,31 @@ class _HomeScreenState extends State<HomeScreen> {
   /// busy is different from the library's: the card carries a spinner where
   /// its button was, and everything else on the screen stays put.
   Future<void> _open(BookSummary book) async {
-    setState(() => _busy = true);
+    _setBusy(true);
 
     try {
       await _opener.open(context, book.id);
     } finally {
-      if (mounted) setState(() => _busy = false);
+      _setBusy(false);
     }
   }
 
-  /// Asks what the reader wants to read, then does it.
+  Future<void> _openAddMenu() =>
+      _dispatcher.showAndAct(context, onBusy: _setBusy);
+
+  /// Shows busy as a spinner in place of the continue card's glyph, and
+  /// nowhere else on the screen.
   ///
-  /// Opens through [AddMenuDispatcher.showAndAct] rather than showing the
-  /// dialog itself — the menu and the switch on its answer both live on the
-  /// dispatcher now, shared with the Library, rather than a second copy of
-  /// either kept here. Wraps the call in Home's own busy flag: raises it from
-  /// `onImportStarted`, which only fires once an EPUB pick has bytes — see
-  /// [BookImporter.importPickedFile]'s `onPicked` — so cancelling the file
-  /// chooser never toggles `_busy` at all (#269), and neither does the wait
-  /// for the reader's tap, since nothing is raised until an answer exists.
-  /// The other three choices never call it: none is slow enough for a reader
-  /// to notice, so busy never needs to cover them. A failed import is
-  /// reported once, by [AddMenuDispatcher]'s own [BookImporter]; this only
-  /// covers how long the spinner in the continue tile's glyph shows.
-  Future<void> _openAddMenu() async {
-    try {
-      await _dispatcher.showAndAct(
-        context,
-        onBusy: (busy) {
-          if (mounted) setState(() => _busy = busy);
-        },
-      );
-    } finally {
-      if (mounted && _busy) setState(() => _busy = false);
-    }
+  /// Raised from [AddMenuDispatcher.act]'s `onBusy`, which only fires once an
+  /// EPUB pick has bytes — see [BookImporter.importPickedFile]'s `onPicked`
+  /// — so cancelling the file chooser never toggles `_busy` at all (#269),
+  /// and neither does the wait for the reader's tap on the menu itself,
+  /// since nothing is raised until an answer exists. The other three choices
+  /// never raise it: none is slow enough for a reader to notice. A failed
+  /// import is reported once, by [AddMenuDispatcher]'s own [BookImporter];
+  /// this only covers how long the spinner shows.
+  void _setBusy(bool busy) {
+    if (mounted) setState(() => _busy = busy);
   }
 
   @override

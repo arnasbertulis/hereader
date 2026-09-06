@@ -476,6 +476,37 @@ void main() {
       },
     );
 
+    testWidgets('the busy bar clears once a successful import lands', (
+      tester,
+    ) async {
+      await addBook('book-1', title: 'Romeo and Juliet');
+
+      await pump(
+        tester,
+        dispatcher: AddMenuDispatcher(
+          repository: repository,
+          sync: sync,
+          catalogue: catalogue,
+          importer: BookImporter(
+            repository: repository,
+            pickBytes: () async => Uint8List.fromList([1, 2, 3]),
+            parser: StubBookParser(
+              fixtureBook(id: 'epub-1', title: 'Pride and Prejudice'),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.byKey(libraryAddButtonKey));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(addMenuEpubKey));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+
+      await _disposeTree(tester);
+    });
+
     testWidgets('cancelling the file chooser never shows the busy bar (#269)', (
       tester,
     ) async {
