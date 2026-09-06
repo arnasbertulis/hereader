@@ -242,8 +242,8 @@ void main() {
       expect(title, isNotNull);
       expect(subtitle, isNotNull);
       expect(
-        title!.fontWeight!.index,
-        greaterThan(subtitle!.fontWeight!.index),
+        title!.fontWeight!.value,
+        greaterThan(subtitle!.fontWeight!.value),
       );
       expect(title.fontWeight, theme.textTheme.titleMedium!.fontWeight);
       expect(subtitle.fontWeight, theme.textTheme.bodyMedium!.fontWeight);
