@@ -415,7 +415,7 @@ void main() {
     await tester.tap(find.text('Remove'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+    await tester.tap(find.widgetWithText(TextButton, 'Remove'));
     await tester.pumpAndSettle();
 
     expect(find.text('Nothing here yet'), findsOneWidget);

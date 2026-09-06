@@ -70,7 +70,10 @@ class ProfileActions {
             onPressed: () => Navigator.of(context).pop(false),
             child: const Text('Keep'),
           ),
-          FilledButton(
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Delete'),
           ),

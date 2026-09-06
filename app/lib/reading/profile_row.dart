@@ -54,7 +54,13 @@ class ProfileRow extends StatelessWidget {
           ),
           const PopupMenuItem(value: 'duplicate', child: Text('Make a copy')),
           if (onDelete != null)
-            const PopupMenuItem(value: 'delete', child: Text('Delete')),
+            PopupMenuItem(
+              value: 'delete',
+              child: Text(
+                'Delete',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
         ],
       ),
     );
