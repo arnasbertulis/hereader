@@ -444,7 +444,7 @@ class _ProblemView extends StatelessWidget {
             Text(
               _problemMessage(problem),
               key: freeBooksMessageKey,
-              textAlign: TextAlign.center,
+              textAlign: TextAlign.left,
               style: theme.textTheme.bodyLarge,
             ),
             if (_showsRetry) ...[
