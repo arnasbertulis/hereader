@@ -42,6 +42,7 @@ const double _continueBarHeight = 4;
 /// doing that by accident: the label answers whether the book was started,
 /// not which book is in the tile.
 const Key homeContinueTileKey = Key('home-continue-tile');
+const Key homeRecentlyReadHeaderKey = Key('home-recently-read-header');
 
 /// The first screen, and the one that answers "where was I".
 ///
@@ -261,7 +262,10 @@ class _HomeScreenState extends State<HomeScreen> {
                             Row(
                               children: [
                                 const Expanded(
-                                  child: _SectionLabel('Recently read'),
+                                  child: _SectionLabel(
+                                    'Recently read',
+                                    key: homeRecentlyReadHeaderKey,
+                                  ),
                                 ),
                                 // Appears only when there is a book the row
                                 // cannot show. An arrow that is always
@@ -338,7 +342,7 @@ bool _hasBeenRead(BookSummary book) => book.lastReadAt != null;
 class _SectionLabel extends StatelessWidget {
   final String text;
 
-  const _SectionLabel(this.text);
+  const _SectionLabel(this.text, {super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -379,7 +383,8 @@ class _ContinueSection extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Center(
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.topLeft,
     child: ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: _continueTileMaxWidth),
       child: _ContinueTile(

@@ -229,4 +229,28 @@ void main() {
       await _disposeTree(tester);
     },
   );
+
+  testWidgets('the continue tile and Recently read share a left edge (#347)', (
+    tester,
+  ) async {
+    await repository.addBook(
+      fixtureBook(id: 'epub-1', title: 'Pride and Prejudice'),
+      Uint8List(0),
+    );
+    await repository.addBook(
+      fixtureBook(id: 'epub-2', title: 'Persuasion'),
+      Uint8List(0),
+    );
+
+    await pump(tester);
+
+    final continueLeft = tester.getTopLeft(find.byKey(homeContinueTileKey)).dx;
+    final recentlyReadLeft = tester
+        .getTopLeft(find.byKey(homeRecentlyReadHeaderKey))
+        .dx;
+
+    expect(continueLeft, recentlyReadLeft);
+
+    await _disposeTree(tester);
+  });
 }
