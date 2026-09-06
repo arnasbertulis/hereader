@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:app/catalogue/catalogue_client.dart';
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
 import 'package:app/reading/add_menu.dart';
 import 'package:app/reading/add_menu_dispatcher.dart';
 import 'package:app/reading/book_importer.dart';
+import 'package:app/reading/free_books_screen.dart';
 import 'package:app/reading/library_book.dart';
 import 'package:app/reading/library_screen.dart';
 import 'package:app/reading/note_editor_screen.dart';
@@ -537,5 +539,70 @@ void main() {
 
       await _disposeTree(tester);
     });
+  });
+
+  group('downloading a Free book resets a mismatched filter', () {
+    // #316: the dispatcher used to build FreeBooksScreen without its own
+    // BookImporter, so a test mounting the Library had nothing to stand in
+    // for the download's importer. Passing the dispatcher's importer through
+    // (add_menu_dispatcher.dart's _openFreeBooks) is what makes this
+    // reachable without a real compute() parse.
+    testWidgets(
+      'a downloaded entry shows the shelf that contains the new book',
+      (tester) async {
+        await addNote('note-1', title: 'A Note');
+
+        const entry = CatalogueEntryStub(
+          gutenbergId: 76,
+          title: 'Adventures of Huckleberry Finn',
+          authors: 'Mark Twain',
+        );
+        catalogue.searchResponses.add(
+          CatalogueSearchResult(
+            catalogueReady: true,
+            results: [entry.toEntry()],
+            page: 0,
+            hasMore: false,
+          ),
+        );
+
+        await pump(
+          tester,
+          dispatcher: AddMenuDispatcher(
+            repository: repository,
+            sync: sync,
+            catalogue: catalogue,
+            importer: BookImporter(
+              repository: repository,
+              parser: StubBookParser(
+                fixtureBook(id: entry.bookId, title: entry.title),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('All'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Notes').last);
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(libraryAddButtonKey));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(addMenuFreeBooksKey));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(freeBooksTileKey(entry.gutenbergId)));
+        await tester.pumpAndSettle();
+
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+
+        expect(find.text('All'), findsOneWidget);
+        expect(find.text('Notes'), findsNothing);
+        expect(find.text(entry.title), findsOneWidget);
+
+        await _disposeTree(tester);
+      },
+    );
   });
 }

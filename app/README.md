@@ -627,8 +627,10 @@ save-and-open flow at its full depth (the add-menu dialog, the editor,
 why that path has no end-to-end automated test of its own. The filter-reset
 rule itself is general now — the repository announces every landed Book, and
 the library reacts to that announcement rather than to which screen caused
-it — so `library_filter_test.dart` exercises the rule directly by calling
-the repository's write while the library is mounted, the same call each of
-the three add paths makes, rather than driving each screen's full flow.
-`library_filter_test.dart` also covers the cancel path, which reaches no
-isolate.
+it — so `library_filter_test.dart` covers it at two depths: a group that
+calls the repository's write directly while the library is mounted, the same
+call each add path makes, and one group per add path that also has a
+no-isolate seam (a stubbed `BookParser` for EPUB, a stubbed `BookImporter`
+for Free books) driving the real screen flow — Add menu, the picker or the
+catalogue tile, then the reset — end to end. `library_filter_test.dart` also
+covers the cancel path, which reaches no isolate.
