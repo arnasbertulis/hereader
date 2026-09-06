@@ -13,32 +13,35 @@ void main() {
     await tester.binding.setSurfaceSize(surfaceSize);
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: Center(child: AddMenu()))),
+      const MaterialApp(
+        home: Scaffold(body: Center(child: AddMenu())),
+      ),
     );
     await tester.pumpAndSettle();
   }
 
-  testWidgets('all four options are on screen at the issue repro size (502x750)', (
-    tester,
-  ) async {
-    await pumpMenu(tester, const Size(502, 750));
+  testWidgets(
+    'all four options are on screen at the issue repro size (502x750)',
+    (tester) async {
+      await pumpMenu(tester, const Size(502, 750));
 
-    for (final key in [
-      addMenuFreeBooksKey,
-      addMenuEpubKey,
-      addMenuNoteKey,
-      addMenuPasteKey,
-    ]) {
-      final finder = find.byKey(key);
-      expect(finder, findsOneWidget, reason: '$key should be laid out');
-      final rect = tester.getRect(finder);
-      expect(
-        rect.bottom,
-        lessThanOrEqualTo(750),
-        reason: '$key should not fall below the fold',
-      );
-    }
-  });
+      for (final key in [
+        addMenuFreeBooksKey,
+        addMenuEpubKey,
+        addMenuNoteKey,
+        addMenuPasteKey,
+      ]) {
+        final finder = find.byKey(key);
+        expect(finder, findsOneWidget, reason: '$key should be laid out');
+        final rect = tester.getRect(finder);
+        expect(
+          rect.bottom,
+          lessThanOrEqualTo(750),
+          reason: '$key should not fall below the fold',
+        );
+      }
+    },
+  );
 
   testWidgets('option titles and descriptions are left-aligned, not centred', (
     tester,
