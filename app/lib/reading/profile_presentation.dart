@@ -240,9 +240,8 @@ int readerInkArgbFor(ResolvedPresentation presentation) =>
 /// background and re-deriving the composite in a test is the arrangement
 /// that had the WCAG readout in settings judging a pair the app never drew.
 Color readerTrackFor(ResolvedPresentation presentation) => Color.alphaBlend(
-  colorOf(
-    readerInkArgbFor(presentation),
-  ).withValues(alpha: _readerTrackOpacity),
+  colorOf(readerInkArgbFor(presentation))
+      .withValues(alpha: _readerTrackOpacity),
   colorOf(surfaceArgbFor(presentation)),
 );
 
@@ -509,6 +508,22 @@ String? reduceMotionWarning(ReadingProfile profile, {required bool disabled}) {
       'continuously and will keep doing so.';
 }
 
+/// Names a duration on a four-point scale instead of a millisecond count.
+///
+/// [milliseconds] and [max] share a slider's own range, so "Long" means
+/// different absolute values on the comma pause and the paragraph pause —
+/// that is the point: nobody can form an intuition for 220 ms, and nobody
+/// needs to when Short/Medium/Long already says what the reader wants to
+/// know. Zero is always "Off" rather than "Short", since a pause a reader
+/// switched off should not read as merely brief.
+String describeDurationScale(int milliseconds, {required int max}) {
+  if (milliseconds <= 0) return 'Off';
+  final third = max / 3;
+  if (milliseconds <= third) return 'Short';
+  if (milliseconds <= third * 2) return 'Medium';
+  return 'Long';
+}
+
 /// How a presentation mode reads, in the reader's terms.
 ///
 /// [PresentationMode.shiftingWindow] is not built and never reaches a
@@ -516,15 +531,12 @@ String? reduceMotionWarning(ReadingProfile profile, {required bool disabled}) {
 /// rather than defaulted, so building it would be a compile error here.
 String describePresentationMode(PresentationMode mode) => switch (mode) {
   PresentationMode.fixedSingle =>
-    'One word at a time, held where your eyes already are. Cuts about 1.3 '
-        'saccades a word for readers with central field loss (Rubin & Turano '
-        '1994).',
+    'One word at a time, held right where your eyes already are, so there '
+        'is nothing to track moving.',
   PresentationMode.shiftingWindow => 'A short window of words. Not built.',
   PresentationMode.continuousScroll =>
-    'A line of text slides past a fixed mark. Read at much the same speed as '
-        'one word at a time by visually impaired readers (Fine & Peli 1995), '
-        'and ahead of it on comprehension in central vision loss '
-        '(Akthar 2021).',
+    'A line of text slides past a fixed mark, keeping more of the '
+        'surrounding sentence in view than one word at a time gives you.',
 };
 
 /// One line summarising how a profile reads, for a list row.
@@ -543,9 +555,9 @@ String describePacingKind(PacingModelKind kind) => switch (kind) {
     'Every word is held for the same time. Fastest for most readers with '
         'ordinary sight.',
   PacingModelKind.lengthScaled =>
-    'Longer words are held longer. Carried readers with central field loss '
-        'through sentences about a third faster in Aquilante 2001.',
+    'Longer words are held longer, so a long word gets enough time to land '
+        'before the next one appears.',
   PacingModelKind.elicited =>
-    'Nothing moves until you tap or press. Averaged 47% faster than a timed '
-        'stream among slow low-vision readers in Arditi 1999.',
+    'Nothing moves until you tap or press, so you set the pace word by '
+        'word instead of a clock setting it for you.',
 };
