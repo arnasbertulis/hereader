@@ -10,6 +10,19 @@ import '../sync/sync_engine.dart';
 import 'book_opener.dart';
 import 'library_book.dart';
 
+/// The plain "Save" control: writes the note and returns without opening
+/// the reader.
+const Key noteEditorSaveButtonKey = Key('note-editor-save');
+
+/// "Save and read": writes the note, then pushes it into the RSVP reader.
+const Key noteEditorSaveAndReadButtonKey = Key('note-editor-save-and-read');
+
+/// Cancels the back-arrow's discard prompt and leaves the note open.
+const Key noteEditorKeepEditingButtonKey = Key('note-editor-keep-editing');
+
+/// Confirms the back-arrow's discard prompt and pops without saving.
+const Key noteEditorDiscardButtonKey = Key('note-editor-discard');
+
 /// Writes a note and reads it back immediately, or edits one already in the
 /// library.
 ///
@@ -66,7 +79,48 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     super.dispose();
   }
 
-  Future<void> _save() async {
+  /// True once the fields no longer match what this screen opened with.
+  ///
+  /// Compared against the starting title and body directly, rather than the
+  /// `textChanged`/`_originalBytes` check `_save` uses: that one exists to
+  /// decide whether a saved reading position survives, so it looks at the
+  /// body alone. This one decides whether leaving should ask at all, so a
+  /// title-only edit on a fresh note counts too.
+  bool get _hasUnsavedChanges =>
+      _titleController.text != widget.initialTitle ||
+      _bodyController.text != widget.initialBody;
+
+  /// Asks before the back arrow throws away typed text with no other copy.
+  ///
+  /// Only reached when [_hasUnsavedChanges] is true, so opening a note and
+  /// leaving without touching it never interrupts with a question about a
+  /// change that never happened.
+  Future<bool?> _confirmDiscard() => showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Discard this note?'),
+      content: const Text(
+        'The changes you made have not been saved and will be lost.',
+      ),
+      actions: [
+        TextButton(
+          key: noteEditorKeepEditingButtonKey,
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Keep editing'),
+        ),
+        FilledButton(
+          key: noteEditorDiscardButtonKey,
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Discard'),
+        ),
+      ],
+    ),
+  );
+
+  /// Writes the note, then either returns to where the reader came from
+  /// ([enterReader] false, the plain "Save") or opens it in the RSVP reader
+  /// the way it always has ([enterReader] true, "Save and read").
+  Future<void> _save({required bool enterReader}) async {
     final body = _bodyController.text;
     if (body.trim().isEmpty) return;
 
@@ -107,18 +161,20 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
 
       if (!mounted) return;
 
-      // Opened through the same path every other book takes, rather than
-      // pushed straight to ReaderScreen: this is what checks for a sync
-      // conflict, re-reads the position sync may just have written, and
-      // wires up the save callback ADR 0011 depends on. A freshly written
-      // note has nothing to conflict with, and an edit that reset progress
-      // opens at the start the same way a first read would; there is no
-      // shorter route that does not duplicate BookOpener either way.
-      final opener = BookOpener(
-        repository: widget.repository,
-        sync: widget.sync,
-      );
-      await opener.open(context, id);
+      if (enterReader) {
+        // Opened through the same path every other book takes, rather than
+        // pushed straight to ReaderScreen: this is what checks for a sync
+        // conflict, re-reads the position sync may just have written, and
+        // wires up the save callback ADR 0011 depends on. A freshly written
+        // note has nothing to conflict with, and an edit that reset progress
+        // opens at the start the same way a first read would; there is no
+        // shorter route that does not duplicate BookOpener either way.
+        final opener = BookOpener(
+          repository: widget.repository,
+          sync: widget.sync,
+        );
+        await opener.open(context, id);
+      }
 
       // Popped with a result rather than bare: the library's own add flow
       // tells a cancelled edit (nothing was ever written, this line never
@@ -170,56 +226,93 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
   Widget build(BuildContext context) {
     final hasText = _bodyController.text.trim().isNotEmpty;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.isEditing ? 'Edit note' : 'Write a note'),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _titleController,
-              enabled: !_busy,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(
-                labelText: 'Title',
-                hintText: 'Untitled note',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Expanded(
-              child: TextField(
-                controller: _bodyController,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        if (!_hasUnsavedChanges) {
+          Navigator.of(context).pop();
+          return;
+        }
+        final navigator = Navigator.of(context);
+        final confirmed = await _confirmDiscard();
+        if (!mounted) return;
+        if (confirmed == true) navigator.pop();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.isEditing ? 'Edit note' : 'Write a note'),
+        ),
+        body: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _titleController,
                 enabled: !_busy,
-                maxLines: null,
-                expands: true,
-                textAlignVertical: TextAlignVertical.top,
-                onChanged: (_) => setState(() {}),
+                textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
-                  hintText: 'Write what you want to read',
+                  labelText: 'Title',
+                  hintText: 'Untitled note',
                   border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: (hasText && !_busy) ? _save : null,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(56),
+              const SizedBox(height: 16),
+              Expanded(
+                child: TextField(
+                  controller: _bodyController,
+                  enabled: !_busy,
+                  maxLines: null,
+                  expands: true,
+                  textAlignVertical: TextAlignVertical.top,
+                  onChanged: (_) => setState(() {}),
+                  decoration: const InputDecoration(
+                    labelText: 'Note',
+                    hintText: 'Write what you want to read',
+                    border: OutlineInputBorder(),
+                    alignLabelWithHint: true,
+                  ),
+                ),
               ),
-              child: _busy
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Save and read'),
-            ),
-          ],
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      key: noteEditorSaveButtonKey,
+                      onPressed: (hasText && !_busy)
+                          ? () => _save(enterReader: false)
+                          : null,
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(56),
+                      ),
+                      child: const Text('Save'),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: FilledButton(
+                      key: noteEditorSaveAndReadButtonKey,
+                      onPressed: (hasText && !_busy)
+                          ? () => _save(enterReader: true)
+                          : null,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size.fromHeight(56),
+                      ),
+                      child: _busy
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Save and read'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
