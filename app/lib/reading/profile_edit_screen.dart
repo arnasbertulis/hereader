@@ -47,6 +47,14 @@ class ProfileEditScreen extends StatefulWidget {
 }
 
 class _ProfileEditScreenState extends State<ProfileEditScreen> {
+  // Shared between each pause/fade slider's `max` and its
+  // describeDurationScale(max:) call so the named-scale cutoffs can never
+  // drift out of sync with the slider range.
+  static const int _clausePauseMaxMs = 800;
+  static const int _sentencePauseMaxMs = 1500;
+  static const int _paragraphPauseMaxMs = 2000;
+  static const int _transitionMaxMs = 300;
+
   late ReadingProfile _draft = widget.profile;
   late final TextEditingController _name = TextEditingController(
     text: widget.profile.name,
@@ -241,6 +249,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               max: 800,
               divisions: 74,
               enabled: _editable && timed,
+              help:
+                  'How fast words are shown. Match it to a pace you can '
+                  'hold for a whole page, not the fastest you can follow '
+                  'for a sentence.',
               onChanged: (v) => _updatePacing((p) => p.copyWith(baseWpm: v)),
             ),
 
@@ -269,11 +281,18 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               SettingSlider(
                 label: 'Pause at commas',
                 value: pacing.clausePause.inMilliseconds.toDouble(),
-                valueLabel: '${pacing.clausePause.inMilliseconds} ms',
+                valueLabel: describeDurationScale(
+                  pacing.clausePause.inMilliseconds,
+                  max: _clausePauseMaxMs,
+                ),
                 min: 0,
-                max: 800,
+                max: _clausePauseMaxMs.toDouble(),
                 divisions: 40,
                 enabled: _editable && timed,
+                help:
+                    'How long the reading holds at a comma. Longer gives '
+                    'you a beat to catch your place before the sentence '
+                    'carries on.',
                 onChanged: (v) => _updatePacing(
                   (p) => p.copyWith(
                     clausePause: Duration(milliseconds: v.round()),
@@ -284,11 +303,17 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               SettingSlider(
                 label: 'Pause at sentences',
                 value: pacing.sentencePause.inMilliseconds.toDouble(),
-                valueLabel: '${pacing.sentencePause.inMilliseconds} ms',
+                valueLabel: describeDurationScale(
+                  pacing.sentencePause.inMilliseconds,
+                  max: _sentencePauseMaxMs,
+                ),
                 min: 0,
-                max: 1500,
+                max: _sentencePauseMaxMs.toDouble(),
                 divisions: 30,
                 enabled: _editable && timed,
+                help:
+                    'How long the reading holds at a full stop. Longer '
+                    'gives you time to take in what the sentence said.',
                 onChanged: (v) => _updatePacing(
                   (p) => p.copyWith(
                     sentencePause: Duration(milliseconds: v.round()),
@@ -299,11 +324,17 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               SettingSlider(
                 label: 'Pause at paragraphs',
                 value: pacing.paragraphPause.inMilliseconds.toDouble(),
-                valueLabel: '${pacing.paragraphPause.inMilliseconds} ms',
+                valueLabel: describeDurationScale(
+                  pacing.paragraphPause.inMilliseconds,
+                  max: _paragraphPauseMaxMs,
+                ),
                 min: 0,
-                max: 2000,
+                max: _paragraphPauseMaxMs.toDouble(),
                 divisions: 40,
                 enabled: _editable && timed,
+                help:
+                    'How long the reading holds between paragraphs. '
+                    'Longer marks the break as more than another sentence.',
                 onChanged: (v) => _updatePacing(
                   (p) => p.copyWith(
                     paragraphPause: Duration(milliseconds: v.round()),
@@ -383,6 +414,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               max: 96,
               divisions: 84,
               enabled: _editable,
+              help:
+                  'How large each word is drawn. Larger holds up at a '
+                  'distance or with limited acuity.',
               onChanged: (v) =>
                   _updatePresentation((p) => p.copyWith(fontSizePt: v)),
             ),
@@ -398,9 +432,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               divisions: 25,
               enabled: _editable,
               help:
-                  'Extra space between letters. Reported to help dyslexic '
-                  'readers, and disputed in the same year. Offered without a '
-                  'claim either way.',
+                  'Extra space between letters. Wider spacing can make '
+                  'each word easier to pick apart.',
               onChanged: (v) =>
                   _updatePresentation((p) => p.copyWith(letterSpacingEm: v)),
             ),
@@ -428,6 +461,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               max: 1,
               divisions: 20,
               enabled: _editable,
+              help:
+                  'Where the word sits on screen, top to bottom. A blind '
+                  'spot above or below centre is a reason to move it.',
               onChanged: (v) =>
                   _updatePresentation((p) => p.copyWith(anchorY: v)),
             ),
@@ -561,11 +597,18 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 value: presentation.transitionMs.toDouble(),
                 valueLabel: presentation.transitionMs == 0
                     ? 'instant'
-                    : '${presentation.transitionMs} ms',
+                    : describeDurationScale(
+                        presentation.transitionMs,
+                        max: _transitionMaxMs,
+                      ),
                 min: 0,
-                max: 300,
+                max: _transitionMaxMs.toDouble(),
                 divisions: 30,
                 enabled: _editable,
+                help:
+                    'How the reading hands off from one word to the next. '
+                    'A slower fade is easier to follow if a hard cut feels '
+                    'disorienting.',
                 onChanged: (v) => _updatePresentation(
                   (p) => p.copyWith(transitionMs: v.round()),
                 ),
@@ -576,8 +619,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               SwitchListTile(
                 title: const Text('Highlight a fixation letter'),
                 subtitle: const Text(
-                  'Marks one letter as a place to look. Offered as a '
-                  'preference: none of the studies behind this app tested it.',
+                  'Marks one letter in each word as a place to look, to '
+                  'help your eye land in the same spot every time.',
                 ),
                 value: presentation.orpHighlight,
                 onChanged: _editable
@@ -645,6 +688,14 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               child: Text(
                 'This sets the text colour. The background can be tinted '
                 'below.',
+              ),
+            ),
+
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+              child: Text(
+                'Background',
+                style: Theme.of(context).textTheme.titleSmall,
               ),
             ),
 

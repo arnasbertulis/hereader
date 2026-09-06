@@ -240,8 +240,9 @@ int readerInkArgbFor(ResolvedPresentation presentation) =>
 /// background and re-deriving the composite in a test is the arrangement
 /// that had the WCAG readout in settings judging a pair the app never drew.
 Color readerTrackFor(ResolvedPresentation presentation) => Color.alphaBlend(
-  colorOf(readerInkArgbFor(presentation))
-      .withValues(alpha: _readerTrackOpacity),
+  colorOf(
+    readerInkArgbFor(presentation),
+  ).withValues(alpha: _readerTrackOpacity),
   colorOf(surfaceArgbFor(presentation)),
 );
 
