@@ -2,12 +2,40 @@ import 'dart:typed_data';
 
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
+import 'package:drift/drift.dart'
+    show ApplyInterceptor, QueryExecutor, QueryInterceptor;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';
 import 'test_database.dart';
 
 Uint8List _bytes(List<int> values) => Uint8List.fromList(values);
+
+/// Rejects the first book_covers select for one bookId, then lets every
+/// later select through — including a select for a different id, so this
+/// fakes one book's read as unreliable rather than the table's.
+class _FlakyCoverReads extends QueryInterceptor {
+  _FlakyCoverReads(this._failingBookId);
+
+  final String _failingBookId;
+  bool _failed = false;
+
+  @override
+  Future<List<Map<String, Object?>>> runSelect(
+    QueryExecutor executor,
+    String statement,
+    List<Object?> args,
+  ) {
+    if (!_failed &&
+        statement.contains('book_covers') &&
+        args.contains(_failingBookId)) {
+      _failed = true;
+      throw Exception('database is locked');
+    }
+
+    return executor.runSelect(statement, args);
+  }
+}
 
 void main() {
   late AppDatabase db;
@@ -116,5 +144,75 @@ void main() {
 
     expect(identical(repository.coverOf('book-1'), bookOneCover), isTrue);
     expect(await repository.coverOf('book-2'), [9]);
+  });
+
+  group('a cover read that fails', () {
+    late AppDatabase flakyDb;
+    late LibraryRepository flakyRepository;
+
+    setUp(() async {
+      flakyDb = AppDatabase(
+        testExecutor().interceptWith(_FlakyCoverReads('book-1')),
+      );
+      flakyRepository = LibraryRepository(flakyDb);
+
+      await flakyRepository.addBook(
+        fixtureBook(
+          id: 'book-1',
+          title: 'Romeo and Juliet',
+          author: 'William Shakespeare',
+          wordCount: 25000,
+          coverBytes: _bytes([0xFF, 0xD8, 0xFF]),
+        ),
+        _bytes([1, 2, 3]),
+      );
+    });
+
+    tearDown(() => flakyDb.close());
+
+    test('surfaces the error to the caller that asked for it', () async {
+      await expectLater(flakyRepository.coverOf('book-1'), throwsException);
+    });
+
+    test('is not left behind, so the next read starts fresh', () async {
+      await expectLater(flakyRepository.coverOf('book-1'), throwsException);
+
+      expect(await flakyRepository.coverOf('book-1'), [0xFF, 0xD8, 0xFF]);
+    });
+
+    test('leaves every other book\'s cached cover alone', () async {
+      await flakyRepository.addBook(
+        fixtureBook(
+          id: 'book-2',
+          title: 'Hamlet',
+          author: 'William Shakespeare',
+          wordCount: 30000,
+          coverBytes: _bytes([7]),
+        ),
+        _bytes([4, 5, 6]),
+      );
+
+      final bookTwoCover = flakyRepository.coverOf('book-2');
+      await bookTwoCover;
+
+      await expectLater(flakyRepository.coverOf('book-1'), throwsException);
+
+      expect(
+        identical(flakyRepository.coverOf('book-2'), bookTwoCover),
+        isTrue,
+      );
+    });
+
+    test(
+      'two callers in flight on the failing read share one outcome',
+      () async {
+        final first = flakyRepository.coverOf('book-1');
+        final second = flakyRepository.coverOf('book-1');
+
+        expect(identical(first, second), isTrue);
+        await expectLater(first, throwsException);
+        await expectLater(second, throwsException);
+      },
+    );
   });
 }
