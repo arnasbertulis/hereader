@@ -148,4 +148,9 @@ abstract final class AppIcons {
   static const pausesWhenHidden = IconData(0xe3a0, fontFamily: _light);
   static const frontMatterOffered = IconData(0xe062, fontFamily: _light);
   static const chaptersFromTheBook = IconData(0xe2f4, fontFamily: _light);
+
+  /// The (i) disclosure that opens a setting's second and third sentences.
+  /// The same glyph as [sectionAbout] and a different fact: that one names a
+  /// destination, this one opens a popup over the current screen — see #357.
+  static const infoDisclosure = IconData(0xe2ce, fontFamily: _light);
 }
