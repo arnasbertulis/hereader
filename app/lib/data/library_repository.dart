@@ -234,7 +234,7 @@ class LibraryRepository {
   /// A live signal, not a log: [StreamController.broadcast] keeps no
   /// history, so a listener that subscribes after a Book has landed has
   /// missed nothing it could not already read off [watchLibrary]. This is
-  /// the one seam every path that puts a Book on the shelf shares — a file
+  /// the one seam every path that puts a Book in the Library shares — a file
   /// import, a Free books download and a saved Note all call [addBook] and
   /// nothing else does — so one listener here covers all three, and a fourth
   /// path added later needs no wiring of its own.

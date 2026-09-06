@@ -7,7 +7,7 @@ import 'package:flutter/material.dart';
 import '../data/library_repository.dart';
 import 'library_book.dart';
 
-/// What became of one attempt to bring a book onto the shelf.
+/// What became of one attempt to bring a book into the Library.
 ///
 /// [cancelled] and [failed] are kept apart rather than folded into a
 /// nullable [LibraryBook] because they are exactly the two cases a caller
@@ -38,7 +38,7 @@ Future<Uint8List?> _pickEpubFile() async {
 }
 
 /// Carries an EPUB — picked off the reader's device, or already downloaded —
-/// onto the shelf.
+/// into the Library.
 ///
 /// Parses, writes, and reports its own failures, the way [BookOpener] does
 /// for the open path: stateless, no held [BuildContext]. [importBytes] and
@@ -51,8 +51,8 @@ Future<Uint8List?> _pickEpubFile() async {
 ///
 /// Deciding whether to open a book already in the Library instead of
 /// importing it again is not this module's job. Only Free books ever faces
-/// that choice — a file picked off disk or pasted in cannot already be on
-/// the shelf under a different origin — so that decision, and the navigation
+/// that choice — a file picked off disk or pasted in cannot already be in
+/// the Library under a different origin — so that decision, and the navigation
 /// it leads to, stays on the screen that needs it.
 class BookImporter {
   final LibraryRepository repository;
@@ -89,7 +89,7 @@ class BookImporter {
     return importBytes(context, bytes);
   }
 
-  /// Parses [bytes] and writes the result onto the shelf, reporting a parse
+  /// Parses [bytes] and writes the result into the Library, reporting a parse
   /// failure through [context].
   ///
   /// Bytes rather than a picked file, so Free books can hand this the bytes
@@ -105,7 +105,7 @@ class BookImporter {
     );
   }
 
-  /// Parses [bytes] and writes the result onto the shelf, without a
+  /// Parses [bytes] and writes the result into the Library, without a
   /// [BuildContext].
   ///
   /// Free books calls this once a download might outlive the screen that
