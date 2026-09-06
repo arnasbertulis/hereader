@@ -24,7 +24,7 @@ const Key addMenuNoteKey = Key('add-menu-note');
 /// See [addMenuFreeBooksKey].
 const Key addMenuPasteKey = Key('add-menu-paste');
 
-/// Four ways to start reading, stacked.
+/// Four ways to start reading, listed.
 ///
 /// The library's own add button opens this, and so does Home's empty state —
 /// one dialog, asked from two places, rather than Home keeping a shorter,
@@ -33,23 +33,28 @@ const Key addMenuPasteKey = Key('add-menu-paste');
 /// it was the two screens drifting out of sync the way [_AddMenuOption]'s own
 /// note below once had to correct for.
 ///
-/// Full-width blocks rather than a list of compact rows, and each one is the
-/// tap target: a reader who cannot reliably hit a small target gets a box the
-/// size of a hand instead of a 48dp row.
+/// Full-width rows, each one the tap target: a reader who cannot reliably
+/// hit a small target gets the whole row rather than a small icon or label
+/// inside it. The row's height is what a stacked icon-over-title layout used
+/// to cost: four centred blocks ran to 660px and pushed the fourth option
+/// below the fold at common phone heights, so this listing keeps the icon
+/// beside the title instead of above it.
 ///
-/// Each block says what it does and what happens to it afterwards. Free
-/// books, EPUB and note all stay in the library; paste does not, and a
-/// reader finding that out later is a reader who lost something.
+/// Each row says what it does and, where that fact is not obvious or not
+/// shared by the others, what happens to it afterwards. Free books, EPUB and
+/// note all stay in the library the same way, so only paste — which does not
+/// — spells that out; repeating "stays in your library" on every row was the
+/// one thing worth cutting once the difference stopped being the point.
 class AddMenu extends StatelessWidget {
   const AddMenu({super.key});
 
-  /// Wide enough to hold two lines of explanation on a phone, capped before
+  /// Wide enough to hold one line of explanation on a phone, capped before
   /// it becomes a dialog the width of a monitor holding two words.
   static const double _maxWidth = 480;
 
-  /// Tall enough that each block is a target rather than a row. Grows with
+  /// A standard list row: leading icon, title, one-line subtitle. Grows with
   /// the reader's text size; the whole panel scrolls once it has to.
-  static const double _minOptionHeight = 148;
+  static const double _minOptionHeight = 72;
 
   @override
   Widget build(BuildContext context) {
@@ -89,10 +94,7 @@ class AddMenu extends StatelessWidget {
                   choice: AddChoice.freeBooks,
                   icon: AppIcons.tabLibrary,
                   title: 'Free books',
-                  detail:
-                      'Free books from a public catalogue. Pick one to '
-                      'download it to this device; it stays in your library '
-                      'like any other book.',
+                  detail: 'Download from a public catalogue',
                   minHeight: _minOptionHeight,
                 ),
                 const Divider(),
@@ -101,9 +103,7 @@ class AddMenu extends StatelessWidget {
                   choice: AddChoice.epub,
                   icon: AppIcons.importFile,
                   title: 'Add an EPUB',
-                  detail:
-                      'A book file from this device. It stays in your '
-                      'library and remembers your place.',
+                  detail: 'A book file from this device',
                   minHeight: _minOptionHeight,
                 ),
                 // Takes its colour and weight from the app's one divider
@@ -115,9 +115,7 @@ class AddMenu extends StatelessWidget {
                   choice: AddChoice.note,
                   icon: AppIcons.writeNote,
                   title: 'Write a note',
-                  detail:
-                      'Type something to read. It stays in your '
-                      'library like any other book.',
+                  detail: 'Type something to read',
                   minHeight: _minOptionHeight,
                 ),
                 const Divider(),
@@ -126,9 +124,7 @@ class AddMenu extends StatelessWidget {
                   choice: AddChoice.paste,
                   icon: AppIcons.pasteText,
                   title: 'Paste text',
-                  detail:
-                      'Read anything you have copied. Nothing is saved, '
-                      'and it is gone when you close it.',
+                  detail: 'Read once. Nothing is saved.',
                   minHeight: _minOptionHeight,
                 ),
               ],
@@ -170,23 +166,28 @@ class _AddMenuOption extends StatelessWidget {
         child: Container(
           width: double.infinity,
           constraints: BoxConstraints(minHeight: minHeight),
-          padding: const EdgeInsets.all(AppSpacing.xl),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.xl,
+            vertical: AppSpacing.md,
+          ),
+          child: Row(
             children: [
-              Icon(icon, size: 40, color: scheme.onSurface),
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.titleMedium,
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                detail,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
+              Icon(icon, size: 32, color: scheme.onSurface),
+              const SizedBox(width: AppSpacing.lg),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: theme.textTheme.titleMedium),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      detail,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
