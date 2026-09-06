@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
@@ -34,6 +35,16 @@ class _PasteReaderScreenState extends State<PasteReaderScreen> {
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _paste() async {
+    // The screen's whole purpose is reading what the reader already copied
+    // elsewhere. Filling the field for them, in one tap, is the primary
+    // action until there is text to read.
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = data?.text;
+    if (text == null || text.isEmpty) return;
+    setState(() => _controller.text = text);
   }
 
   void _start() {
@@ -81,20 +92,45 @@ class _PasteReaderScreenState extends State<PasteReaderScreen> {
                 textAlignVertical: TextAlignVertical.top,
                 onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(
-                  hintText: 'Paste a chapter here',
+                  // Same wording as the Add menu's description of this
+                  // screen (#369): one mental model of what it accepts,
+                  // not two.
+                  labelText: 'Text to read',
+                  hintText: 'Anything you have copied',
                   border: OutlineInputBorder(),
                   alignLabelWithHint: true,
                 ),
               ),
             ),
             const SizedBox(height: 16),
-            FilledButton(
-              onPressed: hasText ? _start : null,
-              style: FilledButton.styleFrom(
-                minimumSize: const Size.fromHeight(56),
+            // Before there is text, pasting is the only useful action, so it
+            // gets the primary button. Once there is text, "Read this"
+            // takes over as primary and paste becomes secondary — it can
+            // still replace what's there, but it is no longer the point.
+            if (hasText) ...[
+              OutlinedButton(
+                onPressed: _paste,
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(56),
+                ),
+                child: const Text('Paste'),
               ),
-              child: const Text('Read this'),
-            ),
+              const SizedBox(height: 8),
+              FilledButton(
+                onPressed: _start,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(56),
+                ),
+                child: const Text('Read this'),
+              ),
+            ] else
+              FilledButton(
+                onPressed: _paste,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(56),
+                ),
+                child: const Text('Paste'),
+              ),
           ],
         ),
       ),
