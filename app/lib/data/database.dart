@@ -377,9 +377,15 @@ class AppDatabase extends _$AppDatabase {
 
       // The single row SyncCursorDao reads and writes for the rest of the
       // app's life. createAll() only creates the (empty) table.
-      await into(
-        syncCursor,
-      ).insert(SyncCursorCompanion.insert(id: const Value(0)));
+      //
+      // insertOrIgnore because createAll() emits CREATE TABLE IF NOT EXISTS:
+      // on web, a storage-tier fallback (OPFS -> sharedIndexedDb) can leave
+      // drift treating an already-seeded database as newly created, and a
+      // plain insert would then fail the row's own primary key.
+      await into(syncCursor).insert(
+        SyncCursorCompanion.insert(id: const Value(0)),
+        mode: InsertMode.insertOrIgnore,
+      );
     },
     onUpgrade: (m, from, to) async {
       // An install several versions behind runs these in order and keeps its
