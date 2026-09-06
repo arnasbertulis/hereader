@@ -98,11 +98,16 @@ class _SyncScreenState extends State<SyncScreen> {
                   horizontal: AppSpacing.lg,
                   vertical: AppSpacing.sm,
                 ),
-                child: FilledButton(
-                  onPressed: signedIn && status != SyncStatus.syncing
-                      ? _syncNow
-                      : null,
-                  child: const Text('Sync now'),
+                child: Center(
+                  child: FilledButton(
+                    onPressed: signedIn && status != SyncStatus.syncing
+                        ? _syncNow
+                        : null,
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(200, 56),
+                    ),
+                    child: const Text('Sync now'),
+                  ),
                 ),
               ),
               const Divider(),

@@ -95,15 +95,23 @@ class AccountScreen extends StatelessWidget {
                   horizontal: AppSpacing.lg,
                   vertical: AppSpacing.sm,
                 ),
-                child: signedIn
-                    ? OutlinedButton(
-                        onPressed: () => _signOut(context),
-                        child: const Text('Sign out'),
-                      )
-                    : FilledButton(
-                        onPressed: () => _signIn(context),
-                        child: const Text('Sign in'),
-                      ),
+                child: Center(
+                  child: signedIn
+                      ? OutlinedButton(
+                          onPressed: () => _signOut(context),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(200, 56),
+                          ),
+                          child: const Text('Sign out'),
+                        )
+                      : FilledButton(
+                          onPressed: () => _signIn(context),
+                          style: FilledButton.styleFrom(
+                            minimumSize: const Size(200, 56),
+                          ),
+                          child: const Text('Sign in'),
+                        ),
+                ),
               ),
               const Divider(),
               FutureBuilder<String>(
