@@ -36,7 +36,7 @@ dependencies:
   file_picker: ^12.1.2
   epub_reader:
     path: ../packages/epub_reader
-  drift: ^2.34.3
+  drift: ^2.34.4
   drift_flutter: ^0.3.1
   http: ^1.6.0
   flutter_secure_storage: ^10.3.1
