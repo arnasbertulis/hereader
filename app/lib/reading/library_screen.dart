@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -719,13 +720,23 @@ class _BookShelf extends StatelessWidget {
           );
         }
 
-        final tileWidth = (available - AppSpacing.md * (columns - 1)) / columns;
+        // Once columns has maxed out, extra window width no longer buys a
+        // wider tile — AppShelf.tileWidth is a cap, not just the divisor
+        // used to pick the column count. The width that cap leaves unused
+        // becomes side margin instead of stretching every tile's cover into
+        // a blank rectangle.
+        final tileWidth = min(
+          (available - AppSpacing.md * (columns - 1)) / columns,
+          AppShelf.tileWidth,
+        );
+        final gridWidth = tileWidth * columns + AppSpacing.md * (columns - 1);
+        final extraMargin = (available - gridWidth) / 2;
 
         return GridView.builder(
           padding: EdgeInsets.fromLTRB(
-            padding,
+            padding + extraMargin,
             0,
-            padding,
+            padding + extraMargin,
             _shelfBottomPadding,
           ),
           physics: const AlwaysScrollableScrollPhysics(),
