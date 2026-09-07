@@ -267,6 +267,29 @@ void main() {
     );
   });
 
+  group('the reader at short-height windows', () {
+    testWidgets('the word does not overlap the controls', (tester) async {
+      // Issue #325: at phone-landscape heights (roughly 390-450px tall) the
+      // centred RSVP word visually collided with the progress bar and the
+      // transport icons below it, because the word centred across the whole
+      // screen while the controls painted over the same region rather than
+      // the two sharing the height. 390 sits in the reported band.
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(844, 390);
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(reader());
+      await tester.pumpAndSettle();
+
+      final word = tester.getRect(find.text(_word(tester)));
+      final progressBar = tester.getRect(find.byType(LinearProgressIndicator));
+
+      expect(word.bottom, lessThanOrEqualTo(progressBar.top));
+
+      await disposeTree(tester);
+    });
+  });
+
   group('the forward jumps', () {
     testWidgets('a sentence lands on the word after the full stop', (
       tester,
