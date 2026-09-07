@@ -6,6 +6,7 @@ import '../sync/last_synced.dart';
 import '../sync/sync_engine.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
+import '../theme/content_width.dart';
 
 /// What sync has done, and a way to make it run now.
 ///
@@ -73,64 +74,66 @@ class _SyncScreenState extends State<SyncScreen> {
           final status = snapshot.data?.status ?? SyncStatus.idle;
           final message = snapshot.data?.message;
 
-          return ListView(
-            padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
-            children: [
-              ListTile(
-                leading: Icon(_iconFor(status, signedIn)),
-                title: Text(_titleFor(status, signedIn)),
-                subtitle: Text(
-                  signedIn
-                      ? describeLastSynced(_lastSynced)
-                      : 'Sign in under Account to turn sync on.',
+          return ContentWidth(
+            child: ListView(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+              children: [
+                ListTile(
+                  leading: Icon(_iconFor(status, signedIn)),
+                  title: Text(_titleFor(status, signedIn)),
+                  subtitle: Text(
+                    signedIn
+                        ? describeLastSynced(_lastSynced)
+                        : 'Sign in under Account to turn sync on.',
+                  ),
                 ),
-              ),
-              if (message != null)
+                if (message != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.lg,
+                      vertical: AppSpacing.sm,
+                    ),
+                    child: Text(message, style: theme.textTheme.bodyMedium),
+                  ),
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: AppSpacing.lg,
                     vertical: AppSpacing.sm,
                   ),
-                  child: Text(message, style: theme.textTheme.bodyMedium),
-                ),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.lg,
-                  vertical: AppSpacing.sm,
-                ),
-                child: Center(
-                  child: FilledButton(
-                    onPressed: signedIn && status != SyncStatus.syncing
-                        ? _syncNow
-                        : null,
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size(200, 56),
+                  child: Center(
+                    child: FilledButton(
+                      onPressed: signedIn && status != SyncStatus.syncing
+                          ? _syncNow
+                          : null,
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(200, 56),
+                      ),
+                      child: const Text('Sync now'),
                     ),
-                    child: const Text('Sync now'),
                   ),
                 ),
-              ),
-              const Divider(),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  AppSpacing.md,
-                  AppSpacing.lg,
-                  0,
+                const Divider(),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.md,
+                    AppSpacing.lg,
+                    0,
+                  ),
+                  child: Text(
+                    'Sync carries your place in each book and your reading '
+                    'profiles. It does not carry the books themselves: an EPUB '
+                    'stays on the device you added it to.\n\n'
+                    'Changes you make offline are kept and sent the next time '
+                    'the app reaches the service. Sync also runs by itself '
+                    'every few minutes while the app is open.\n\n'
+                    'When two devices land far apart in the same book, the app '
+                    'asks which place to keep rather than picking one.',
+                    style: theme.textTheme.bodyMedium,
+                  ),
                 ),
-                child: Text(
-                  'Sync carries your place in each book and your reading '
-                  'profiles. It does not carry the books themselves: an EPUB '
-                  'stays on the device you added it to.\n\n'
-                  'Changes you make offline are kept and sent the next time '
-                  'the app reaches the service. Sync also runs by itself '
-                  'every few minutes while the app is open.\n\n'
-                  'When two devices land far apart in the same book, the app '
-                  'asks which place to keep rather than picking one.',
-                  style: theme.textTheme.bodyMedium,
-                ),
-              ),
-            ],
+              ],
+            ),
           );
         },
       ),

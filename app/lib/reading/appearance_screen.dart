@@ -4,6 +4,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import '../theme/appearance.dart';
+import '../theme/content_width.dart';
 import 'custom_accent_screen.dart';
 import 'info_dot.dart';
 import 'section_header.dart';
@@ -33,116 +34,121 @@ class AppearanceScreen extends StatelessWidget {
           final settings = controller.settings;
           final theme = Theme.of(context);
 
-          return ListView(
-            padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
-            children: [
-              const SectionHeader('Theme'),
-              for (final option in _themeOptions)
-                ListTile(
-                  leading: Icon(
-                    option.mode == settings.themeMode
-                        ? AppIcons.chosen
-                        : AppIcons.notChosen,
+          return ContentWidth(
+            child: ListView(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+              children: [
+                const SectionHeader('Theme'),
+                for (final option in _themeOptions)
+                  ListTile(
+                    leading: Icon(
+                      option.mode == settings.themeMode
+                          ? AppIcons.chosen
+                          : AppIcons.notChosen,
+                    ),
+                    title: Text(option.label),
+                    subtitle: Text(option.description),
+                    selected: option.mode == settings.themeMode,
+                    onTap: () => controller.setThemeMode(option.mode),
                   ),
-                  title: Text(option.label),
-                  subtitle: Text(option.description),
-                  selected: option.mode == settings.themeMode,
-                  onTap: () => controller.setThemeMode(option.mode),
-                ),
 
-              SectionHeader(
-                'Accent colour',
-                info: InfoDot(
-                  semanticLabel: 'About accent colour',
-                  explanation:
-                      'Everything else stays grey, so the colour means '
-                      'something wherever it appears.',
+                SectionHeader(
+                  'Accent colour',
+                  info: InfoDot(
+                    semanticLabel: 'About accent colour',
+                    explanation:
+                        'Everything else stays grey, so the colour means '
+                        'something wherever it appears.',
+                  ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  0,
-                  AppSpacing.lg,
-                  AppSpacing.sm,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    0,
+                    AppSpacing.lg,
+                    AppSpacing.sm,
+                  ),
+                  child: Text(
+                    'Used on buttons, selected rows and progress.',
+                    style: theme.textTheme.bodyMedium,
+                  ),
                 ),
-                child: Text(
-                  'Used on buttons, selected rows and progress.',
-                  style: theme.textTheme.bodyMedium,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                child: Wrap(
-                  spacing: AppSpacing.xs,
-                  runSpacing: AppSpacing.xs,
-                  children: [
-                    for (final accent in AppAccents.all)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                  ),
+                  child: Wrap(
+                    spacing: AppSpacing.xs,
+                    runSpacing: AppSpacing.xs,
+                    children: [
+                      for (final accent in AppAccents.all)
+                        _AccentSwatch(
+                          accent: accent,
+                          selected: accent.color == settings.accent,
+                          onTap: () => controller.setAccent(accent.color),
+                        ),
+                      // Selected when the stored colour is none of the six.
+                      // The swatch shows that colour rather than a fixed
+                      // sample, so the row reads as one set of choices with
+                      // one of them selected.
                       _AccentSwatch(
-                        accent: accent,
-                        selected: accent.color == settings.accent,
-                        onTap: () => controller.setAccent(accent.color),
-                      ),
-                    // Selected when the stored colour is none of the six.
-                    // The swatch shows that colour rather than a fixed
-                    // sample, so the row reads as one set of choices with
-                    // one of them selected.
-                    _AccentSwatch(
-                      accent: AppAccent('Custom', settings.accent),
-                      selected: !AppAccents.all.any(
-                        (a) => a.color == settings.accent,
-                      ),
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              CustomAccentScreen(controller: controller),
+                        accent: AppAccent('Custom', settings.accent),
+                        selected: !AppAccents.all.any(
+                          (a) => a.color == settings.accent,
+                        ),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                CustomAccentScreen(controller: controller),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
 
-              SectionHeader(
-                'Contrast',
-                info: InfoDot(
-                  semanticLabel: 'About appearance settings',
-                  explanation:
-                      'These three stay on this device. A phone read '
-                      'outdoors and a desktop in a dim room can want '
-                      'different ones.\n\n'
-                      'None of them touch the reading surface. The colours '
-                      'a word is drawn in belong to the reading profile you '
-                      'chose, under Reading profiles.',
+                SectionHeader(
+                  'Contrast',
+                  info: InfoDot(
+                    semanticLabel: 'About appearance settings',
+                    explanation:
+                        'These three stay on this device. A phone read '
+                        'outdoors and a desktop in a dim room can want '
+                        'different ones.\n\n'
+                        'None of them touch the reading surface. The colours '
+                        'a word is drawn in belong to the reading profile you '
+                        'chose, under Reading profiles.',
+                  ),
                 ),
-              ),
-              ListTile(
-                onTap: () => controller.setHighContrast(!settings.highContrast),
-                title: const Text('High contrast'),
-                subtitle: const Text('Pure black and white surfaces.'),
-                // A genuine trailing widget, not the InfoDot inside the
-                // tile's own title — see InfoDot's doc comment and #357's
-                // rule 4: that placement risks stealing the row's own tap.
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    InfoDot(
-                      semanticLabel: 'About high contrast',
-                      explanation:
-                          'Pure black and white surfaces, darker borders, '
-                          'and thicker lines between them.\n\n'
-                          'Your device may already ask for high contrast, '
-                          'in which case the app follows it whether or not '
-                          'this is on.',
-                    ),
-                    Switch(
-                      value: settings.highContrast,
-                      onChanged: controller.setHighContrast,
-                    ),
-                  ],
+                ListTile(
+                  onTap: () =>
+                      controller.setHighContrast(!settings.highContrast),
+                  title: const Text('High contrast'),
+                  subtitle: const Text('Pure black and white surfaces.'),
+                  // A genuine trailing widget, not the InfoDot inside the
+                  // tile's own title — see InfoDot's doc comment and #357's
+                  // rule 4: that placement risks stealing the row's own tap.
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      InfoDot(
+                        semanticLabel: 'About high contrast',
+                        explanation:
+                            'Pure black and white surfaces, darker borders, '
+                            'and thicker lines between them.\n\n'
+                            'Your device may already ask for high contrast, '
+                            'in which case the app follows it whether or not '
+                            'this is on.',
+                      ),
+                      Switch(
+                        value: settings.highContrast,
+                        onChanged: controller.setHighContrast,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           );
         },
       ),

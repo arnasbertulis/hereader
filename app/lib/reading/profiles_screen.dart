@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
+import '../theme/content_width.dart';
 import 'profile_actions.dart';
 import 'profile_edit_screen.dart';
 import 'profile_row.dart';
@@ -128,53 +129,55 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
               final presets = profiles.where((p) => p.isBuiltIn).toList();
               final mine = profiles.where((p) => !p.isBuiltIn).toList();
 
-              return ListView(
-                children: [
-                  const SectionHeader('Your profiles'),
-                  if (mine.isEmpty)
+              return ContentWidth(
+                child: ListView(
+                  children: [
+                    const SectionHeader('Your profiles'),
+                    if (mine.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                        child: Text(
+                          'None yet. Copy a preset below to make one you can '
+                          'change.',
+                        ),
+                      ),
+                    for (final profile in mine)
+                      ProfileRow(
+                        profile: profile,
+                        selected: profile.id == activeId,
+                        onSelect: () => _select(profile),
+                        onEdit: () => _edit(profile),
+                        onDuplicate: () => _duplicate(profile),
+                        onDelete: () => _delete(profile),
+                      ),
+
+                    const SectionHeader('Presets'),
                     const Padding(
                       padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
                       child: Text(
-                        'None yet. Copy a preset below to make one you can '
-                        'change.',
+                        'Starting points that ship with the app. Copy one to '
+                        'change it.',
                       ),
                     ),
-                  for (final profile in mine)
-                    ProfileRow(
-                      profile: profile,
-                      selected: profile.id == activeId,
-                      onSelect: () => _select(profile),
-                      onEdit: () => _edit(profile),
-                      onDuplicate: () => _duplicate(profile),
-                      onDelete: () => _delete(profile),
-                    ),
+                    for (final profile in presets)
+                      ProfileRow(
+                        profile: profile,
+                        selected: profile.id == activeId,
+                        onSelect: () => _select(profile),
+                        onEdit: () => _edit(profile),
+                        onDuplicate: () => _duplicate(profile),
+                      ),
 
-                  const SectionHeader('Presets'),
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                    child: Text(
-                      'Starting points that ship with the app. Copy one to '
-                      'change it.',
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 24, 16, 32),
+                      child: Text(
+                        'Your profiles follow you between devices. Which one '
+                        'is selected does not: a phone read outdoors and a '
+                        'desktop in a dim room can want different ones.',
+                      ),
                     ),
-                  ),
-                  for (final profile in presets)
-                    ProfileRow(
-                      profile: profile,
-                      selected: profile.id == activeId,
-                      onSelect: () => _select(profile),
-                      onEdit: () => _edit(profile),
-                      onDuplicate: () => _duplicate(profile),
-                    ),
-
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(16, 24, 16, 32),
-                    child: Text(
-                      'Your profiles follow you between devices. Which one '
-                      'is selected does not: a phone read outdoors and a '
-                      'desktop in a dim room can want different ones.',
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               );
             },
           );

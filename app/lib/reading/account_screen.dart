@@ -8,6 +8,7 @@ import '../sync/sign_in_screen.dart';
 import '../sync/sync_engine.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
+import '../theme/content_width.dart';
 import 'device_label.dart';
 
 /// The session, the device, and the way in and out of an account.
@@ -71,71 +72,73 @@ class AccountScreen extends StatelessWidget {
         builder: (context, snapshot) {
           final signedIn = snapshot.data != null;
 
-          return ListView(
-            padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
-            children: [
-              ListTile(
-                leading: Icon(
-                  signedIn
-                      ? AppIcons.accountSignedIn
-                      : AppIcons.accountSignedOut,
+          return ContentWidth(
+            child: ListView(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+              children: [
+                ListTile(
+                  leading: Icon(
+                    signedIn
+                        ? AppIcons.accountSignedIn
+                        : AppIcons.accountSignedOut,
+                  ),
+                  title: Text(signedIn ? 'Signed in' : 'Not signed in'),
+                  // No address. AuthStore holds tokens and a device id and
+                  // nothing else, and naming the account from anything else
+                  // here would be a guess printed as a fact.
+                  subtitle: Text(
+                    signedIn
+                        ? 'Your places and profiles reach your other devices.'
+                        : 'Reading works without an account. Sign in to carry '
+                              'your place between devices.',
+                  ),
                 ),
-                title: Text(signedIn ? 'Signed in' : 'Not signed in'),
-                // No address. AuthStore holds tokens and a device id and
-                // nothing else, and naming the account from anything else
-                // here would be a guess printed as a fact.
-                subtitle: Text(
-                  signedIn
-                      ? 'Your places and profiles reach your other devices.'
-                      : 'Reading works without an account. Sign in to carry '
-                            'your place between devices.',
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.lg,
-                  vertical: AppSpacing.sm,
-                ),
-                child: Center(
-                  child: signedIn
-                      ? OutlinedButton(
-                          onPressed: () => _signOut(context),
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(200, 56),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.lg,
+                    vertical: AppSpacing.sm,
+                  ),
+                  child: Center(
+                    child: signedIn
+                        ? OutlinedButton(
+                            onPressed: () => _signOut(context),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(200, 56),
+                            ),
+                            child: const Text('Sign out'),
+                          )
+                        : FilledButton(
+                            onPressed: () => _signIn(context),
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(200, 56),
+                            ),
+                            child: const Text('Sign in'),
                           ),
-                          child: const Text('Sign out'),
-                        )
-                      : FilledButton(
-                          onPressed: () => _signIn(context),
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size(200, 56),
-                          ),
-                          child: const Text('Sign in'),
-                        ),
+                  ),
                 ),
-              ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(AppIcons.device),
-                title: const Text('This device'),
-                subtitle: Text(devicePlatformLabel()),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  AppSpacing.sm,
-                  AppSpacing.lg,
-                  0,
+                const Divider(),
+                ListTile(
+                  leading: const Icon(AppIcons.device),
+                  title: const Text('This device'),
+                  subtitle: Text(devicePlatformLabel()),
                 ),
-                child: Text(
-                  'This name is just for you, so you can tell this device '
-                  'from your others when the app asks which place to keep '
-                  'in a synced book. A separate id, not shown here, goes '
-                  'into every change this device sends.',
-                  style: theme.textTheme.bodySmall,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg,
+                    AppSpacing.sm,
+                    AppSpacing.lg,
+                    0,
+                  ),
+                  child: Text(
+                    'This name is just for you, so you can tell this device '
+                    'from your others when the app asks which place to keep '
+                    'in a synced book. A separate id, not shown here, goes '
+                    'into every change this device sends.',
+                    style: theme.textTheme.bodySmall,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           );
         },
       ),
