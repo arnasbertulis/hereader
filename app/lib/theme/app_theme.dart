@@ -186,6 +186,8 @@ ThemeData appTheme({
       iconColor: scheme.onSurfaceVariant,
       textColor: scheme.onSurface,
       selectedColor: scheme.onSurface,
+      titleTextStyle: appTextTheme(scheme).titleMedium,
+      subtitleTextStyle: appTextTheme(scheme).bodyMedium,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadii.md),
       ),

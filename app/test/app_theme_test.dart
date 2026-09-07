@@ -233,6 +233,21 @@ void main() {
         isNot(theme.colorScheme.primary),
       );
     });
+
+    test('a list tile title is heavier than its subtitle', () {
+      final theme = appTheme(brightness: Brightness.light);
+      final title = theme.listTileTheme.titleTextStyle;
+      final subtitle = theme.listTileTheme.subtitleTextStyle;
+
+      expect(title, isNotNull);
+      expect(subtitle, isNotNull);
+      expect(
+        title!.fontWeight!.value,
+        greaterThan(subtitle!.fontWeight!.value),
+      );
+      expect(title.fontWeight, theme.textTheme.titleMedium!.fontWeight);
+      expect(subtitle.fontWeight, theme.textTheme.bodyMedium!.fontWeight);
+    });
   });
 
   group('pushing a route', () {
