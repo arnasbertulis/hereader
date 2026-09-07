@@ -10,6 +10,7 @@ import '../data/library_repository.dart';
 import '../sync/sync_engine.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
+import '../theme/content_width.dart';
 import 'add_menu_dispatcher.dart';
 import 'book_cover.dart';
 import 'book_opener.dart';
@@ -20,10 +21,6 @@ import 'section_header.dart';
 
 /// How many books the recent row shows, beyond the one in the continue card.
 const int _recentCount = 4;
-
-/// Widest the column of content gets. Past this the screen stops growing
-/// and centres, because a 1600px-wide continue tile is a banner.
-const double _maxContentWidth = 720;
 
 /// Width of the continue tile.
 ///
@@ -217,10 +214,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     return Center(
                       child: SingleChildScrollView(
                         padding: EdgeInsets.all(_screenPadding(context)),
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(
-                            maxWidth: _maxContentWidth,
-                          ),
+                        child: ContentWidth(
                           child: _NothingOpenYet(
                             onAdd: _busy ? null : _openAddMenu,
                           ),
@@ -230,10 +224,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   }
 
                   return Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxWidth: _maxContentWidth,
-                      ),
+                    child: ContentWidth(
                       child: ListView(
                         // Well off the top. The tile is the only thing up
                         // there and it reads as pinned to the status bar

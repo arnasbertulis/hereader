@@ -27,6 +27,19 @@ abstract final class AppShelf {
   static const double tileWidth = 172;
 }
 
+/// Widest a screen body gets before it stops growing and centres, so
+/// content laid out for a phone does not stretch edge to edge on a wide
+/// desktop window. See `ContentWidth`.
+abstract final class AppContent {
+  /// Settings lists and forms. Matches Home's continue-tile column, the one
+  /// place this cap already existed before it had a name.
+  static const double maxWidth = 720;
+
+  /// Prose — About, and any settings description long enough to wrap.
+  /// Narrower than [maxWidth]: about 70 characters per line at 16px.
+  static const double proseMaxWidth = 640;
+}
+
 /// Three radii, and no others. Chips and progress-bar ends use [sm]; cards,
 /// tiles, buttons and rows use [md]; the nav indicator and any FAB use
 /// [stadium] via a `StadiumBorder` rather than a numeric radius.

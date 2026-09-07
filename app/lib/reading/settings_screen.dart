@@ -10,6 +10,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import '../theme/appearance.dart';
+import '../theme/content_width.dart';
 import 'about_screen.dart';
 import 'account_screen.dart';
 import 'appearance_screen.dart';
@@ -116,71 +117,74 @@ class _SettingsScreenState extends State<SettingsScreen> {
               builder: (context, snapshot) {
                 final profiles = snapshot.data ?? const <ReadingProfile>[];
 
-                return ListView(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
-                  children: [
-                    StreamBuilder<Session?>(
-                      stream: widget.api.auth.sessions,
-                      initialData: widget.api.auth.current,
-                      builder: (context, session) => _IndexRow(
-                        icon: AppIcons.sectionAccount,
-                        title: 'Account',
-                        value: session.data == null
-                            ? 'Not signed in'
-                            : 'Signed in',
+                return ContentWidth(
+                  child: ListView(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+                    children: [
+                      StreamBuilder<Session?>(
+                        stream: widget.api.auth.sessions,
+                        initialData: widget.api.auth.current,
+                        builder: (context, session) => _IndexRow(
+                          icon: AppIcons.sectionAccount,
+                          title: 'Account',
+                          value: session.data == null
+                              ? 'Not signed in'
+                              : 'Signed in',
+                          onTap: () => _push(
+                            AccountScreen(api: widget.api, sync: widget.sync),
+                          ),
+                        ),
+                      ),
+                      _IndexRow(
+                        icon: AppIcons.sectionProfiles,
+                        title: 'Reading profiles',
+                        value: _profilesValue(profiles),
                         onTap: () => _push(
-                          AccountScreen(api: widget.api, sync: widget.sync),
+                          ProfilesScreen(
+                            repository: widget.repository,
+                            issueStamp: widget.issueStamp,
+                          ),
                         ),
                       ),
-                    ),
-                    _IndexRow(
-                      icon: AppIcons.sectionProfiles,
-                      title: 'Reading profiles',
-                      value: _profilesValue(profiles),
-                      onTap: () => _push(
-                        ProfilesScreen(
-                          repository: widget.repository,
-                          issueStamp: widget.issueStamp,
+                      _IndexRow(
+                        icon: AppIcons.sectionAppearance,
+                        title: 'Appearance',
+                        value: describeAppearance(widget.appearance.settings),
+                        onTap: () => _push(
+                          AppearanceScreen(controller: widget.appearance),
                         ),
                       ),
-                    ),
-                    _IndexRow(
-                      icon: AppIcons.sectionAppearance,
-                      title: 'Appearance',
-                      value: describeAppearance(widget.appearance.settings),
-                      onTap: () => _push(
-                        AppearanceScreen(controller: widget.appearance),
-                      ),
-                    ),
-                    _IndexRow(
-                      icon: AppIcons.sectionReading,
-                      title: 'Reading',
-                      value: describeReading(widget.display.timeLeftScope),
-                      onTap: () =>
-                          _push(ReadingSettingsScreen(display: widget.display)),
-                    ),
-                    _IndexRow(
-                      icon: AppIcons.sectionSync,
-                      title: 'Sync',
-                      value: widget.api.auth.isSignedIn
-                          ? describeLastSynced(_lastSynced)
-                          : 'Off. Sign in to turn it on.',
-                      onTap: () => _push(
-                        SyncScreen(
-                          repository: widget.repository,
-                          api: widget.api,
-                          sync: widget.sync,
+                      _IndexRow(
+                        icon: AppIcons.sectionReading,
+                        title: 'Reading',
+                        value: describeReading(widget.display.timeLeftScope),
+                        onTap: () => _push(
+                          ReadingSettingsScreen(display: widget.display),
                         ),
                       ),
-                    ),
-                    _IndexRow(
-                      icon: AppIcons.sectionAbout,
-                      title: 'About',
-                      value:
-                          'Licence, research, and what this app does not claim',
-                      onTap: () => _push(const AboutScreen()),
-                    ),
-                  ],
+                      _IndexRow(
+                        icon: AppIcons.sectionSync,
+                        title: 'Sync',
+                        value: widget.api.auth.isSignedIn
+                            ? describeLastSynced(_lastSynced)
+                            : 'Off. Sign in to turn it on.',
+                        onTap: () => _push(
+                          SyncScreen(
+                            repository: widget.repository,
+                            api: widget.api,
+                            sync: widget.sync,
+                          ),
+                        ),
+                      ),
+                      _IndexRow(
+                        icon: AppIcons.sectionAbout,
+                        title: 'About',
+                        value:
+                            'Licence, research, and what this app does not claim',
+                        onTap: () => _push(const AboutScreen()),
+                      ),
+                    ],
+                  ),
                 );
               },
             );

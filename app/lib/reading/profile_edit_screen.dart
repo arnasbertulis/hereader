@@ -5,6 +5,7 @@ import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
 import '../theme/app_icons.dart';
+import '../theme/content_width.dart';
 import 'profile_presentation.dart';
 import 'reading_surface.dart';
 import 'rgb_sliders.dart';
@@ -180,72 +181,238 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         appBar: AppBar(
           title: Text(_editable ? _draft.name : '${_draft.name} (preset)'),
         ),
-        body: ListView(
-          children: [
-            _Preview(profile: _draft, presentation: resolved),
+        body: ContentWidth(
+          child: ListView(
+            children: [
+              _Preview(profile: _draft, presentation: resolved),
 
-            if (!_editable) _PresetBanner(onCopy: _makeCopy, name: _draft.name),
+              if (!_editable)
+                _PresetBanner(onCopy: _makeCopy, name: _draft.name),
 
-            const SectionHeader(
-              'Name',
-              padding: EdgeInsets.fromLTRB(16, 28, 16, 12),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              // A disabled TextField paints its text at the same grey as
-              // hintText, so a preset's name reads as an empty field with a
-              // placeholder rather than as its own name — see #331. Text
-              // instead of a field that cannot be typed into.
-              child: _editable
-                  ? TextField(
-                      controller: _name,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                      ),
-                      onChanged: (value) =>
-                          _update((p) => p.copyWith(name: value)),
-                    )
-                  : Text(
-                      _draft.name,
-                      style: Theme.of(context).textTheme.bodyLarge,
-                    ),
-            ),
-
-            // -- pacing ------------------------------------------------
-            const SectionHeader(
-              'How the text advances',
-              padding: EdgeInsets.fromLTRB(16, 28, 16, 12),
-            ),
-
-            // The whole pacing model is inert under sliding text: velocity
-            // comes from the reading speed alone, and `PlaybackSession`
-            // branches on the presentation mode before it ever consults a
-            // `PacingModel`, so the kind, the length scaling and the three
-            // pauses have nothing to act on. Hidden rather than greyed,
-            // like the fade and fixation controls below — there are six of
-            // them, and six greyed controls is a section that looks broken.
-            if (!scrolling) ...[
+              const SectionHeader(
+                'Name',
+                padding: EdgeInsets.fromLTRB(16, 28, 16, 12),
+              ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: SegmentedButton<PacingModelKind>(
+                // A disabled TextField paints its text at the same grey as
+                // hintText, so a preset's name reads as an empty field with a
+                // placeholder rather than as its own name — see #331. Text
+                // instead of a field that cannot be typed into.
+                child: _editable
+                    ? TextField(
+                        controller: _name,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                        ),
+                        onChanged: (value) =>
+                            _update((p) => p.copyWith(name: value)),
+                      )
+                    : Text(
+                        _draft.name,
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+              ),
+
+              // -- pacing ------------------------------------------------
+              const SectionHeader(
+                'How the text advances',
+                padding: EdgeInsets.fromLTRB(16, 28, 16, 12),
+              ),
+
+              // The whole pacing model is inert under sliding text: velocity
+              // comes from the reading speed alone, and `PlaybackSession`
+              // branches on the presentation mode before it ever consults a
+              // `PacingModel`, so the kind, the length scaling and the three
+              // pauses have nothing to act on. Hidden rather than greyed,
+              // like the fade and fixation controls below — there are six of
+              // them, and six greyed controls is a section that looks broken.
+              if (!scrolling) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: SegmentedButton<PacingModelKind>(
+                    segments: const [
+                      ButtonSegment(
+                        value: PacingModelKind.constant,
+                        label: Text('Steady'),
+                      ),
+                      ButtonSegment(
+                        value: PacingModelKind.lengthScaled,
+                        label: Text('By length'),
+                      ),
+                      ButtonSegment(
+                        value: PacingModelKind.elicited,
+                        label: Text('Manual'),
+                      ),
+                    ],
+                    selected: {pacing.kind},
+                    onSelectionChanged: _editable
+                        ? (selected) => _updatePacing(
+                            (p) => p.copyWith(kind: selected.first),
+                          )
+                        : null,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: Text(
+                    describePacingKind(pacing.kind),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ],
+
+              SettingSlider(
+                label: 'Reading speed',
+                value: pacing.baseWpm,
+                valueLabel: '${pacing.baseWpm.round()} wpm',
+                min: 60,
+                max: 800,
+                divisions: 74,
+                enabled: _editable && timed,
+                help:
+                    'How fast words are shown. Match it to a pace you can '
+                    'hold for a whole page, not the fastest you can follow '
+                    'for a sentence.',
+                onChanged: (v) => _updatePacing((p) => p.copyWith(baseWpm: v)),
+              ),
+
+              if (!scrolling)
+                SettingSlider(
+                  label: 'Length scaling',
+                  value: pacing.lengthScaleStrength,
+                  valueLabel: pacing.lengthScaleStrength == 0
+                      ? 'off'
+                      : '${(pacing.lengthScaleStrength * 100).round()}%',
+                  min: 0,
+                  max: 1,
+                  divisions: 20,
+                  // At zero this model behaves exactly like the steady one, which
+                  // is why it is a slider rather than a second mode.
+                  enabled:
+                      _editable && pacing.kind == PacingModelKind.lengthScaled,
+                  help:
+                      'How much a long word is held beyond a short one. At zero '
+                      'this reads the same as Steady.',
+                  onChanged: (v) =>
+                      _updatePacing((p) => p.copyWith(lengthScaleStrength: v)),
+                ),
+
+              if (!scrolling) ...[
+                SettingSlider(
+                  label: 'Pause at commas',
+                  value: pacing.clausePause.inMilliseconds.toDouble(),
+                  valueLabel: describeDurationScale(
+                    pacing.clausePause.inMilliseconds,
+                    max: _clausePauseMaxMs,
+                  ),
+                  min: 0,
+                  max: _clausePauseMaxMs.toDouble(),
+                  divisions: 40,
+                  enabled: _editable && timed,
+                  help:
+                      'How long the reading holds at a comma. Longer gives '
+                      'you a beat to catch your place before the sentence '
+                      'carries on.',
+                  onChanged: (v) => _updatePacing(
+                    (p) => p.copyWith(
+                      clausePause: Duration(milliseconds: v.round()),
+                    ),
+                  ),
+                ),
+
+                SettingSlider(
+                  label: 'Pause at sentences',
+                  value: pacing.sentencePause.inMilliseconds.toDouble(),
+                  valueLabel: describeDurationScale(
+                    pacing.sentencePause.inMilliseconds,
+                    max: _sentencePauseMaxMs,
+                  ),
+                  min: 0,
+                  max: _sentencePauseMaxMs.toDouble(),
+                  divisions: 30,
+                  enabled: _editable && timed,
+                  help:
+                      'How long the reading holds at a full stop. Longer '
+                      'gives you time to take in what the sentence said.',
+                  onChanged: (v) => _updatePacing(
+                    (p) => p.copyWith(
+                      sentencePause: Duration(milliseconds: v.round()),
+                    ),
+                  ),
+                ),
+
+                SettingSlider(
+                  label: 'Pause at paragraphs',
+                  value: pacing.paragraphPause.inMilliseconds.toDouble(),
+                  valueLabel: describeDurationScale(
+                    pacing.paragraphPause.inMilliseconds,
+                    max: _paragraphPauseMaxMs,
+                  ),
+                  min: 0,
+                  max: _paragraphPauseMaxMs.toDouble(),
+                  divisions: 40,
+                  enabled: _editable && timed,
+                  help:
+                      'How long the reading holds between paragraphs. '
+                      'Longer marks the break as more than another sentence.',
+                  onChanged: (v) => _updatePacing(
+                    (p) => p.copyWith(
+                      paragraphPause: Duration(milliseconds: v.round()),
+                    ),
+                  ),
+                ),
+              ],
+
+              SettingSlider(
+                label: 'Rewind on resume',
+                value: _draft.rewindWords.toDouble(),
+                valueLabel: _draft.rewindWords == 0
+                    ? 'none'
+                    : '${_draft.rewindWords} '
+                          'word${_draft.rewindWords == 1 ? '' : 's'}',
+                min: 0,
+                max: 10,
+                divisions: 10,
+                enabled: _editable,
+                help:
+                    'How far back to step when you start again after a pause, '
+                    'so you re-enter the sentence with some context.',
+                onChanged: (v) =>
+                    _update((p) => p.copyWith(rewindWords: v.round())),
+              ),
+
+              // -- text --------------------------------------------------
+              const SectionHeader(
+                'Text',
+                padding: EdgeInsets.fromLTRB(16, 28, 16, 12),
+              ),
+
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                // Typed rather than a bare `SegmentedButton`, so a finder
+                // looking for the polarity control cannot match this one.
+                // `reading_surface_test.dart` finds `SegmentedButton<Polarity>`
+                // by type.
+                child: SegmentedButton<PresentationMode>(
                   segments: const [
                     ButtonSegment(
-                      value: PacingModelKind.constant,
-                      label: Text('Steady'),
+                      value: PresentationMode.fixedSingle,
+                      label: Text('One word'),
                     ),
+                    // Two options. `shiftingWindow` is not built, and a control
+                    // offering something that does nothing is worse than one
+                    // that does not offer it — ADR 0020's argument, applied to
+                    // a setting rather than a button.
                     ButtonSegment(
-                      value: PacingModelKind.lengthScaled,
-                      label: Text('By length'),
-                    ),
-                    ButtonSegment(
-                      value: PacingModelKind.elicited,
-                      label: Text('Manual'),
+                      value: PresentationMode.continuousScroll,
+                      label: Text('Sliding'),
                     ),
                   ],
-                  selected: {pacing.kind},
+                  selected: {presentation.mode},
                   onSelectionChanged: _editable
-                      ? (selected) => _updatePacing(
-                          (p) => p.copyWith(kind: selected.first),
+                      ? (selected) => _updatePresentation(
+                          (p) => p.copyWith(mode: selected.first),
                         )
                       : null,
                 ),
@@ -253,491 +420,330 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 child: Text(
-                  describePacingKind(pacing.kind),
+                  describePresentationMode(presentation.mode),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
-            ],
+              if (reduceMotion != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: SettingWarning(reduceMotion),
+                ),
 
-            SettingSlider(
-              label: 'Reading speed',
-              value: pacing.baseWpm,
-              valueLabel: '${pacing.baseWpm.round()} wpm',
-              min: 60,
-              max: 800,
-              divisions: 74,
-              enabled: _editable && timed,
-              help:
-                  'How fast words are shown. Match it to a pace you can '
-                  'hold for a whole page, not the fastest you can follow '
-                  'for a sentence.',
-              onChanged: (v) => _updatePacing((p) => p.copyWith(baseWpm: v)),
-            ),
-
-            if (!scrolling)
               SettingSlider(
-                label: 'Length scaling',
-                value: pacing.lengthScaleStrength,
-                valueLabel: pacing.lengthScaleStrength == 0
-                    ? 'off'
-                    : '${(pacing.lengthScaleStrength * 100).round()}%',
-                min: 0,
-                max: 1,
-                divisions: 20,
-                // At zero this model behaves exactly like the steady one, which
-                // is why it is a slider rather than a second mode.
-                enabled:
-                    _editable && pacing.kind == PacingModelKind.lengthScaled,
+                label: 'Type size',
+                value: presentation.fontSizePt,
+                valueLabel: '${presentation.fontSizePt.round()} pt',
+                min: 12,
+                max: PresentationConfig.maxFontSizePt,
+                divisions: 84,
+                enabled: _editable,
                 help:
-                    'How much a long word is held beyond a short one. At zero '
-                    'this reads the same as Steady.',
+                    'How large each word is drawn. Larger holds up at a '
+                    'distance or with limited acuity.',
                 onChanged: (v) =>
-                    _updatePacing((p) => p.copyWith(lengthScaleStrength: v)),
+                    _updatePresentation((p) => p.copyWith(fontSizePt: v)),
               ),
 
-            if (!scrolling) ...[
               SettingSlider(
-                label: 'Pause at commas',
-                value: pacing.clausePause.inMilliseconds.toDouble(),
-                valueLabel: describeDurationScale(
-                  pacing.clausePause.inMilliseconds,
-                  max: _clausePauseMaxMs,
-                ),
+                label: 'Letter spacing',
+                value: presentation.letterSpacingEm,
+                valueLabel: presentation.letterSpacingEm == 0
+                    ? 'normal'
+                    : '+${presentation.letterSpacingEm.toStringAsFixed(2)} em',
                 min: 0,
-                max: _clausePauseMaxMs.toDouble(),
-                divisions: 40,
-                enabled: _editable && timed,
+                max: 0.5,
+                divisions: 25,
+                enabled: _editable,
                 help:
-                    'How long the reading holds at a comma. Longer gives '
-                    'you a beat to catch your place before the sentence '
-                    'carries on.',
-                onChanged: (v) => _updatePacing(
-                  (p) => p.copyWith(
-                    clausePause: Duration(milliseconds: v.round()),
-                  ),
-                ),
+                    'Extra space between letters. Wider spacing can make '
+                    'each word easier to pick apart.',
+                onChanged: (v) =>
+                    _updatePresentation((p) => p.copyWith(letterSpacingEm: v)),
               ),
 
               SettingSlider(
-                label: 'Pause at sentences',
-                value: pacing.sentencePause.inMilliseconds.toDouble(),
-                valueLabel: describeDurationScale(
-                  pacing.sentencePause.inMilliseconds,
-                  max: _sentencePauseMaxMs,
-                ),
-                min: 0,
-                max: _sentencePauseMaxMs.toDouble(),
-                divisions: 30,
-                enabled: _editable && timed,
-                help:
-                    'How long the reading holds at a full stop. Longer '
-                    'gives you time to take in what the sentence said.',
-                onChanged: (v) => _updatePacing(
-                  (p) => p.copyWith(
-                    sentencePause: Duration(milliseconds: v.round()),
-                  ),
-                ),
-              ),
-
-              SettingSlider(
-                label: 'Pause at paragraphs',
-                value: pacing.paragraphPause.inMilliseconds.toDouble(),
-                valueLabel: describeDurationScale(
-                  pacing.paragraphPause.inMilliseconds,
-                  max: _paragraphPauseMaxMs,
-                ),
-                min: 0,
-                max: _paragraphPauseMaxMs.toDouble(),
-                divisions: 40,
-                enabled: _editable && timed,
-                help:
-                    'How long the reading holds between paragraphs. '
-                    'Longer marks the break as more than another sentence.',
-                onChanged: (v) => _updatePacing(
-                  (p) => p.copyWith(
-                    paragraphPause: Duration(milliseconds: v.round()),
-                  ),
-                ),
-              ),
-            ],
-
-            SettingSlider(
-              label: 'Rewind on resume',
-              value: _draft.rewindWords.toDouble(),
-              valueLabel: _draft.rewindWords == 0
-                  ? 'none'
-                  : '${_draft.rewindWords} '
-                        'word${_draft.rewindWords == 1 ? '' : 's'}',
-              min: 0,
-              max: 10,
-              divisions: 10,
-              enabled: _editable,
-              help:
-                  'How far back to step when you start again after a pause, '
-                  'so you re-enter the sentence with some context.',
-              onChanged: (v) =>
-                  _update((p) => p.copyWith(rewindWords: v.round())),
-            ),
-
-            // -- text --------------------------------------------------
-            const SectionHeader(
-              'Text',
-              padding: EdgeInsets.fromLTRB(16, 28, 16, 12),
-            ),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              // Typed rather than a bare `SegmentedButton`, so a finder
-              // looking for the polarity control cannot match this one.
-              // `reading_surface_test.dart` finds `SegmentedButton<Polarity>`
-              // by type.
-              child: SegmentedButton<PresentationMode>(
-                segments: const [
-                  ButtonSegment(
-                    value: PresentationMode.fixedSingle,
-                    label: Text('One word'),
-                  ),
-                  // Two options. `shiftingWindow` is not built, and a control
-                  // offering something that does nothing is worse than one
-                  // that does not offer it — ADR 0020's argument, applied to
-                  // a setting rather than a button.
-                  ButtonSegment(
-                    value: PresentationMode.continuousScroll,
-                    label: Text('Sliding'),
-                  ),
-                ],
-                selected: {presentation.mode},
-                onSelectionChanged: _editable
-                    ? (selected) => _updatePresentation(
-                        (p) => p.copyWith(mode: selected.first),
-                      )
-                    : null,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: Text(
-                describePresentationMode(presentation.mode),
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ),
-            if (reduceMotion != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                child: SettingWarning(reduceMotion),
-              ),
-
-            SettingSlider(
-              label: 'Type size',
-              value: presentation.fontSizePt,
-              valueLabel: '${presentation.fontSizePt.round()} pt',
-              min: 12,
-              max: PresentationConfig.maxFontSizePt,
-              divisions: 84,
-              enabled: _editable,
-              help:
-                  'How large each word is drawn. Larger holds up at a '
-                  'distance or with limited acuity.',
-              onChanged: (v) =>
-                  _updatePresentation((p) => p.copyWith(fontSizePt: v)),
-            ),
-
-            SettingSlider(
-              label: 'Letter spacing',
-              value: presentation.letterSpacingEm,
-              valueLabel: presentation.letterSpacingEm == 0
-                  ? 'normal'
-                  : '+${presentation.letterSpacingEm.toStringAsFixed(2)} em',
-              min: 0,
-              max: 0.5,
-              divisions: 25,
-              enabled: _editable,
-              help:
-                  'Extra space between letters. Wider spacing can make '
-                  'each word easier to pick apart.',
-              onChanged: (v) =>
-                  _updatePresentation((p) => p.copyWith(letterSpacingEm: v)),
-            ),
-
-            SettingSlider(
-              label: 'Position across',
-              value: presentation.anchorX,
-              valueLabel: '${(presentation.anchorX * 100).round()}%',
-              min: 0,
-              max: 1,
-              divisions: 20,
-              enabled: _editable,
-              help:
-                  'Where the word sits on screen. A blind spot to one side '
-                  'is a reason to move it off centre.',
-              onChanged: (v) =>
-                  _updatePresentation((p) => p.copyWith(anchorX: v)),
-            ),
-
-            SettingSlider(
-              label: 'Position down',
-              value: presentation.anchorY,
-              valueLabel: '${(presentation.anchorY * 100).round()}%',
-              min: 0,
-              max: 1,
-              divisions: 20,
-              enabled: _editable,
-              help:
-                  'Where the word sits on screen, top to bottom. A blind '
-                  'spot above or below centre is a reason to move it.',
-              onChanged: (v) =>
-                  _updatePresentation((p) => p.copyWith(anchorY: v)),
-            ),
-
-            // The eye point, and only under sliding text: the fixed anchor
-            // holds one word in place and needs nothing pointing at it.
-            if (scrolling) ...[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                child: Text(
-                  'Where to look',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: SegmentedButton<CaretPlacement>(
-                  segments: const [
-                    ButtonSegment(
-                      value: CaretPlacement.above,
-                      label: Text('Above'),
-                    ),
-                    ButtonSegment(
-                      value: CaretPlacement.below,
-                      label: Text('Below'),
-                    ),
-                    ButtonSegment(
-                      value: CaretPlacement.both,
-                      label: Text('Both'),
-                    ),
-                  ],
-                  selected: {presentation.caretPlacement},
-                  onSelectionChanged: _editable
-                      ? (selected) => _updatePresentation(
-                          (p) => p.copyWith(caretPlacement: selected.first),
-                        )
-                      : null,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: SegmentedButton<CaretStyle>(
-                  segments: const [
-                    ButtonSegment(
-                      value: CaretStyle.filled,
-                      label: Text('Solid'),
-                    ),
-                    ButtonSegment(
-                      value: CaretStyle.outline,
-                      label: Text('Outline'),
-                    ),
-                    ButtonSegment(
-                      value: CaretStyle.chevron,
-                      label: Text('Chevron'),
-                    ),
-                  ],
-                  selected: {presentation.caretStyle},
-                  onSelectionChanged: _editable
-                      ? (selected) => _updatePresentation(
-                          (p) => p.copyWith(caretStyle: selected.first),
-                        )
-                      : null,
-                ),
-              ),
-              SettingSlider(
-                label: 'Caret distance',
-                value: presentation.caretGapEm,
-                valueLabel: presentation.caretGapEm == 0
-                    ? 'touching'
-                    : '${(presentation.caretGapEm * 100).round()}%',
+                label: 'Position across',
+                value: presentation.anchorX,
+                valueLabel: '${(presentation.anchorX * 100).round()}%',
                 min: 0,
                 max: 1,
                 divisions: 20,
                 enabled: _editable,
                 help:
-                    'How far the marker sits from the line, as a share of '
-                    'the type size. Further out is easier to see past a '
-                    'blind spot; closer in is easier to keep in one look.',
+                    'Where the word sits on screen. A blind spot to one side '
+                    'is a reason to move it off centre.',
                 onChanged: (v) =>
-                    _updatePresentation((p) => p.copyWith(caretGapEm: v)),
+                    _updatePresentation((p) => p.copyWith(anchorX: v)),
               ),
+
               SettingSlider(
-                label: 'Caret size',
-                value: presentation.caretScale,
-                valueLabel: '${(presentation.caretScale * 100).round()}%',
-                min: PresentationConfig.minCaretScale,
-                max: PresentationConfig.maxCaretScale,
+                label: 'Position down',
+                value: presentation.anchorY,
+                valueLabel: '${(presentation.anchorY * 100).round()}%',
+                min: 0,
+                max: 1,
                 divisions: 20,
                 enabled: _editable,
                 help:
-                    'How large the marker is drawn, as a share of its '
-                    'ordinary size. It scales with the type size either way, '
-                    'so this is how big it is beside the words rather than '
-                    'how big it is on screen.',
+                    'Where the word sits on screen, top to bottom. A blind '
+                    'spot above or below centre is a reason to move it.',
                 onChanged: (v) =>
-                    _updatePresentation((p) => p.copyWith(caretScale: v)),
+                    _updatePresentation((p) => p.copyWith(anchorY: v)),
               ),
-              // A solid wedge has no stroke to set, so the control is hidden
-              // rather than shown doing nothing — the same rule the pacing
-              // controls follow above. The stored value is left alone, so
-              // choosing an outline again restores it.
-              if (presentation.caretStyle != CaretStyle.filled)
+
+              // The eye point, and only under sliding text: the fixed anchor
+              // holds one word in place and needs nothing pointing at it.
+              if (scrolling) ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: Text(
+                    'Where to look',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: SegmentedButton<CaretPlacement>(
+                    segments: const [
+                      ButtonSegment(
+                        value: CaretPlacement.above,
+                        label: Text('Above'),
+                      ),
+                      ButtonSegment(
+                        value: CaretPlacement.below,
+                        label: Text('Below'),
+                      ),
+                      ButtonSegment(
+                        value: CaretPlacement.both,
+                        label: Text('Both'),
+                      ),
+                    ],
+                    selected: {presentation.caretPlacement},
+                    onSelectionChanged: _editable
+                        ? (selected) => _updatePresentation(
+                            (p) => p.copyWith(caretPlacement: selected.first),
+                          )
+                        : null,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: SegmentedButton<CaretStyle>(
+                    segments: const [
+                      ButtonSegment(
+                        value: CaretStyle.filled,
+                        label: Text('Solid'),
+                      ),
+                      ButtonSegment(
+                        value: CaretStyle.outline,
+                        label: Text('Outline'),
+                      ),
+                      ButtonSegment(
+                        value: CaretStyle.chevron,
+                        label: Text('Chevron'),
+                      ),
+                    ],
+                    selected: {presentation.caretStyle},
+                    onSelectionChanged: _editable
+                        ? (selected) => _updatePresentation(
+                            (p) => p.copyWith(caretStyle: selected.first),
+                          )
+                        : null,
+                  ),
+                ),
                 SettingSlider(
-                  label: 'Caret thickness',
-                  value: presentation.caretThicknessEm,
-                  valueLabel:
-                      '${(presentation.caretThicknessEm * 100).round()}%',
-                  min: PresentationConfig.minCaretThicknessEm,
-                  max: PresentationConfig.maxCaretThicknessEm,
+                  label: 'Caret distance',
+                  value: presentation.caretGapEm,
+                  valueLabel: presentation.caretGapEm == 0
+                      ? 'touching'
+                      : '${(presentation.caretGapEm * 100).round()}%',
+                  min: 0,
+                  max: 1,
                   divisions: 20,
                   enabled: _editable,
                   help:
-                      'How heavy the line of the marker is, as a share of '
-                      'the type size. Separate from its size, so a large '
-                      'light marker and a small heavy one are both '
-                      'available.',
+                      'How far the marker sits from the line, as a share of '
+                      'the type size. Further out is easier to see past a '
+                      'blind spot; closer in is easier to keep in one look.',
+                  onChanged: (v) =>
+                      _updatePresentation((p) => p.copyWith(caretGapEm: v)),
+                ),
+                SettingSlider(
+                  label: 'Caret size',
+                  value: presentation.caretScale,
+                  valueLabel: '${(presentation.caretScale * 100).round()}%',
+                  min: PresentationConfig.minCaretScale,
+                  max: PresentationConfig.maxCaretScale,
+                  divisions: 20,
+                  enabled: _editable,
+                  help:
+                      'How large the marker is drawn, as a share of its '
+                      'ordinary size. It scales with the type size either way, '
+                      'so this is how big it is beside the words rather than '
+                      'how big it is on screen.',
+                  onChanged: (v) =>
+                      _updatePresentation((p) => p.copyWith(caretScale: v)),
+                ),
+                // A solid wedge has no stroke to set, so the control is hidden
+                // rather than shown doing nothing — the same rule the pacing
+                // controls follow above. The stored value is left alone, so
+                // choosing an outline again restores it.
+                if (presentation.caretStyle != CaretStyle.filled)
+                  SettingSlider(
+                    label: 'Caret thickness',
+                    value: presentation.caretThicknessEm,
+                    valueLabel:
+                        '${(presentation.caretThicknessEm * 100).round()}%',
+                    min: PresentationConfig.minCaretThicknessEm,
+                    max: PresentationConfig.maxCaretThicknessEm,
+                    divisions: 20,
+                    enabled: _editable,
+                    help:
+                        'How heavy the line of the marker is, as a share of '
+                        'the type size. Separate from its size, so a large '
+                        'light marker and a small heavy one are both '
+                        'available.',
+                    onChanged: (v) => _updatePresentation(
+                      (p) => p.copyWith(caretThicknessEm: v),
+                    ),
+                  ),
+              ],
+
+              // Both of these are inert under continuous scroll: there is no
+              // moment at which one word replaces another to fade, and marking
+              // a fixation letter on moving text is a different feature that is
+              // not built. Hidden rather than disabled, and their stored values
+              // are left alone, so switching back restores them.
+              if (!scrolling)
+                SettingSlider(
+                  label: 'Fade between words',
+                  value: presentation.transitionMs.toDouble(),
+                  valueLabel: presentation.transitionMs == 0
+                      ? 'instant'
+                      : describeDurationScale(
+                          presentation.transitionMs,
+                          max: _transitionMaxMs,
+                        ),
+                  min: 0,
+                  max: _transitionMaxMs.toDouble(),
+                  divisions: 30,
+                  enabled: _editable,
+                  help:
+                      'How the reading hands off from one word to the next. '
+                      'A slower fade is easier to follow if a hard cut feels '
+                      'disorienting.',
                   onChanged: (v) => _updatePresentation(
-                    (p) => p.copyWith(caretThicknessEm: v),
+                    (p) => p.copyWith(transitionMs: v.round()),
                   ),
+                  warning: fadeWarning(_draft),
                 ),
-            ],
 
-            // Both of these are inert under continuous scroll: there is no
-            // moment at which one word replaces another to fade, and marking
-            // a fixation letter on moving text is a different feature that is
-            // not built. Hidden rather than disabled, and their stored values
-            // are left alone, so switching back restores them.
-            if (!scrolling)
-              SettingSlider(
-                label: 'Fade between words',
-                value: presentation.transitionMs.toDouble(),
-                valueLabel: presentation.transitionMs == 0
-                    ? 'instant'
-                    : describeDurationScale(
-                        presentation.transitionMs,
-                        max: _transitionMaxMs,
-                      ),
-                min: 0,
-                max: _transitionMaxMs.toDouble(),
-                divisions: 30,
-                enabled: _editable,
-                help:
-                    'How the reading hands off from one word to the next. '
-                    'A slower fade is easier to follow if a hard cut feels '
-                    'disorienting.',
-                onChanged: (v) => _updatePresentation(
-                  (p) => p.copyWith(transitionMs: v.round()),
+              if (!scrolling)
+                SwitchListTile(
+                  title: const Text('Highlight a fixation letter'),
+                  subtitle: const Text(
+                    'Marks one letter in each word as a place to look, to '
+                    'help your eye land in the same spot every time.',
+                  ),
+                  value: presentation.orpHighlight,
+                  onChanged: _editable
+                      ? (v) => _updatePresentation(
+                          (p) => p.copyWith(orpHighlight: v),
+                        )
+                      : null,
                 ),
-                warning: fadeWarning(_draft),
+
+              // -- colour ------------------------------------------------
+              const SectionHeader(
+                'Colour',
+                padding: EdgeInsets.fromLTRB(16, 28, 16, 12),
               ),
 
-            if (!scrolling)
               SwitchListTile(
-                title: const Text('Highlight a fixation letter'),
+                key: profileFollowAppKey,
+                title: const Text('Follow the app’s theme'),
                 subtitle: const Text(
-                  'Marks one letter in each word as a place to look, to '
-                  'help your eye land in the same spot every time.',
+                  'The page turns light or dark along with the rest of the '
+                  'app. Theme mode is set per device, so this profile can '
+                  'read light on a phone and dark on a desktop.',
                 ),
-                value: presentation.orpHighlight,
+                value: presentation.polarity == null,
                 onChanged: _editable
-                    ? (v) => _updatePresentation(
-                        (p) => p.copyWith(orpHighlight: v),
+                    ? (following) => _updatePresentation(
+                        // Switching off pins the polarity the app was already
+                        // supplying, rather than the class default. The reader
+                        // is looking at a surface when they reach for this, and
+                        // pinning any other one would change the page they just
+                        // decided to keep.
+                        (p) => p.withPolarity(
+                          following ? null : resolved.polarity,
+                        ),
                       )
                     : null,
               ),
 
-            // -- colour ------------------------------------------------
-            const SectionHeader(
-              'Colour',
-              padding: EdgeInsets.fromLTRB(16, 28, 16, 12),
-            ),
-
-            SwitchListTile(
-              key: profileFollowAppKey,
-              title: const Text('Follow the app’s theme'),
-              subtitle: const Text(
-                'The page turns light or dark along with the rest of the '
-                'app. Theme mode is set per device, so this profile can '
-                'read light on a phone and dark on a desktop.',
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: SegmentedButton<Polarity>(
+                  segments: const [
+                    ButtonSegment(
+                      value: Polarity.darkOnLight,
+                      label: Text('Dark on light'),
+                    ),
+                    ButtonSegment(
+                      value: Polarity.lightOnDark,
+                      label: Text('Light on dark'),
+                    ),
+                  ],
+                  // The resolved value, so a profile following the app shows
+                  // the side it is on. An empty selection would be accurate
+                  // about the stored field and wrong about the page.
+                  selected: {resolved.polarity},
+                  // Disabled while the profile follows, which is how the rate
+                  // and pause controls behave under elicited pacing. Tapping a
+                  // side is also how a reader turns following off, so the
+                  // switch above stays the one way to reach that state.
+                  onSelectionChanged: _editable && presentation.polarity != null
+                      ? (selected) => _updatePresentation(
+                          (p) => p.withPolarity(selected.first),
+                        )
+                      : null,
+                ),
               ),
-              value: presentation.polarity == null,
-              onChanged: _editable
-                  ? (following) => _updatePresentation(
-                      // Switching off pins the polarity the app was already
-                      // supplying, rather than the class default. The reader
-                      // is looking at a surface when they reach for this, and
-                      // pinning any other one would change the page they just
-                      // decided to keep.
-                      (p) =>
-                          p.withPolarity(following ? null : resolved.polarity),
-                    )
-                  : null,
-            ),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: SegmentedButton<Polarity>(
-                segments: const [
-                  ButtonSegment(
-                    value: Polarity.darkOnLight,
-                    label: Text('Dark on light'),
-                  ),
-                  ButtonSegment(
-                    value: Polarity.lightOnDark,
-                    label: Text('Light on dark'),
-                  ),
-                ],
-                // The resolved value, so a profile following the app shows
-                // the side it is on. An empty selection would be accurate
-                // about the stored field and wrong about the page.
-                selected: {resolved.polarity},
-                // Disabled while the profile follows, which is how the rate
-                // and pause controls behave under elicited pacing. Tapping a
-                // side is also how a reader turns following off, so the
-                // switch above stays the one way to reach that state.
-                onSelectionChanged: _editable && presentation.polarity != null
-                    ? (selected) => _updatePresentation(
-                        (p) => p.withPolarity(selected.first),
-                      )
-                    : null,
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Text(
+                  'This sets the text colour. The background can be tinted '
+                  'below.',
+                ),
               ),
-            ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: Text(
-                'This sets the text colour. The background can be tinted '
-                'below.',
+
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                child: Text(
+                  'Background',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
               ),
-            ),
 
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-              child: Text(
-                'Background',
-                style: Theme.of(context).textTheme.titleSmall,
+              _BackgroundField(
+                presentation: resolved,
+                enabled: _editable,
+                onChanged: (argb) =>
+                    _updatePresentation((p) => p.withTint(argb)),
+                // `withTint` replaces the hand-written PresentationConfig this
+                // used to rebuild field by field. Both nullable fields on that
+                // class now have one setter each that can reach null, so
+                // clearing a background and clearing a polarity read the same.
+                onReset: presentation.tintArgb == null
+                    ? null
+                    : () => _updatePresentation((p) => p.withTint(null)),
               ),
-            ),
 
-            _BackgroundField(
-              presentation: resolved,
-              enabled: _editable,
-              onChanged: (argb) => _updatePresentation((p) => p.withTint(argb)),
-              // `withTint` replaces the hand-written PresentationConfig this
-              // used to rebuild field by field. Both nullable fields on that
-              // class now have one setter each that can reach null, so
-              // clearing a background and clearing a polarity read the same.
-              onReset: presentation.tintArgb == null
-                  ? null
-                  : () => _updatePresentation((p) => p.withTint(null)),
-            ),
-
-            const SizedBox(height: 40),
-          ],
+              const SizedBox(height: 40),
+            ],
+          ),
         ),
       ),
     );
