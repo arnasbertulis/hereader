@@ -177,7 +177,7 @@ class PresentationConfig {
     this.caretScale = 1,
   }) : assert(anchorX >= 0 && anchorX <= 1),
        assert(anchorY >= 0 && anchorY <= 1),
-       assert(fontSizePt > 0),
+       assert(fontSizePt > 0 && fontSizePt <= maxFontSizePt),
        assert(
          chunkSize == 1,
          'chunkSize > 1 needs group-aware pacing, which is not built',
@@ -201,6 +201,13 @@ class PresentationConfig {
   static const double maxCaretThicknessEm = 0.3;
   static const double minCaretScale = 0.5;
   static const double maxCaretScale = 2.5;
+
+  /// Ceiling on the type-size slider and on how far the RSVP surface may
+  /// grow [fontSizePt] to fill a wide viewport. Named once so the two
+  /// cannot drift apart: the slider stops a reader from picking something
+  /// larger, and the viewport-scaling ceiling stops the same word from
+  /// growing past what "large" is meant to look like on a desktop monitor.
+  static const double maxFontSizePt = 96;
 
   /// Every field except the two nullable ones.
   ///
@@ -335,7 +342,12 @@ class PresentationConfig {
       anchorX: coerceDouble(json['anchorX'], fallback.anchorX, min: 0, max: 1),
       anchorY: coerceDouble(json['anchorY'], fallback.anchorY, min: 0, max: 1),
       fontFamily: coerceStringOrNull(json['fontFamily']),
-      fontSizePt: coerceDouble(json['fontSizePt'], fallback.fontSizePt, min: 1),
+      fontSizePt: coerceDouble(
+        json['fontSizePt'],
+        fallback.fontSizePt,
+        min: 1,
+        max: maxFontSizePt,
+      ),
       letterSpacingEm: coerceDouble(
         json['letterSpacingEm'],
         fallback.letterSpacingEm,
