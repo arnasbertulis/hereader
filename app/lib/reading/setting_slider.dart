@@ -69,18 +69,22 @@ class SettingSlider extends StatelessWidget {
               ),
             ],
           ),
-          Slider(
-            // Clamped because a profile written by another build may sit
-            // outside the range this one offers, and Slider throws rather
-            // than pinning.
-            value: value.clamp(min, max),
-            min: min,
-            max: max,
-            divisions: divisions,
-            label: valueLabel,
-            onChanged: enabled ? onChanged : null,
-            onChangeEnd: enabled ? onChangeEnd : null,
-          ),
+          // No Slider at all when locked, rather than one with a disabled
+          // thumb: a dimmed thumb is still a thumb, and a preset's control
+          // should not look like something a reader could try to drag.
+          if (enabled)
+            Slider(
+              // Clamped because a profile written by another build may sit
+              // outside the range this one offers, and Slider throws rather
+              // than pinning.
+              value: value.clamp(min, max),
+              min: min,
+              max: max,
+              divisions: divisions,
+              label: valueLabel,
+              onChanged: onChanged,
+              onChangeEnd: onChangeEnd,
+            ),
           if (help != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
