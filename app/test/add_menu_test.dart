@@ -83,4 +83,28 @@ void main() {
       expect(repeatsLibraryFact, isEmpty);
     },
   );
+
+  testWidgets(
+    '#330: a visible scrollbar hints at the cut-off option when the menu '
+    'overflows the viewport',
+    (tester) async {
+      // 1280x720 with an 0.8 maxHeight cap leaves ~576px, short of the four
+      // options' combined height — the issue's own repro size.
+      await pumpMenu(tester, const Size(1280, 720));
+
+      final scrollbar = tester.widget<Scrollbar>(find.byType(Scrollbar));
+      expect(
+        scrollbar.thumbVisibility,
+        isTrue,
+        reason:
+            'the thumb should be visible without a drag to hint at more '
+            'content below the fold',
+      );
+      expect(
+        find.byKey(addMenuPasteKey),
+        findsOneWidget,
+        reason: 'the last option should still be laid out, just scrolled to',
+      );
+    },
+  );
 }

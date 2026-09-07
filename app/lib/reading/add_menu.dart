@@ -45,7 +45,7 @@ const Key addMenuPasteKey = Key('add-menu-paste');
 /// note all stay in the library the same way, so only paste — which does not
 /// — spells that out; repeating "stays in your library" on every row was the
 /// one thing worth cutting once the difference stopped being the point.
-class AddMenu extends StatelessWidget {
+class AddMenu extends StatefulWidget {
   const AddMenu({super.key});
 
   /// Wide enough to hold one line of explanation on a phone, capped before
@@ -55,6 +55,22 @@ class AddMenu extends StatelessWidget {
   /// A standard list row: leading icon, title, one-line subtitle. Grows with
   /// the reader's text size; the whole panel scrolls once it has to.
   static const double _minOptionHeight = 72;
+
+  @override
+  State<AddMenu> createState() => _AddMenuState();
+}
+
+class _AddMenuState extends State<AddMenu> {
+  /// Owned here rather than left implicit so [Scrollbar] has a controller to
+  /// attach its thumb to — without one the sheet scrolls (confirmed by
+  /// dragging) but gives no visual hint that it can, which is issue #330.
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -82,52 +98,57 @@ class AddMenu extends StatelessWidget {
         ),
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            maxWidth: _maxWidth,
+            maxWidth: AddMenu._maxWidth,
             maxHeight: size.height * 0.8,
           ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _AddMenuOption(
-                  key: addMenuFreeBooksKey,
-                  choice: AddChoice.freeBooks,
-                  icon: AppIcons.tabLibrary,
-                  title: 'Free books',
-                  detail: 'Download from a public catalogue',
-                  minHeight: _minOptionHeight,
-                ),
-                const Divider(),
-                _AddMenuOption(
-                  key: addMenuEpubKey,
-                  choice: AddChoice.epub,
-                  icon: AppIcons.importFile,
-                  title: 'Add an EPUB',
-                  detail: 'A book file from this device',
-                  minHeight: _minOptionHeight,
-                ),
-                // Takes its colour and weight from the app's one divider
-                // theme, so it thickens with the rest of them under high
-                // contrast.
-                const Divider(),
-                _AddMenuOption(
-                  key: addMenuNoteKey,
-                  choice: AddChoice.note,
-                  icon: AppIcons.writeNote,
-                  title: 'Write a note',
-                  detail: 'Type something to read',
-                  minHeight: _minOptionHeight,
-                ),
-                const Divider(),
-                _AddMenuOption(
-                  key: addMenuPasteKey,
-                  choice: AddChoice.paste,
-                  icon: AppIcons.pasteText,
-                  title: 'Paste text',
-                  detail: 'Read once. Nothing is saved.',
-                  minHeight: _minOptionHeight,
-                ),
-              ],
+          child: Scrollbar(
+            controller: _scrollController,
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              controller: _scrollController,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _AddMenuOption(
+                    key: addMenuFreeBooksKey,
+                    choice: AddChoice.freeBooks,
+                    icon: AppIcons.tabLibrary,
+                    title: 'Free books',
+                    detail: 'Download from a public catalogue',
+                    minHeight: AddMenu._minOptionHeight,
+                  ),
+                  const Divider(),
+                  _AddMenuOption(
+                    key: addMenuEpubKey,
+                    choice: AddChoice.epub,
+                    icon: AppIcons.importFile,
+                    title: 'Add an EPUB',
+                    detail: 'A book file from this device',
+                    minHeight: AddMenu._minOptionHeight,
+                  ),
+                  // Takes its colour and weight from the app's one divider
+                  // theme, so it thickens with the rest of them under high
+                  // contrast.
+                  const Divider(),
+                  _AddMenuOption(
+                    key: addMenuNoteKey,
+                    choice: AddChoice.note,
+                    icon: AppIcons.writeNote,
+                    title: 'Write a note',
+                    detail: 'Type something to read',
+                    minHeight: AddMenu._minOptionHeight,
+                  ),
+                  const Divider(),
+                  _AddMenuOption(
+                    key: addMenuPasteKey,
+                    choice: AddChoice.paste,
+                    icon: AppIcons.pasteText,
+                    title: 'Paste text',
+                    detail: 'Read once. Nothing is saved.',
+                    minHeight: AddMenu._minOptionHeight,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
