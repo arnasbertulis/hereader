@@ -218,6 +218,55 @@ void main() {
     });
   });
 
+  group('the controls on a wide window', () {
+    testWidgets('the jump row stays a compact cluster, not full-bleed', (
+      tester,
+    ) async {
+      // Issue #329: `spaceEvenly` with no width cap spread the icon row
+      // edge-to-edge across a wide desktop window, leaving large gaps
+      // between related controls. 1920 stands in for that desktop window;
+      // the row must hold its shape rather than track it.
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(1920, 1080);
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(reader());
+      await tester.pumpAndSettle();
+
+      final left = tester.getRect(find.byKey(readerBackParagraphButtonKey));
+      final right = tester.getRect(find.byKey(readerParagraphButtonKey));
+      final span = right.right - left.left;
+
+      expect(span, lessThan(500));
+
+      await disposeTree(tester);
+    });
+
+    testWidgets(
+      'the close/play/profile row stays a compact cluster, not full-bleed',
+      (tester) async {
+        // Issue #329 named this row too: "the close/play/settings icons
+        // spread far apart" alongside the jump row. The close button has no
+        // key, so this measures play-to-profile; a still-stretching row
+        // would widen this span too, since spaceEvenly spreads all three.
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = const Size(1920, 1080);
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(reader());
+        await tester.pumpAndSettle();
+
+        final left = tester.getRect(find.byKey(readerPlayButtonKey));
+        final right = tester.getRect(find.byKey(readerProfileButtonKey));
+        final span = right.right - left.left;
+
+        expect(span, lessThan(500));
+
+        await disposeTree(tester);
+      },
+    );
+  });
+
   group('the forward jumps', () {
     testWidgets('a sentence lands on the word after the full stop', (
       tester,

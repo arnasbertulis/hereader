@@ -1601,6 +1601,13 @@ class _TapZone extends StatelessWidget {
 const double _primaryIconSize = 44;
 const double _secondaryIconSize = 28;
 
+/// Widest the transport control rows get before they stop growing and hold
+/// their shape instead. Unconstrained, `spaceEvenly` spreads a handful of
+/// icon buttons edge-to-edge across a wide desktop window, leaving gaps
+/// between related controls instead of keeping them a compact cluster —
+/// issue #329.
+const double _controlsMaxWidth = 360;
+
 /// A disabled glyph, in the same ink as every enabled one.
 ///
 /// Material's own disabled opacity, rather than a number picked here, so a
@@ -1749,82 +1756,89 @@ class _Controls extends StatelessWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                IconButton(
-                  key: readerBackParagraphButtonKey,
-                  onPressed: onBackParagraph,
-                  iconSize: _secondaryIconSize,
-                  color: ink,
-                  // `color` is the enabled colour only, and this row sets it
-                  // explicitly rather than taking a scheme role, so the
-                  // disabled one has to be set explicitly too or the glyph
-                  // falls back to the theme's `onSurface` over a background
-                  // the theme has never seen. The same ink, dimmed: nothing
-                  // else on this screen could carry "unavailable", and ADR
-                  // 0015's one ink is not broken by an opacity.
-                  disabledColor: _dimmed(ink),
-                  icon: const Icon(AppIcons.backParagraph),
-                  tooltip: 'Back a paragraph',
-                ),
-                IconButton(
-                  key: readerBackSentenceButtonKey,
-                  onPressed: onBackSentence,
-                  iconSize: _secondaryIconSize,
-                  color: ink,
-                  disabledColor: _dimmed(ink),
-                  icon: const Icon(AppIcons.backSentence),
-                  tooltip: 'Back a sentence',
-                ),
-                IconButton(
-                  key: readerSentenceButtonKey,
-                  onPressed: onSentence,
-                  iconSize: _secondaryIconSize,
-                  color: ink,
-                  disabledColor: _dimmed(ink),
-                  icon: const Icon(AppIcons.skipSentence),
-                  tooltip: 'Forward a sentence',
-                ),
-                IconButton(
-                  key: readerParagraphButtonKey,
-                  onPressed: onParagraph,
-                  iconSize: _secondaryIconSize,
-                  color: ink,
-                  disabledColor: _dimmed(ink),
-                  icon: const Icon(AppIcons.skipParagraph),
-                  tooltip: 'Forward a paragraph',
-                ),
-              ],
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: _controlsMaxWidth),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  IconButton(
+                    key: readerBackParagraphButtonKey,
+                    onPressed: onBackParagraph,
+                    iconSize: _secondaryIconSize,
+                    color: ink,
+                    // `color` is the enabled colour only, and this row sets
+                    // it explicitly rather than taking a scheme role, so the
+                    // disabled one has to be set explicitly too or the glyph
+                    // falls back to the theme's `onSurface` over a
+                    // background the theme has never seen. The same ink,
+                    // dimmed: nothing else on this screen could carry
+                    // "unavailable", and ADR 0015's one ink is not broken by
+                    // an opacity.
+                    disabledColor: _dimmed(ink),
+                    icon: const Icon(AppIcons.backParagraph),
+                    tooltip: 'Back a paragraph',
+                  ),
+                  IconButton(
+                    key: readerBackSentenceButtonKey,
+                    onPressed: onBackSentence,
+                    iconSize: _secondaryIconSize,
+                    color: ink,
+                    disabledColor: _dimmed(ink),
+                    icon: const Icon(AppIcons.backSentence),
+                    tooltip: 'Back a sentence',
+                  ),
+                  IconButton(
+                    key: readerSentenceButtonKey,
+                    onPressed: onSentence,
+                    iconSize: _secondaryIconSize,
+                    color: ink,
+                    disabledColor: _dimmed(ink),
+                    icon: const Icon(AppIcons.skipSentence),
+                    tooltip: 'Forward a sentence',
+                  ),
+                  IconButton(
+                    key: readerParagraphButtonKey,
+                    onPressed: onParagraph,
+                    iconSize: _secondaryIconSize,
+                    color: ink,
+                    disabledColor: _dimmed(ink),
+                    icon: const Icon(AppIcons.skipParagraph),
+                    tooltip: 'Forward a paragraph',
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: AppSpacing.lg),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                IconButton(
-                  onPressed: onClose,
-                  iconSize: _secondaryIconSize,
-                  color: ink,
-                  icon: const Icon(AppIcons.closeBook),
-                  tooltip: 'Back to library',
-                ),
-                IconButton(
-                  key: readerPlayButtonKey,
-                  onPressed: onToggle,
-                  iconSize: _primaryIconSize,
-                  color: ink,
-                  icon: Icon(stopping ? AppIcons.pause : AppIcons.play),
-                  tooltip: toggleLabel,
-                ),
-                IconButton(
-                  key: readerProfileButtonKey,
-                  onPressed: onProfile,
-                  iconSize: _secondaryIconSize,
-                  color: ink,
-                  icon: const Icon(AppIcons.readingProfile),
-                  tooltip: 'Reading profile',
-                ),
-              ],
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: _controlsMaxWidth),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  IconButton(
+                    onPressed: onClose,
+                    iconSize: _secondaryIconSize,
+                    color: ink,
+                    icon: const Icon(AppIcons.closeBook),
+                    tooltip: 'Back to library',
+                  ),
+                  IconButton(
+                    key: readerPlayButtonKey,
+                    onPressed: onToggle,
+                    iconSize: _primaryIconSize,
+                    color: ink,
+                    icon: Icon(stopping ? AppIcons.pause : AppIcons.play),
+                    tooltip: toggleLabel,
+                  ),
+                  IconButton(
+                    key: readerProfileButtonKey,
+                    onPressed: onProfile,
+                    iconSize: _secondaryIconSize,
+                    color: ink,
+                    icon: const Icon(AppIcons.readingProfile),
+                    tooltip: 'Reading profile',
+                  ),
+                ],
+              ),
             ),
           ],
         ),
