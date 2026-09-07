@@ -19,6 +19,7 @@ import 'profiles_screen.dart';
 import 'reading_display.dart';
 import 'reading_surface.dart';
 import 'scroll_clock.dart';
+import 'section_header.dart';
 
 /// Identifies the play and pause button on the reading surface.
 ///
@@ -723,6 +724,15 @@ class _ReaderScreenState extends State<ReaderScreen>
     // Read off `chrome.bottomSheetTheme` rather than written out again, so
     // `readerChromeTheme` stays the one place these are decided.
     final sheet = chrome.bottomSheetTheme;
+    // Capped rather than left to the intrinsic content height: five preset
+    // rows plus the switch's two-line description plus the manage row run
+    // past a short viewport, and a bottom-anchored sheet with no cap pushes
+    // that overflow off the *top* of the screen instead of scrolling it into
+    // view — see issue #326. `isScrollControlled` lifts Flutter's own
+    // default cap (9/16 of the screen) so this constraint is the only one in
+    // effect; the `ListView` below is a real scroll view, so content past
+    // this height scrolls inside it rather than clipping.
+    final maxSheetHeight = MediaQuery.sizeOf(context).height * 0.9;
 
     final intent = await showModalBottomSheet<_ProfileIntent>(
       context: context,
@@ -734,6 +744,9 @@ class _ReaderScreenState extends State<ReaderScreen>
       // `Material` applies a surface tint through `ElevationOverlay`, which
       // returns the colour unchanged at elevation 0, and `sheet.elevation`
       // is 0 for the reason every other panel in this app is.
+      isScrollControlled: true,
+      showDragHandle: true,
+      constraints: BoxConstraints(maxHeight: maxSheetHeight),
       builder: (_) => Theme(
         data: chrome,
         child: SafeArea(
@@ -751,6 +764,7 @@ class _ReaderScreenState extends State<ReaderScreen>
               return ListView(
                 shrinkWrap: true,
                 children: [
+                  const SectionHeader('Profile'),
                   for (final profile in profiles)
                     ProfileRow(
                       profile: profile,
@@ -772,6 +786,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                   // primarily the profile picker, and a tile at the top
                   // pushed the last profile out of a shrink-wrapped sheet's
                   // viewport — `reader_profile_menu_test.dart` counts them.
+                  const SectionHeader('Display'),
                   SwitchListTile(
                     key: readerScrollModeKey,
                     secondary: const Icon(AppIcons.sectionReading),
@@ -792,6 +807,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                       ),
                     ),
                   ),
+                  const SectionHeader('Manage'),
                   ListTile(
                     leading: const Icon(AppIcons.sectionProfiles),
                     title: const Text('Reading profiles'),

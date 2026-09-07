@@ -61,6 +61,56 @@ void main() {
       await disposeTree(tester);
     });
 
+    testWidgets('labels its three groups', (tester) async {
+      await tester.pumpWidget(reader());
+      await tester.pumpAndSettle();
+
+      await openProfileSheet(tester);
+
+      expect(find.text('Profile'), findsOneWidget);
+
+      // "Display" and "Manage" sit below the five preset rows, past what
+      // the sheet's lazy list builds without a nudge — same reason
+      // `openProfileSheet`'s callers drag before reaching "Reading
+      // profiles".
+      await tester.drag(find.byType(ListView).last, const Offset(0, -400));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Display'), findsOneWidget);
+      expect(find.text('Manage'), findsOneWidget);
+
+      await disposeTree(tester);
+    });
+
+    testWidgets('keeps its header on screen at a short viewport height', (
+      tester,
+    ) async {
+      final originalSize = tester.view.physicalSize;
+      final originalRatio = tester.view.devicePixelRatio;
+      // 844x390 reproduces the report: a phone-landscape-sized window.
+      tester.view.physicalSize = const Size(844, 390);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(() {
+        tester.view.physicalSize = originalSize;
+        tester.view.devicePixelRatio = originalRatio;
+      });
+
+      await tester.pumpWidget(reader());
+      await tester.pumpAndSettle();
+
+      await openProfileSheet(tester);
+
+      // Before the fix the sheet had no height cap, so the first group's
+      // heading was pushed off the top of the screen along with the rest
+      // of the overflow — this pins it back inside the viewport.
+      expect(
+        tester.getTopLeft(find.text('Profile')).dy,
+        greaterThanOrEqualTo(0),
+      );
+
+      await disposeTree(tester);
+    });
+
     testWidgets('carries a row to the full profiles screen', (tester) async {
       await tester.pumpWidget(reader());
       await tester.pumpAndSettle();
