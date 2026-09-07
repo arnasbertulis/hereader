@@ -192,7 +192,17 @@ class PlaybackSession {
   void play() {
     if (tokens.isEmpty || _state == PlaybackState.playing) return;
 
-    if (_state == PlaybackState.finished) return;
+    // The convention at end-of-book: Play restarts from the beginning
+    // rather than silently no-op'ing. Reset the position directly rather
+    // than delegating to [seekToIndex]: that method's own [_setState] would
+    // land on `paused` and emit before falling through to [_scheduleCurrent]
+    // below, which would then emit `playing` right after — a spurious
+    // `finished` -> `paused` -> `playing` flicker for one call. `tokens` is
+    // non-empty here (checked above), so 0 needs no clamping.
+    if (_state == PlaybackState.finished) {
+      _index = 0;
+      _offset = 0;
+    }
 
     // A rewind of no words is not a move, so it must not zero [_offset]
     // either. Under continuous scroll that would snap the reader back to the
