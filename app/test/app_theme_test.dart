@@ -234,6 +234,39 @@ void main() {
       );
     });
 
+    // ADR 0032 section 6: focus is its own treatment, distinct from hover,
+    // selection and the accent. `scheme.outline` is already spoken for
+    // (`outlinedButtonTheme.side`, the unselected switch thumb) and the
+    // accent already means "selected" (the nav indicator, the slider), so a
+    // focus ring in either would be indistinguishable from something else.
+    for (final brightness in Brightness.values) {
+      test(
+        'the focus colour is not the accent or outline — ${brightness.name}',
+        () {
+          final theme = appTheme(brightness: brightness);
+          final scheme = theme.colorScheme;
+          final focusOpaque = theme.focusColor.withValues(alpha: 1);
+
+          expect(focusOpaque, isNot(scheme.primary));
+          expect(focusOpaque, isNot(scheme.outline));
+        },
+      );
+
+      // 3:1, the same non-text-UI-component bar the outline test above
+      // holds outline to, since a focus ring a keyboard user cannot see
+      // against the row behind it is no ring at all.
+      test(
+        'the focus ring reads against the surface behind it — ${brightness.name}',
+        () {
+          final theme = appTheme(brightness: brightness);
+          final scheme = theme.colorScheme;
+          final composited = Color.alphaBlend(theme.focusColor, scheme.surface);
+
+          expect(_ratio(composited, scheme.surface), greaterThanOrEqualTo(3));
+        },
+      );
+    }
+
     test('a list tile title is heavier than its subtitle', () {
       final theme = appTheme(brightness: Brightness.light);
       final title = theme.listTileTheme.titleTextStyle;
