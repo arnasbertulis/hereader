@@ -354,7 +354,7 @@ void main() {
       s.dispose();
     });
 
-    test('a finished session ignores play', () {
+    test('a finished session restarts from the beginning on play', () {
       fakeAsync((async) {
         final s = PlaybackSession(tokens: _tokens(), profile: _profile());
         s.play();
@@ -362,7 +362,9 @@ void main() {
         expect(s.state, PlaybackState.finished);
 
         s.play();
-        expect(s.state, PlaybackState.finished);
+        expect(s.state, PlaybackState.playing);
+        expect(s.index, 0);
+        expect(s.currentToken?.text, 'one');
         s.dispose();
       });
     });
