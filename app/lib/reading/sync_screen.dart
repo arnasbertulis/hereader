@@ -7,6 +7,8 @@ import '../sync/sync_engine.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import '../theme/content_width.dart';
+import 'info_dot.dart';
+import 'section_header.dart';
 
 /// What sync has done, and a way to make it run now.
 ///
@@ -113,23 +115,21 @@ class _SyncScreenState extends State<SyncScreen> {
                   ),
                 ),
                 const Divider(),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg,
-                    AppSpacing.md,
-                    AppSpacing.lg,
-                    0,
-                  ),
-                  child: Text(
-                    'Sync carries your place in each book and your reading '
-                    'profiles. It does not carry the books themselves: an EPUB '
-                    'stays on the device you added it to.\n\n'
-                    'Changes you make offline are kept and sent the next time '
-                    'the app reaches the service. Sync also runs by itself '
-                    'every few minutes while the app is open.\n\n'
-                    'When two devices land far apart in the same book, the app '
-                    'asks which place to keep rather than picking one.',
-                    style: theme.textTheme.bodyMedium,
+                SectionHeader(
+                  'About sync',
+                  info: const InfoDot(
+                    semanticLabel: 'About sync',
+                    explanation:
+                        'Sync carries your place in each book and your '
+                        'reading profiles. It does not carry the books '
+                        'themselves: an EPUB stays on the device you added '
+                        'it to.\n\n'
+                        'Changes you make offline are kept and sent the next '
+                        'time the app reaches the service. Sync also runs by '
+                        'itself every few minutes while the app is open.\n\n'
+                        'When two devices land far apart in the same book, '
+                        'the app asks which place to keep rather than '
+                        'picking one.',
                   ),
                 ),
               ],

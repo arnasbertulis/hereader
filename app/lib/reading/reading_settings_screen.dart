@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import '../theme/content_width.dart';
+import 'info_dot.dart';
 import 'reading_display.dart';
 import 'section_header.dart';
 import 'setting_slider.dart';
@@ -39,7 +40,18 @@ class ReadingSettingsScreen extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
             children: [
-              const SectionHeader('Step'),
+              SectionHeader(
+                'Step',
+                info: const InfoDot(
+                  semanticLabel: 'About step',
+                  explanation:
+                      'Tapping the left or right quarter of the reading '
+                      'surface moves this far and stops there. The Left and '
+                      'Right keys do the same. Starting again picks up where '
+                      'you stopped rather than stepping back the way it does '
+                      'after a pause.',
+                ),
+              ),
               SettingSlider(
                 label: 'One step moves',
                 value: display.stepWords.toDouble(),
@@ -49,15 +61,20 @@ class ReadingSettingsScreen extends StatelessWidget {
                 min: kMinStepWords.toDouble(),
                 max: kMaxStepWords.toDouble(),
                 divisions: kMaxStepWords - kMinStepWords,
-                help:
-                    'Tapping the left or right quarter of the reading surface '
-                    'moves this far and stops there. The Left and Right keys do '
-                    'the same. Starting again picks up where you stopped rather '
-                    'than stepping back the way it does after a pause.',
                 onChanged: (v) => display.setStepWords(v.round()),
               ),
               const Divider(),
-              const SectionHeader('Time left counts'),
+              SectionHeader(
+                'Time left counts',
+                info: const InfoDot(
+                  semanticLabel: 'About time left counts',
+                  explanation:
+                      'On the home and library tiles. The chapter you are in '
+                      'is shown either way; books without a table of '
+                      'contents, and places that have just arrived from '
+                      'another device, count down to the end of the book.',
+                ),
+              ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                 child: SegmentedButton<TimeLeftScope>(
@@ -76,54 +93,47 @@ class ReadingSettingsScreen extends StatelessWidget {
                       display.setTimeLeftScope(selected.first),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.lg,
-                  AppSpacing.sm,
-                  AppSpacing.lg,
-                  AppSpacing.md,
-                ),
-                child: Text(
-                  'On the home and library tiles. The chapter you are in is '
-                  'shown either way; books without a table of contents, and '
-                  'places that have just arrived from another device, count '
-                  'down to the end of the book.',
-                  style: theme.textTheme.bodySmall,
-                ),
-              ),
               const Divider(),
               const ListTile(
                 leading: Icon(AppIcons.placeIsSaved),
                 title: Text('Your place is saved as you read'),
-                subtitle: Text(
-                  'Every fifteen seconds while words are moving, at every pause, '
-                  'and when you leave the book or the app.',
+                trailing: InfoDot(
+                  semanticLabel: 'About your place being saved',
+                  explanation:
+                      'Every fifteen seconds while words are moving, at '
+                      'every pause, and when you leave the book or the app.',
                 ),
               ),
               const ListTile(
                 leading: Icon(AppIcons.pausesWhenHidden),
                 title: Text('Playback pauses when the app is hidden'),
-                subtitle: Text(
-                  'Switching apps stops the words rather than running the book '
-                  'on without you.',
+                trailing: InfoDot(
+                  semanticLabel: 'About pausing when the app is hidden',
+                  explanation:
+                      'Switching apps stops the words rather than running '
+                      'the book on without you.',
                 ),
               ),
               const ListTile(
                 leading: Icon(AppIcons.frontMatterOffered),
                 title: Text('Front matter is offered, not skipped for you'),
-                subtitle: Text(
-                  'A book that opens on a title page and a licence offers to '
-                  'jump to the first chapter, and stays where it is if you '
-                  'ignore it.',
+                trailing: InfoDot(
+                  semanticLabel: 'About front matter',
+                  explanation:
+                      'A book that opens on a title page and a licence '
+                      'offers to jump to the first chapter, and stays where '
+                      'it is if you ignore it.',
                 ),
               ),
               const ListTile(
                 leading: Icon(AppIcons.chaptersFromTheBook),
                 title: Text('Chapters come from the book'),
-                subtitle: Text(
-                  'The chapter list is the one the publisher wrote. A book that '
-                  'ships without one shows no chapter button rather than a list '
-                  'guessed from its headings.',
+                trailing: InfoDot(
+                  semanticLabel: 'About chapters',
+                  explanation:
+                      'The chapter list is the one the publisher wrote. A '
+                      'book that ships without one shows no chapter button '
+                      'rather than a list guessed from its headings.',
                 ),
               ),
               const Divider(),
