@@ -188,12 +188,23 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
             const _SectionHeader('Name'),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: TextField(
-                controller: _name,
-                enabled: _editable,
-                decoration: const InputDecoration(border: OutlineInputBorder()),
-                onChanged: (value) => _update((p) => p.copyWith(name: value)),
-              ),
+              // A disabled TextField paints its text at the same grey as
+              // hintText, so a preset's name reads as an empty field with a
+              // placeholder rather than as its own name — see #331. Text
+              // instead of a field that cannot be typed into.
+              child: _editable
+                  ? TextField(
+                      controller: _name,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) =>
+                          _update((p) => p.copyWith(name: value)),
+                    )
+                  : Text(
+                      _draft.name,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
             ),
 
             // -- pacing ------------------------------------------------
