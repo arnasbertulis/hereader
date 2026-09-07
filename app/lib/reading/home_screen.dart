@@ -22,13 +22,12 @@ import 'section_header.dart';
 /// How many books the recent row shows, beyond the one in the continue card.
 const int _recentCount = 4;
 
-/// Width of the continue tile.
+/// Width the continue tile's cover is drawn at.
 ///
-/// Fixed rather than a share of the screen. The cover runs the tile's full
-/// width and is half again as tall, so every pixel of width costs one and a
-/// half of height, and a tile that tracked a desktop window would be a
-/// hero image.
-const double _continueTileMaxWidth = 252;
+/// The same 72 the library's single-column row uses. The cover here is
+/// incidental to a control, not the subject of a poster, so it takes a
+/// control's size rather than a share of the tile's width (ADR 0033 §3).
+const double _continueTileCoverWidth = 72;
 
 /// Height of the progress bar along the tile's bottom edge.
 const double _continueBarHeight = 4;
@@ -332,7 +331,7 @@ DateTime _activityOf(BookSummary book) => book.lastReadAt ?? book.importedAt;
 
 bool _hasBeenRead(BookSummary book) => book.lastReadAt != null;
 
-/// The tile, held to one width.
+/// The tile that gets a reader back into the book they're in.
 ///
 /// No heading over it. The tile shows a cover, a title, an author, where
 /// the reader is and how much is left, which is the section's subject
@@ -355,29 +354,25 @@ class _ContinueSection extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => Align(
-    alignment: Alignment.topLeft,
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: _continueTileMaxWidth),
-      child: _ContinueTile(
-        book: book,
-        cover: cover,
-        pacing: pacing,
-        scope: scope,
-        busy: busy,
-        onOpen: onOpen,
-      ),
-    ),
+  Widget build(BuildContext context) => _ContinueTile(
+    book: book,
+    cover: cover,
+    pacing: pacing,
+    scope: scope,
+    busy: busy,
+    onOpen: onOpen,
   );
 }
 
 /// The book the reader is in, with the way back into it.
 ///
-/// One tile, and the tap is the tile. The cover runs the tile's full width
-/// and reaches its top edge, the title and author sit under it on the left,
-/// and the way in sits opposite them on the right. Under the author is one
-/// dim line saying how much of the book is left, which is the question a
-/// reader picking a book up again actually has.
+/// One tile, and the tap is the tile. A small cover sits on the left, the
+/// same 72 the library's single-column row uses, with the title and author
+/// beside it and the way in opposite them on the right. Under the author is
+/// one dim line saying how much of the book is left, which is the question
+/// a reader picking a book up again actually has. The cover is incidental
+/// to a control, not the subject of a poster (ADR 0033 §3), so it no longer
+/// reserves a large placeholder height for books without stored art.
 ///
 /// The glyph is not a button. A tile that opens the book, carrying a
 /// control that opens the book, gives one action two targets, and the outer
@@ -461,35 +456,17 @@ class _ContinueTile extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final width = constraints.maxWidth;
-
-                    // The cover runs edge to edge and flush to the top, so
-                    // the tile's own clip gives it the top corners. Its
-                    // bottom corners are cropped off: BookCoverFuture
-                    // rounds all four, and a curve there would leave the
-                    // tile's surface showing in two notches against sides
-                    // that are otherwise straight.
-                    final height = width * kCoverAspect;
-
-                    return ClipRect(
-                      child: Align(
-                        alignment: Alignment.topCenter,
-                        heightFactor: (height - AppRadii.md) / height,
-                        child: BookCoverFuture(
-                          bookId: book.id,
-                          cover: cover,
-                          width: width,
-                        ),
-                      ),
-                    );
-                  },
-                ),
                 Padding(
                   padding: const EdgeInsets.all(AppSpacing.lg),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      BookCoverFuture(
+                        bookId: book.id,
+                        cover: cover,
+                        width: _continueTileCoverWidth,
+                      ),
+                      const SizedBox(width: AppSpacing.md),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
