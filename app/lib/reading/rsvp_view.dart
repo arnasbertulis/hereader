@@ -46,61 +46,75 @@ class RsvpView extends StatelessWidget {
     // unresolved config reaching a paint call by looking close enough.
     final config = presentation.config;
 
-    final style = readingTextStyle(presentation);
-
     final token = update?.token;
-
-    Widget word;
-    if (token == null) {
-      // Gap between tokens, or nothing loaded yet. Hold the space so the
-      // anchor does not shift.
-      word = SizedBox(
-        key: const ValueKey('blank'),
-        height: config.fontSizePt * 1.2,
-      );
-    } else if (config.orpHighlight) {
-      final i = _orpIndex(token.text);
-      word = Text.rich(
-        TextSpan(
-          children: [
-            TextSpan(text: token.text.substring(0, i)),
-            TextSpan(
-              text: token.text[i],
-              style: TextStyle(color: colorOf(orpArgb)),
-            ),
-            TextSpan(text: token.text.substring(i + 1)),
-          ],
-        ),
-        key: ValueKey('${update!.index}'),
-        style: style,
-        textAlign: TextAlign.center,
-      );
-    } else {
-      word = Text(
-        token.text,
-        key: ValueKey('${update!.index}'),
-        style: style,
-        textAlign: TextAlign.center,
-      );
-    }
-
     final transition = reduceMotion ? 0 : config.transitionMs;
 
-    return ColoredBox(
-      color: colorOf(surfaceArgbFor(presentation)),
-      child: Align(
-        // Anchor fractions map onto Alignment's -1..1 range.
-        alignment: Alignment(config.anchorX * 2 - 1, config.anchorY * 2 - 1),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: transition == 0
-              ? word
-              : AnimatedSwitcher(
-                  duration: Duration(milliseconds: transition),
-                  child: word,
+    // Measured in a LayoutBuilder rather than off MediaQuery's full window
+    // size, so the word grows to fill *this widget's* box -- the reader
+    // surface or the settings preview, whichever is drawing it -- instead of
+    // the settings preview ballooning to the size the reader gets.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final fontSizePt = scaledFontSizePt(
+          config.fontSizePt,
+          constraints.maxWidth,
+        );
+        final style = readingTextStyle(presentation, fontSizePt: fontSizePt);
+
+        Widget word;
+        if (token == null) {
+          // Gap between tokens, or nothing loaded yet. Hold the space so the
+          // anchor does not shift.
+          word = SizedBox(
+            key: const ValueKey('blank'),
+            height: fontSizePt * 1.2,
+          );
+        } else if (config.orpHighlight) {
+          final i = _orpIndex(token.text);
+          word = Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(text: token.text.substring(0, i)),
+                TextSpan(
+                  text: token.text[i],
+                  style: TextStyle(color: colorOf(orpArgb)),
                 ),
-        ),
-      ),
+                TextSpan(text: token.text.substring(i + 1)),
+              ],
+            ),
+            key: ValueKey('${update!.index}'),
+            style: style,
+            textAlign: TextAlign.center,
+          );
+        } else {
+          word = Text(
+            token.text,
+            key: ValueKey('${update!.index}'),
+            style: style,
+            textAlign: TextAlign.center,
+          );
+        }
+
+        return ColoredBox(
+          color: colorOf(surfaceArgbFor(presentation)),
+          child: Align(
+            // Anchor fractions map onto Alignment's -1..1 range.
+            alignment: Alignment(
+              config.anchorX * 2 - 1,
+              config.anchorY * 2 - 1,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: transition == 0
+                  ? word
+                  : AnimatedSwitcher(
+                      duration: Duration(milliseconds: transition),
+                      child: word,
+                    ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

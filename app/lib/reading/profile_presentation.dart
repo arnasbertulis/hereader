@@ -425,17 +425,38 @@ ThemeData readerChromeTheme({
 /// it *twice* — once to measure the run and once to paint it. Three copies
 /// of one style is three chances for the geometry the session walks to stop
 /// matching the glyphs on screen.
-TextStyle readingTextStyle(ResolvedPresentation presentation) {
+TextStyle readingTextStyle(
+  ResolvedPresentation presentation, {
+  double? fontSizePt,
+}) {
   final config = presentation.config;
+  final size = fontSizePt ?? config.fontSizePt;
 
   return TextStyle(
     fontFamily: config.fontFamily,
-    fontSize: config.fontSizePt,
-    letterSpacing: config.fontSizePt * config.letterSpacingEm,
+    fontSize: size,
+    letterSpacing: size * config.letterSpacingEm,
     height: 1.2,
     color: colorOf(inkArgbFor(presentation.polarity)),
     fontFeatures: const [FontFeature.tabularFigures()],
   );
+}
+
+/// Grows [basePt] to fill extra width on a wide viewport.
+///
+/// Floored at [basePt] itself — the reader's own chosen size is never
+/// shrunk by this — and capped at [PresentationConfig.maxFontSizePt], the
+/// same ceiling the type-size slider enforces, so the fixed single word
+/// actually uses the space a desktop or ultrawide window gives it instead
+/// of sitting at phone size in a sea of empty space, without growing past
+/// what "large" is meant to look like.
+double scaledFontSizePt(double basePt, double availableWidth) {
+  // Roughly phone-portrait width, so nothing grows on a phone; not shared
+  // with anything else — a single local const, not a profile field.
+  const referenceWidth = 400.0;
+  if (availableWidth <= referenceWidth) return basePt;
+  final grown = basePt * (availableWidth / referenceWidth);
+  return grown.clamp(basePt, PresentationConfig.maxFontSizePt);
 }
 
 // -- descriptions -------------------------------------------------------
