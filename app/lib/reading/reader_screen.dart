@@ -1164,173 +1164,195 @@ class _ReaderScreenState extends State<ReaderScreen>
               // to start by accident on a phone. Opening a panel mid-sentence
               // that way would be the app interrupting the reader.
               drawerEnableOpenDragGesture: false,
-              body: Stack(
+              // A Column, not one Stack painting both the reading surface and
+              // the controls over the same box. Wrapping the reading Stack in
+              // Expanded means the controls' natural height comes out of its
+              // constraints *before* RsvpView centres the word, so a short
+              // landscape window shrinks the word's box instead of the two
+              // painting over each other (issue #325) — stacking them left
+              // neither side's height depending on the other's.
+              body: Column(
                 children: [
-                  Positioned.fill(
-                    // Paint only. The roles and the labels are on the
-                    // regions above, which are what a reader actually
-                    // presses; a word announced as its own node beside three
-                    // buttons would make the surface four things.
-                    //
-                    // Which surface a profile draws is decided in one place,
-                    // and the settings preview calls the same one. See
-                    // [ReadingSurface] for why a `switch (mode)` here as well
-                    // would reopen the hole that had the contrast readout
-                    // measuring a pair the app never painted.
-                    child: ExcludeSemantics(
-                      child: ReadingSurface(
-                        updates: _current,
-                        presentation: presentation,
-                        layout: _clock.layout,
-                      ),
-                    ),
-                  ),
-
-                  // Three regions rather than one, at a fixed anchor. The
-                  // edges step and stop; the centre keeps play, pause and
-                  // the elicited advance. Continuous scroll replaces all
-                  // three with one draggable surface — see [_scrollRegion],
-                  // and ADR 0025 for why the zones are a fixed-anchor
-                  // arrangement rather than a reader-facing concept.
-                  //
-                  // Flex 1/2/1 rather than arithmetic over a measured width:
-                  // it puts the 25/50/25 split in the layout, which is also
-                  // where a screen reader reads the geometry of each button
-                  // from. A generous centre because that tap is the primary
-                  // control and a mis-hit costs the reader their place in a
-                  // sentence.
-                  //
-                  // Before the controls in this list, so the close, profile,
-                  // play, chapter and jump buttons sit above the zones and
-                  // keep their own taps. The detector this replaced wrapped
-                  // all of them.
-                  Positioned.fill(
-                    child: scrolling
-                        ? _scrollRegion(state)
-                        : Row(
-                            children: [
-                              Expanded(
-                                child: _TapZone(
-                                  key: readerTapBackKey,
-                                  label: _backLabel,
-                                  onTap: () => _whenReading(_stepBack),
-                                ),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                // The word is announced by the control that stops
-                                // on it, so this one node follows the stream while
-                                // the two edges do not. The `Row` and its
-                                // `Expanded`s are built once either way.
-                                child: ValueListenableBuilder<PlaybackUpdate?>(
-                                  valueListenable: _current,
-                                  builder: (_, update, _) => _TapZone(
-                                    key: readerTapCentreKey,
-                                    label: _surfaceLabel,
-                                    // Offered only while the stream is stopped. A
-                                    // reader using RSVP is reading with their
-                                    // eyes, and speech four times a second would
-                                    // fight that rather than serve it — anyone who
-                                    // needs speech instead of sight is better
-                                    // served by the whole book read aloud than by
-                                    // one word at a time. Paused, stepped or
-                                    // rewound, the word on screen is one fact
-                                    // worth having on focus, and each of those is
-                                    // something the reader just did.
-                                    value: state == PlaybackState.playing
-                                        ? ''
-                                        : (update?.token?.text ?? ''),
-                                    onTap: _onSurfaceTap,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                child: _TapZone(
-                                  key: readerTapForwardKey,
-                                  label: _forwardLabel,
-                                  onTap: () => _whenReading(_stepForward),
-                                ),
-                              ),
-                            ],
-                          ),
-                  ),
-                  if (state == PlaybackState.finished)
-                    Center(
-                      child: Text('End of book', style: TextStyle(color: ink)),
-                    ),
-                  if (showControls && _chapters.isNotEmpty)
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      child: SafeArea(
-                        child: Padding(
-                          padding: const EdgeInsets.all(AppSpacing.lg),
-                          // A bare glyph in the surface's own ink. The
-                          // filled tonal disc this replaced took
-                          // `secondaryContainer`, which is an accent role,
-                          // so it drew a coloured circle over a background
-                          // the reader had chosen.
+                  Expanded(
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          // Paint only. The roles and the labels are on the
+                          // regions above, which are what a reader actually
+                          // presses; a word announced as its own node beside
+                          // three buttons would make the surface four things.
                           //
-                          // A list rather than a book: the book glyph is
-                          // what the Library tab uses, and the same
-                          // picture meaning "your books" in one place and
-                          // "this book's chapters" in another is a picture
-                          // meaning two things. Both are named in
-                          // `AppIcons`, which is where that distinction is
-                          // visible side by side.
-                          child: IconButton(
-                            onPressed: _openChapters,
-                            iconSize: _secondaryIconSize,
-                            color: ink,
-                            icon: const Icon(AppIcons.chapters),
-                            tooltip: 'Chapters',
+                          // Which surface a profile draws is decided in one
+                          // place, and the settings preview calls the same
+                          // one. See [ReadingSurface] for why a
+                          // `switch (mode)` here as well would reopen the
+                          // hole that had the contrast readout measuring a
+                          // pair the app never painted.
+                          child: ExcludeSemantics(
+                            child: ReadingSurface(
+                              updates: _current,
+                              presentation: presentation,
+                              layout: _clock.layout,
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                  if (showControls)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (_offerFrontMatter)
-                            _FrontMatterOffer(
-                              onAccept: _goToFrontMatter,
-                              onDismiss: () =>
-                                  setState(() => _offerFrontMatter = false),
+
+                        // Three regions rather than one, at a fixed anchor.
+                        // The edges step and stop; the centre keeps play,
+                        // pause and the elicited advance. Continuous scroll
+                        // replaces all three with one draggable surface —
+                        // see [_scrollRegion], and ADR 0025 for why the
+                        // zones are a fixed-anchor arrangement rather than a
+                        // reader-facing concept.
+                        //
+                        // Flex 1/2/1 rather than arithmetic over a measured
+                        // width: it puts the 25/50/25 split in the layout,
+                        // which is also where a screen reader reads the
+                        // geometry of each button from. A generous centre
+                        // because that tap is the primary control and a
+                        // mis-hit costs the reader their place in a
+                        // sentence.
+                        //
+                        // Before the controls in this list, so the close,
+                        // profile, play, chapter and jump buttons sit above
+                        // the zones and keep their own taps. The detector
+                        // this replaced wrapped all of them.
+                        Positioned.fill(
+                          child: scrolling
+                              ? _scrollRegion(state)
+                              : Row(
+                                  children: [
+                                    Expanded(
+                                      child: _TapZone(
+                                        key: readerTapBackKey,
+                                        label: _backLabel,
+                                        onTap: () => _whenReading(_stepBack),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 2,
+                                      // The word is announced by the control
+                                      // that stops on it, so this one node
+                                      // follows the stream while the two
+                                      // edges do not. The `Row` and its
+                                      // `Expanded`s are built once either
+                                      // way.
+                                      child: ValueListenableBuilder<PlaybackUpdate?>(
+                                        valueListenable: _current,
+                                        builder: (_, update, _) => _TapZone(
+                                          key: readerTapCentreKey,
+                                          label: _surfaceLabel,
+                                          // Offered only while the stream is
+                                          // stopped. A reader using RSVP is
+                                          // reading with their eyes, and
+                                          // speech four times a second would
+                                          // fight that rather than serve it —
+                                          // anyone who needs speech instead
+                                          // of sight is better served by the
+                                          // whole book read aloud than by one
+                                          // word at a time. Paused, stepped
+                                          // or rewound, the word on screen is
+                                          // one fact worth having on focus,
+                                          // and each of those is something
+                                          // the reader just did.
+                                          value: state == PlaybackState.playing
+                                              ? ''
+                                              : (update?.token?.text ?? ''),
+                                          onTap: _onSurfaceTap,
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: _TapZone(
+                                        key: readerTapForwardKey,
+                                        label: _forwardLabel,
+                                        onTap: () => _whenReading(_stepForward),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                        if (state == PlaybackState.finished)
+                          Center(
+                            child: Text(
+                              'End of book',
+                              style: TextStyle(color: ink),
                             ),
-                          _Controls(
-                            state: state,
-                            bookTitle: widget.book.title,
-                            progress: widget.book.text.progressAt(
-                              _session.index,
-                            ),
-                            // `.length` is the token count, and
-                            // `_session.index` the last one seen — the same
-                            // +1 correction `BookSummary.progress` and
-                            // `tokensLeft` in `book_progress.dart` both make,
-                            // so this reads the same as the Library tile's
-                            // own count would if the reader carried a
-                            // `PacingConfig` to phrase it in minutes instead.
-                            wordsLeft:
-                                widget.book.text.length - (_session.index + 1),
-                            presentation: presentation,
-                            onClose: _closeOrDismiss,
-                            onToggle: _toggle,
-                            onProfile: _pickProfile,
-                            // Null where there is no next one, so the
-                            // control is absent rather than present and
-                            // inert at the end of the book.
-                            onSentence: _jumpTo(_nextSentence),
-                            onParagraph: _jumpTo(_nextParagraph),
-                            onBackSentence: _jumpTo(_previousSentence),
-                            onBackParagraph: _jumpTo(_previousParagraph),
                           ),
-                        ],
-                      ),
+                        if (showControls && _chapters.isNotEmpty)
+                          Positioned(
+                            top: 0,
+                            left: 0,
+                            child: SafeArea(
+                              child: Padding(
+                                padding: const EdgeInsets.all(AppSpacing.lg),
+                                // A bare glyph in the surface's own ink. The
+                                // filled tonal disc this replaced took
+                                // `secondaryContainer`, which is an accent
+                                // role, so it drew a coloured circle over a
+                                // background the reader had chosen.
+                                //
+                                // A list rather than a book: the book glyph
+                                // is what the Library tab uses, and the same
+                                // picture meaning "your books" in one place
+                                // and "this book's chapters" in another is a
+                                // picture meaning two things. Both are named
+                                // in `AppIcons`, which is where that
+                                // distinction is visible side by side.
+                                child: IconButton(
+                                  onPressed: _openChapters,
+                                  iconSize: _secondaryIconSize,
+                                  color: ink,
+                                  icon: const Icon(AppIcons.chapters),
+                                  tooltip: 'Chapters',
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  // Sits below the reading Stack rather than inside it, so
+                  // its natural height is subtracted from the Expanded
+                  // area's constraints above instead of painting over
+                  // whatever the reading surface centred in the full window
+                  // height (issue #325).
+                  if (showControls)
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_offerFrontMatter)
+                          _FrontMatterOffer(
+                            onAccept: _goToFrontMatter,
+                            onDismiss: () =>
+                                setState(() => _offerFrontMatter = false),
+                          ),
+                        _Controls(
+                          state: state,
+                          bookTitle: widget.book.title,
+                          progress: widget.book.text.progressAt(_session.index),
+                          // `.length` is the token count, and
+                          // `_session.index` the last one seen — the same +1
+                          // correction `BookSummary.progress` and
+                          // `tokensLeft` in `book_progress.dart` both make,
+                          // so this reads the same as the Library tile's own
+                          // count would if the reader carried a
+                          // `PacingConfig` to phrase it in minutes instead.
+                          wordsLeft:
+                              widget.book.text.length - (_session.index + 1),
+                          presentation: presentation,
+                          onClose: _closeOrDismiss,
+                          onToggle: _toggle,
+                          onProfile: _pickProfile,
+                          // Null where there is no next one, so the control
+                          // is absent rather than present and inert at the
+                          // end of the book.
+                          onSentence: _jumpTo(_nextSentence),
+                          onParagraph: _jumpTo(_nextParagraph),
+                          onBackSentence: _jumpTo(_previousSentence),
+                          onBackParagraph: _jumpTo(_previousParagraph),
+                        ),
+                      ],
                     ),
                 ],
               ),
