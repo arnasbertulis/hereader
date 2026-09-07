@@ -1,6 +1,14 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_icons.dart';
 import 'api_client.dart';
+
+/// Identifies the password field's show/hide toggle for tests.
+///
+/// The button carries only an icon and a tooltip that flips with state, so a
+/// test asserting the toggle worked needs a stable handle that isn't either
+/// of those.
+const Key passwordVisibilityToggleKey = Key('password-visibility-toggle');
 
 /// Sign in or create an account.
 ///
@@ -23,6 +31,7 @@ class _SignInScreenState extends State<SignInScreen> {
 
   bool _registering = false;
   bool _busy = false;
+  bool _passwordVisible = false;
   String? _error;
 
   @override
@@ -103,7 +112,7 @@ class _SignInScreenState extends State<SignInScreen> {
 
                   TextField(
                     controller: _password,
-                    obscureText: true,
+                    obscureText: !_passwordVisible,
                     autofillHints: const [AutofillHints.password],
                     textInputAction: TextInputAction.done,
                     enabled: !_busy,
@@ -113,6 +122,22 @@ class _SignInScreenState extends State<SignInScreen> {
                       labelText: 'Password',
                       border: const OutlineInputBorder(),
                       helperText: _registering ? 'At least 8 characters' : null,
+                      suffixIcon: IconButton(
+                        key: passwordVisibilityToggleKey,
+                        icon: Icon(
+                          _passwordVisible
+                              ? AppIcons.passwordHidden
+                              : AppIcons.passwordVisible,
+                        ),
+                        tooltip: _passwordVisible
+                            ? 'Hide password'
+                            : 'Show password',
+                        onPressed: _busy
+                            ? null
+                            : () => setState(
+                                () => _passwordVisible = !_passwordVisible,
+                              ),
+                      ),
                     ),
                   ),
 
