@@ -63,6 +63,15 @@ abstract final class AppIcons {
   /// the one the sort and filter menus already drop.
   static const openSection = IconData(0xe13a, fontFamily: _light);
 
+  // -- password visibility ----------------------------------------------
+
+  /// Reveal the password field's contents. Toggled with [passwordHidden].
+  static const passwordVisible = IconData(0xe220, fontFamily: _light);
+
+  /// Obscure the password field's contents again. Toggled with
+  /// [passwordVisible].
+  static const passwordHidden = IconData(0xe224, fontFamily: _light);
+
   // -- account and sync ------------------------------------------------
 
   /// The account row on its own screen, which states signed in or not and so
