@@ -149,6 +149,39 @@ void main() {
     }
   });
 
+  group('high contrast flattens the container ramp', () {
+    for (final brightness in Brightness.values) {
+      test('every container role equals surface — ${brightness.name}', () {
+        final scheme = buildScheme(
+          accent: AppAccents.all.first.color,
+          brightness: brightness,
+          highContrast: true,
+        );
+
+        _surfaceRoles(scheme).forEach((name, value) {
+          expect(value, scheme.surface, reason: '$name did not flatten');
+        });
+      });
+
+      // cardTheme draws an outlineVariant border, and under high contrast
+      // that border is now the only thing separating a card from the
+      // surface it sits on — no lightness step is left to do that job.
+      test('outlineVariant still separates a card from surface — '
+          '${brightness.name}', () {
+        final scheme = buildScheme(
+          accent: AppAccents.all.first.color,
+          brightness: brightness,
+          highContrast: true,
+        );
+
+        expect(
+          _ratio(scheme.outlineVariant, scheme.surface),
+          greaterThanOrEqualTo(3),
+        );
+      });
+    }
+  });
+
   group('accent swatches', () {
     // The check mark that says which swatch is selected, since colour alone
     // cannot carry that.
