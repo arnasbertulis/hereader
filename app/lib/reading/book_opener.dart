@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../data/library_repository.dart';
 import '../sync/sync_engine.dart';
+import '../theme/page_transitions.dart';
 import 'library_book.dart';
 import 'reader_screen.dart';
 
@@ -98,7 +99,7 @@ class BookOpener {
       }
 
       await Navigator.of(context).push<void>(
-        MaterialPageRoute(
+        NoFadePageRoute<void>(
           builder: (_) => ReaderScreen(
             book: book,
             // The reader needs these to list the profiles actually on this
