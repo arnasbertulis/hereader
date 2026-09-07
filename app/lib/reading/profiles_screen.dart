@@ -3,6 +3,7 @@ import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
 import '../theme/content_width.dart';
+import 'info_dot.dart';
 import 'profile_actions.dart';
 import 'profile_edit_screen.dart';
 import 'profile_row.dart';
@@ -132,7 +133,17 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
               return ContentWidth(
                 child: ListView(
                   children: [
-                    const SectionHeader('Your profiles'),
+                    SectionHeader(
+                      'Your profiles',
+                      info: const InfoDot(
+                        semanticLabel: 'About your profiles',
+                        explanation:
+                            'Your profiles follow you between devices. '
+                            'Which one is selected does not: a phone read '
+                            'outdoors and a desktop in a dim room can want '
+                            'different ones.',
+                      ),
+                    ),
                     if (mine.isEmpty)
                       const Padding(
                         padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
@@ -167,15 +178,6 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                         onEdit: () => _edit(profile),
                         onDuplicate: () => _duplicate(profile),
                       ),
-
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 24, 16, 32),
-                      child: Text(
-                        'Your profiles follow you between devices. Which one '
-                        'is selected does not: a phone read outdoors and a '
-                        'desktop in a dim room can want different ones.',
-                      ),
-                    ),
                   ],
                 ),
               );
