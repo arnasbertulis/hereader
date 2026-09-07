@@ -357,34 +357,64 @@ void main() {
       await tester.pumpAndSettle();
 
       final switchFinder = find.byKey(profileFollowAppKey);
+      final polarityFinder = find.byType(SegmentedButton<Polarity>);
+      final scrollable = find.byType(Scrollable).first;
 
       // Named rather than left to default. `scrollUntilVisible` resolves its
       // own default to the single Scrollable in the tree, and the name field
       // builds an EditableText with a Scrollable of its own, so the default
       // matches two and throws before it scrolls anything. The list is the
       // outer one, so it comes first.
-      await tester.scrollUntilVisible(
-        switchFinder,
-        300,
-        scrollable: find.byType(Scrollable).first,
-      );
+      //
+      // Scrolled to on its own, right before each use, rather than once up
+      // front: the switch and the polarity control are two separate list
+      // items, and stacking every SettingSlider's value under its label
+      // (ADR 0033) grew everything above them, so a single scroll that
+      // happens to land both on screen at once is not guaranteed.
+      // `scrollUntilVisible` stops as soon as the target is built, which can
+      // leave it off the visible viewport once a later call scrolls past it
+      // for the other target — and it skips straight past that early-exit
+      // without re-centring on a call where the target is already built.
+      // `ensureVisible` is unconditional, so it re-centres every time.
+      Future<void> showSwitch() async {
+        await tester.scrollUntilVisible(
+          switchFinder,
+          100,
+          scrollable: scrollable,
+        );
+        await tester.ensureVisible(switchFinder);
+        await tester.pumpAndSettle();
+      }
 
+      Future<void> showPolarity() async {
+        await tester.scrollUntilVisible(
+          polarityFinder,
+          100,
+          scrollable: scrollable,
+        );
+        await tester.ensureVisible(polarityFinder);
+        await tester.pumpAndSettle();
+      }
+
+      await showSwitch();
       expect(tester.widget<SwitchListTile>(switchFinder).value, isTrue);
 
       SegmentedButton<Polarity> polarityControl() =>
-          tester.widget<SegmentedButton<Polarity>>(
-            find.byType(SegmentedButton<Polarity>),
-          );
+          tester.widget<SegmentedButton<Polarity>>(polarityFinder);
 
       // Following, so the control shows the side the app put it on and takes
       // no input.
+      await showPolarity();
       expect(polarityControl().selected, {Polarity.lightOnDark});
       expect(polarityControl().onSelectionChanged, isNull);
 
+      await showSwitch();
       await tester.tap(switchFinder);
       await tester.pumpAndSettle();
 
       expect(tester.widget<SwitchListTile>(switchFinder).value, isFalse);
+
+      await showPolarity();
       expect(polarityControl().selected, {Polarity.lightOnDark});
       expect(polarityControl().onSelectionChanged, isNotNull);
 

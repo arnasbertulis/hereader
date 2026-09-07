@@ -57,17 +57,12 @@ class SettingSlider extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(label, style: enabled ? null : TextStyle(color: dim)),
-              Text(
-                valueLabel,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: enabled ? null : dim,
-                ),
-              ),
-            ],
+          Text(label, style: enabled ? null : TextStyle(color: dim)),
+          Text(
+            valueLabel,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: enabled ? null : dim,
+            ),
           ),
           // No Slider at all when locked, rather than one with a disabled
           // thumb: a dimmed thumb is still a thumb, and a preset's control
