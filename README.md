@@ -173,6 +173,12 @@ Every substantial decision has an ADR carrying the alternatives that were reject
 | [0027](docs/adr/0027-refresh-token-revocation.md) | Refresh-token revocation is a `token_version` column, checked at refresh |
 | [0028](docs/adr/0028-content-security-policy.md) | The web bundle ships a Content-Security-Policy restricting it to its own origin |
 | [0029](docs/adr/0029-catalogue-ingested-and-searched-locally.md) | The Free books catalogue is ingested from Gutenberg's bulk exports and searched locally, never proxied live |
+| [0030](docs/adr/0030-shared-spring-test-contexts.md) | The server's integration suite shares Spring test contexts instead of rebuilding one per class |
+| [0031](docs/adr/0031-chrome-type-roles-on-a-base.md) | Chrome type is four roles expressed as ratios of a base, with every `TextTheme` slot declared |
+| [0032](docs/adr/0032-colour-meanings-are-fixed-at-build-time.md) | Colour meanings are fixed at build time: a curated palette, a pinned error group, and the accent as a fill |
+| [0033](docs/adr/0033-measure-and-control-proportion.md) | Every scrollable body takes a measure, and a control is sized as a control rather than a poster |
+| [0034](docs/adr/0034-a-one-control-destination-is-a-row.md) | A Settings destination whose purpose is one control is a row, and the reader route is opaque |
+| [0035](docs/adr/0035-reader-transport-names-itself.md) | On the reading surface hierarchy is size and position, and every transport control names itself in text |
 
 ---
 
