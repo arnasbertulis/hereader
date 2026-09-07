@@ -8,6 +8,7 @@ import '../sync/sign_in_screen.dart';
 import '../sync/sync_engine.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
+import 'device_label.dart';
 
 /// The session, the device, and the way in and out of an account.
 ///
@@ -114,13 +115,10 @@ class AccountScreen extends StatelessWidget {
                 ),
               ),
               const Divider(),
-              FutureBuilder<String>(
-                future: api.auth.deviceId(),
-                builder: (context, id) => ListTile(
-                  leading: const Icon(AppIcons.device),
-                  title: const Text('This device'),
-                  subtitle: Text(id.data ?? 'Reading'),
-                ),
+              ListTile(
+                leading: const Icon(AppIcons.device),
+                title: const Text('This device'),
+                subtitle: Text(devicePlatformLabel()),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(
@@ -130,10 +128,10 @@ class AccountScreen extends StatelessWidget {
                   0,
                 ),
                 child: Text(
-                  'The device name is generated here and stored on this '
-                  'device. It goes into every change this device sends, so '
-                  'the service can tell your devices apart without knowing '
-                  'anything about them.',
+                  'This name is just for you, so you can tell this device '
+                  'from your others when the app asks which place to keep '
+                  'in a synced book. A separate id, not shown here, goes '
+                  'into every change this device sends.',
                   style: theme.textTheme.bodySmall,
                 ),
               ),
