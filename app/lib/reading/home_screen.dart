@@ -16,6 +16,7 @@ import 'book_opener.dart';
 import 'book_progress.dart';
 import 'profile_presentation.dart';
 import 'reading_display.dart';
+import 'section_header.dart';
 
 /// How many books the recent row shows, beyond the one in the continue card.
 const int _recentCount = 4;
@@ -262,9 +263,10 @@ class _HomeScreenState extends State<HomeScreen> {
                             Row(
                               children: [
                                 const Expanded(
-                                  child: _SectionLabel(
+                                  child: SectionHeader(
                                     'Recently read',
                                     key: homeRecentlyReadHeaderKey,
+                                    padding: EdgeInsets.zero,
                                   ),
                                 ),
                                 // Appears only when there is a book the row
@@ -338,27 +340,6 @@ List<BookSummary> byLastRead(List<BookSummary> books) {
 DateTime _activityOf(BookSummary book) => book.lastReadAt ?? book.importedAt;
 
 bool _hasBeenRead(BookSummary book) => book.lastReadAt != null;
-
-class _SectionLabel extends StatelessWidget {
-  final String text;
-
-  const _SectionLabel(this.text, {super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Semantics(
-      header: true,
-      child: Text(
-        text,
-        style: theme.textTheme.titleSmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
-      ),
-    );
-  }
-}
 
 /// The tile, held to one width.
 ///

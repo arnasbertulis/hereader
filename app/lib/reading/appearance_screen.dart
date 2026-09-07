@@ -6,6 +6,7 @@ import '../theme/app_tokens.dart';
 import '../theme/appearance.dart';
 import 'custom_accent_screen.dart';
 import 'info_dot.dart';
+import 'section_header.dart';
 
 /// Theme, accent and contrast for app chrome.
 ///
@@ -35,7 +36,7 @@ class AppearanceScreen extends StatelessWidget {
           return ListView(
             padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
             children: [
-              const _SectionHeader('Theme'),
+              const SectionHeader('Theme'),
               for (final option in _themeOptions)
                 ListTile(
                   leading: Icon(
@@ -49,7 +50,7 @@ class AppearanceScreen extends StatelessWidget {
                   onTap: () => controller.setThemeMode(option.mode),
                 ),
 
-              _SectionHeader(
+              SectionHeader(
                 'Accent colour',
                 info: InfoDot(
                   semanticLabel: 'About accent colour',
@@ -102,7 +103,7 @@ class AppearanceScreen extends StatelessWidget {
                 ),
               ),
 
-              _SectionHeader(
+              SectionHeader(
                 'Contrast',
                 info: InfoDot(
                   semanticLabel: 'About appearance settings',
@@ -226,30 +227,6 @@ class _AccentSwatch extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  final InfoDot? info;
-
-  const _SectionHeader(this.title, {this.info});
-
-  @override
-  Widget build(BuildContext context) {
-    final text = Text(title, style: Theme.of(context).textTheme.titleMedium);
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.lg,
-        AppSpacing.xl,
-        AppSpacing.lg,
-        AppSpacing.sm,
-      ),
-      child: info == null
-          ? text
-          : Row(mainAxisSize: MainAxisSize.min, children: [text, info!]),
     );
   }
 }
