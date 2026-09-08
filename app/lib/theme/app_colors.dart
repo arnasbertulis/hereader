@@ -98,30 +98,34 @@ class _Neutrals {
     required this.onInverseSurface,
   });
 
-  /// Applies only the roles a high-contrast override supplies, keeping the
-  /// base ramp for everything the UI brief's high-contrast table did not
-  /// name (`surfaceContainerLowest`, `surfaceBright`, `surfaceDim`, the two
-  /// inverse roles, and the container steps other than `surfaceContainer`).
-  /// Flagged rather than guessed at: those roles want a real accessibility
-  /// pass before being called complete, and inheriting the standard ramp is
-  /// the safer default in the meantime, since it is at minimum the ratio
-  /// already verified in the contrast test suite.
+  /// Collapses the whole container ramp to a single flat `surface` value.
+  ///
+  /// Under high contrast there is no ramp to tune: holding the pinned dark
+  /// `error` at 7:1 requires a backdrop luminance at most 0.0037, which is
+  /// already too dark to read as a raised surface, and too light to leave
+  /// room for a lighter step above it. So every container role —
+  /// `surfaceContainerLowest`, `Low`, `surfaceContainer`, `High`, `Highest`,
+  /// plus `surfaceBright`/`surfaceDim` — takes the same value as `surface`.
+  /// A dialog, bottom sheet, popup menu or card is then told apart from what
+  /// it sits on by its `outline`, not by a lightness step; the outline
+  /// values already in the high-contrast overrides clear WCAG 1.4.11's 3:1
+  /// component-boundary bar with room to spare. The two inverse roles are
+  /// left alone: nothing in the high-contrast table names them.
   _Neutrals overrideWith({
     required Color surface,
     required Color onSurface,
     required Color onSurfaceVariant,
     required Color outline,
     required Color outlineVariant,
-    required Color surfaceContainer,
   }) => _Neutrals(
-    surfaceContainerLowest: surfaceContainerLowest,
+    surfaceContainerLowest: surface,
     surface: surface,
-    surfaceBright: surfaceBright,
-    surfaceContainerLow: surfaceContainerLow,
-    surfaceContainer: surfaceContainer,
-    surfaceContainerHigh: surfaceContainerHigh,
-    surfaceContainerHighest: surfaceContainerHighest,
-    surfaceDim: surfaceDim,
+    surfaceBright: surface,
+    surfaceContainerLow: surface,
+    surfaceContainer: surface,
+    surfaceContainerHigh: surface,
+    surfaceContainerHighest: surface,
+    surfaceDim: surface,
     onSurface: onSurface,
     onSurfaceVariant: onSurfaceVariant,
     outline: outline,
@@ -185,7 +189,6 @@ _Neutrals _neutrals(Brightness brightness, bool highContrast) {
           onSurfaceVariant: const Color(0xFF2A2E31),
           outline: const Color(0xFF4A4F53),
           outlineVariant: const Color(0xFF767C80),
-          surfaceContainer: const Color(0xFFEDEEEF),
         )
       : base.overrideWith(
           surface: const Color(0xFF000000),
@@ -193,7 +196,6 @@ _Neutrals _neutrals(Brightness brightness, bool highContrast) {
           onSurfaceVariant: const Color(0xFFD6DADD),
           outline: const Color(0xFFA8AEB2),
           outlineVariant: const Color(0xFF767C80),
-          surfaceContainer: const Color(0xFF141516),
         );
 }
 
