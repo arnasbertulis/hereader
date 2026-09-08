@@ -205,8 +205,10 @@ _Neutrals _neutrals(Brightness brightness, bool highContrast) {
 /// and their `on*`/container pairs); every surface and outline role is then
 /// overridden from [_neutrals], so the same greys appear under every accent
 /// and the accent is visible only where section 2 of the UI brief says it
-/// should be: the active nav indicator, progress fill, primary buttons,
-/// selected states and focus rings.
+/// should be: the active nav indicator, progress fill, primary buttons and
+/// selected states. Focus is not on that list — ADR 0032 section 6 gives it
+/// `tertiary` instead, kept out of the accent's own roles so a focus ring
+/// never reads as "this is selected" or "this is the accent colour."
 ColorScheme buildScheme({
   required Color accent,
   required Brightness brightness,

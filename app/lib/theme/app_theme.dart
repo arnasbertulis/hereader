@@ -106,6 +106,17 @@ ThemeData appTheme({
     textTheme: appTextTheme(scheme),
     scaffoldBackgroundColor: scheme.surface,
 
+    // ADR 0032 section 6: focus is its own treatment, distinct from hover,
+    // selection and the accent. `scheme.outline` already draws
+    // `outlinedButtonTheme.side` (below) and the unselected switch thumb,
+    // and `scheme.primary` already means "selected" (the nav indicator, the
+    // slider), so a focus ring in either would read as something else.
+    // `tertiary` is otherwise unused by this theme, so it is free for focus
+    // to own outright. `InkWell`/`InkResponse`/`ListTile` all fall back to
+    // this when they don't set their own `focusColor`, and none in this app
+    // do, so this one value covers every focusable row and button.
+    focusColor: scheme.tertiary.withValues(alpha: 0.55),
+
     // Carries the two values `scheme` cannot report back, for the reader
     // screen. See [AppChromeSource].
     extensions: [
