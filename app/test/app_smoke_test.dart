@@ -629,6 +629,27 @@ void main() {
     );
   });
 
+  test(
+    'the settings index states the active profile\'s pacing and type size',
+    () {
+      const profile = ReadingProfile(
+        id: 'p1',
+        name: 'My profile',
+        pacing: PacingConfig(kind: PacingModelKind.constant, baseWpm: 320),
+        presentation: PresentationConfig(fontSizePt: 56),
+      );
+
+      expect(
+        describeActiveProfile(profile, 0),
+        'My profile · 320 words a minute · 56 pt · presets only',
+      );
+      expect(
+        describeActiveProfile(profile, 3),
+        'My profile · 320 words a minute · 56 pt · 3 of your own',
+      );
+    },
+  );
+
   test('a sync that has never run says so rather than reporting a time', () {
     final now = DateTime.utc(2026, 5, 1, 12);
 

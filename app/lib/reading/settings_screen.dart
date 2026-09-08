@@ -14,6 +14,7 @@ import '../theme/content_width.dart';
 import 'about_screen.dart';
 import 'account_screen.dart';
 import 'appearance_screen.dart';
+import 'profile_presentation.dart';
 import 'profiles_screen.dart';
 import 'reading_display.dart';
 import 'reading_settings_screen.dart';
@@ -64,7 +65,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  String? _activeProfileName;
+  ReadingProfile? _activeProfile;
   DateTime? _lastSynced;
 
   @override
@@ -87,7 +88,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (!mounted) return;
 
     setState(() {
-      _activeProfileName = active.name;
+      _activeProfile = active;
       _lastSynced = synced;
     });
   }
@@ -194,20 +195,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  /// The active profile, and how many the reader has of their own.
+  /// The active profile's name, pacing and type size, and how many the
+  /// reader has of their own — or `Loading` before the first profile read
+  /// resolves.
   ///
   /// Presets are excluded from the count. Five of the profiles in that
   /// stream ship with the app, so counting them all would tell every reader
   /// they have five before they have made one.
   String _profilesValue(List<ReadingProfile> profiles) {
-    final name = _activeProfileName;
+    final active = _activeProfile;
+
+    if (active == null) return 'Loading';
+
     final mine = profiles.where((p) => !p.isBuiltIn).length;
 
-    if (name == null) return 'Loading';
-    if (mine == 0) return '$name · presets only';
-
-    return '$name · $mine of your own';
+    return describeActiveProfile(active, mine);
   }
+}
+
+/// The active profile's name, pacing and type size, and ownership count, as
+/// the settings index states them.
+///
+/// Pacing and type size are the two settings that most determine how a page
+/// reads, and until now reaching them meant a push into this row's own
+/// screen, then a row's overflow menu, then Edit. Stating them here does not
+/// remove that path — a reader who wants a different profile, or a different
+/// value, still opens it the same way — but a reader who only wants to know
+/// what is active no longer has to.
+String describeActiveProfile(ReadingProfile active, int ownProfileCount) {
+  final ownership = ownProfileCount == 0
+      ? 'presets only'
+      : '$ownProfileCount of your own';
+  final pacing = describeProfile(active);
+  final size = '${active.presentation.fontSizePt.round()} pt';
+
+  return '${active.name} · $pacing · $size · $ownership';
 }
 
 /// The Reading section's one setting, as the index states it.
