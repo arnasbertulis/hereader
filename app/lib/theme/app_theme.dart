@@ -131,6 +131,11 @@ ThemeData appTheme({
       elevation: 0,
       scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
+      // ADR 0031 section 4: the app bar takes the Screen title role. A
+      // title that does not fit wraps and grows the app bar rather than
+      // being ellipsised — truncating a screen name withholds it from
+      // exactly the reader least able to guess the rest.
+      titleTextStyle: appTextTheme(scheme).headlineSmall,
       shape: Border(
         bottom: BorderSide(color: scheme.outlineVariant, width: hairlineWidth),
       ),
@@ -198,7 +203,9 @@ ThemeData appTheme({
       textColor: scheme.onSurface,
       selectedColor: scheme.onSurface,
       titleTextStyle: appTextTheme(scheme).titleMedium,
-      subtitleTextStyle: appTextTheme(scheme).bodyMedium,
+      // ADR 0031: Secondary is bodyLarge, not bodyMedium — there is no 14
+      // tier for chrome prose to fall back to.
+      subtitleTextStyle: appTextTheme(scheme).bodyLarge,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadii.md),
       ),

@@ -1,6 +1,7 @@
 import 'package:app/theme/app_colors.dart';
 import 'package:app/theme/app_theme.dart';
 import 'package:app/theme/app_tokens.dart';
+import 'package:app/theme/app_typography.dart';
 import 'package:app/theme/page_transitions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -312,7 +313,131 @@ void main() {
         greaterThan(subtitle!.fontWeight!.value),
       );
       expect(title.fontWeight, theme.textTheme.titleMedium!.fontWeight);
-      expect(subtitle.fontWeight, theme.textTheme.bodyMedium!.fontWeight);
+      expect(subtitle.fontWeight, theme.textTheme.bodyLarge!.fontWeight);
+    });
+  });
+
+  // ADR 0031: four roles, expressed as ratios of a 16px base, and every
+  // `TextTheme` slot the app can resolve declared onto one of them. This is
+  // the enforcement section 6 calls for — the next undeclared-role gap
+  // should fail here rather than ship silently, the way `titleSmall`,
+  // `bodySmall` and `titleLarge` did before this ADR.
+  group('ADR 0031: chrome type roles', () {
+    const declaredSlots = [
+      'headlineSmall',
+      'titleLarge',
+      'titleMedium',
+      'titleSmall',
+      'bodyLarge',
+      'bodyMedium',
+      'bodySmall',
+      'labelLarge',
+      'labelMedium',
+      'labelSmall',
+    ];
+
+    Map<String, TextStyle?> slotsOf(TextTheme textTheme) => {
+      'headlineSmall': textTheme.headlineSmall,
+      'titleLarge': textTheme.titleLarge,
+      'titleMedium': textTheme.titleMedium,
+      'titleSmall': textTheme.titleSmall,
+      'bodyLarge': textTheme.bodyLarge,
+      'bodyMedium': textTheme.bodyMedium,
+      'bodySmall': textTheme.bodySmall,
+      'labelLarge': textTheme.labelLarge,
+      'labelMedium': textTheme.labelMedium,
+      'labelSmall': textTheme.labelSmall,
+    };
+
+    test('every declared slot lands on one of the four base roles', () {
+      final textTheme = appTheme(brightness: Brightness.light).textTheme;
+      final base = <TextStyle>{
+        textTheme.headlineSmall!, // Screen title
+        textTheme.titleLarge!, // Section header
+        textTheme.titleMedium!, // Row label
+        textTheme.bodyLarge!, // Secondary
+      };
+
+      slotsOf(textTheme).forEach((name, style) {
+        expect(style, isNotNull, reason: '$name is not declared');
+        expect(declaredSlots, contains(name));
+        expect(
+          base.any(
+            (role) =>
+                role.fontSize == style!.fontSize &&
+                role.fontWeight == style.fontWeight &&
+                role.height == style.height &&
+                role.color == style.color,
+          ),
+          isTrue,
+          reason:
+              '$name (${style!.fontSize}/${style.fontWeight}) does not '
+              'match one of the four roles — there is no tier below the '
+              'base',
+        );
+      });
+    });
+
+    test('appTextTheme itself leaves the deleted display roles undeclared', () {
+      // `ThemeData` always merges a partial `TextTheme` onto Material's
+      // defaults, so `appTheme(...).textTheme.displayLarge` resolves to
+      // Roboto regardless — that merge is the defect this ADR closes for
+      // the roles the app actually uses. What this file controls is
+      // whether [appTextTheme] itself declares a value here; it does not,
+      // since zero call sites resolve these. See app_typography.dart.
+      final scheme = appTheme(brightness: Brightness.light).colorScheme;
+      final textTheme = appTextTheme(scheme);
+
+      expect(textTheme.displayLarge, isNull);
+      expect(textTheme.displayMedium, isNull);
+      expect(textTheme.displaySmall, isNull);
+    });
+
+    test('the app bar takes the Screen title role', () {
+      final theme = appTheme(brightness: Brightness.light);
+      final appBarTitle = theme.appBarTheme.titleTextStyle;
+      final screenTitle = theme.textTheme.headlineSmall!;
+
+      expect(appBarTitle, isNotNull);
+      expect(appBarTitle!.fontSize, screenTitle.fontSize);
+      expect(appBarTitle.fontWeight, screenTitle.fontWeight);
+      expect(appBarTitle.height, screenTitle.height);
+      expect(appBarTitle.color, screenTitle.color);
+    });
+
+    test('Section header is distinct from Row label in size and colour, '
+        'not weight', () {
+      final textTheme = appTheme(brightness: Brightness.light).textTheme;
+      final sectionHeader = textTheme.titleLarge!;
+      final rowLabel = textTheme.titleMedium!;
+
+      expect(sectionHeader.fontSize, isNot(rowLabel.fontSize));
+      expect(sectionHeader.color, isNot(rowLabel.color));
+      expect(sectionHeader.fontWeight, rowLabel.fontWeight);
+    });
+
+    test('Secondary and Row label sit at the same base — nothing smaller', () {
+      final textTheme = appTheme(brightness: Brightness.light).textTheme;
+
+      for (final name in declaredSlots) {
+        if (name == 'titleLarge') continue; // Section header, above base.
+        final style = slotsOf(textTheme)[name]!;
+        expect(
+          style.fontSize,
+          greaterThanOrEqualTo(16),
+          reason: '$name is below the 16px base',
+        );
+      }
+    });
+
+    test('the four roles hold their ratios of the 16px base', () {
+      final textTheme = appTheme(brightness: Brightness.light).textTheme;
+      const base = 16.0;
+
+      expect(textTheme.headlineSmall!.fontSize! / base, 1.5);
+      expect(textTheme.titleLarge!.fontSize! / base, 1.25);
+      expect(textTheme.titleMedium!.fontSize! / base, 1.0);
+      expect(textTheme.bodyLarge!.fontSize! / base, 1.0);
     });
   });
 
