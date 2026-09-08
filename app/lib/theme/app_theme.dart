@@ -85,10 +85,17 @@ class AppChromeSource extends ThemeExtension<AppChromeSource> {
 /// `themeMode` stays a `MaterialApp`-level concern rather than living here,
 /// since it decides which of `theme` / `darkTheme` applies rather than
 /// anything about either theme's content.
+///
+/// [textScale] is the reader's chrome text-size choice from Appearance
+/// (#338), a multiple of `appTextTheme`'s base sizes. Defaults to 1.0 for
+/// the two call sites — `startup_failure.dart` and a build before
+/// `AppearanceController.restore()` completes — that have no settings to
+/// read it from yet.
 ThemeData appTheme({
   required Brightness brightness,
   Color? accent,
   bool highContrast = false,
+  double textScale = 1.0,
 }) {
   final resolvedAccent = accent ?? AppAccents.defaultAccent.color;
   final scheme = buildScheme(
@@ -99,11 +106,12 @@ ThemeData appTheme({
   final hairlineWidth = highContrast
       ? AppHairline.widthHighContrast
       : AppHairline.width;
+  final textTheme = appTextTheme(scheme, scale: textScale);
 
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
-    textTheme: appTextTheme(scheme),
+    textTheme: textTheme,
     scaffoldBackgroundColor: scheme.surface,
 
     // ADR 0032 section 6: focus is its own treatment, distinct from hover,
@@ -173,7 +181,7 @@ ThemeData appTheme({
           borderRadius: BorderRadius.circular(AppRadii.md),
         ),
         minimumSize: const Size(48, 48),
-        textStyle: appTextTheme(scheme).labelLarge,
+        textStyle: textTheme.labelLarge,
       ),
     ),
 
@@ -184,7 +192,7 @@ ThemeData appTheme({
         ),
         side: BorderSide(color: scheme.outline, width: hairlineWidth),
         minimumSize: const Size(48, 48),
-        textStyle: appTextTheme(scheme).labelLarge,
+        textStyle: textTheme.labelLarge,
       ),
     ),
 
@@ -194,7 +202,7 @@ ThemeData appTheme({
           borderRadius: BorderRadius.circular(AppRadii.md),
         ),
         minimumSize: const Size(48, 48),
-        textStyle: appTextTheme(scheme).labelLarge,
+        textStyle: textTheme.labelLarge,
       ),
     ),
 
@@ -202,10 +210,10 @@ ThemeData appTheme({
       iconColor: scheme.onSurfaceVariant,
       textColor: scheme.onSurface,
       selectedColor: scheme.onSurface,
-      titleTextStyle: appTextTheme(scheme).titleMedium,
+      titleTextStyle: textTheme.titleMedium,
       // ADR 0031: Secondary is bodyLarge, not bodyMedium — there is no 14
       // tier for chrome prose to fall back to.
-      subtitleTextStyle: appTextTheme(scheme).bodyLarge,
+      subtitleTextStyle: textTheme.bodyLarge,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadii.md),
       ),

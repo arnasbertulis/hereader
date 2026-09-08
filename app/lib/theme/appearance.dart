@@ -34,18 +34,31 @@ abstract final class AppearanceKeys {
   static const themeMode = 'ui.theme_mode';
   static const accent = 'ui.accent';
   static const highContrast = 'ui.high_contrast';
+  static const chromeTextScale = 'ui.chrome_text_scale';
 }
+
+/// The smallest and largest multiple of the base a reader can choose.
+///
+/// #338: ADR 0031 states every chrome role as a ratio of a 16px base
+/// specifically so one lever can move the whole scale. This is that lever.
+/// It does not touch the reading surface — the RSVP word keeps its own size
+/// from the active reading profile — and it stacks with, rather than
+/// replaces, the platform's own `MediaQuery.textScaler`.
+const double chromeTextScaleMin = 0.85;
+const double chromeTextScaleMax = 1.5;
 
 @immutable
 class AppearanceSettings {
   final ThemeMode themeMode;
   final Color accent;
   final bool highContrast;
+  final double chromeTextScale;
 
   const AppearanceSettings({
     required this.themeMode,
     required this.accent,
     required this.highContrast,
+    required this.chromeTextScale,
   });
 
   /// What a device with nothing stored starts from.
@@ -59,16 +72,19 @@ class AppearanceSettings {
     themeMode: ThemeMode.system,
     accent: AppAccents.defaultAccent.color,
     highContrast: false,
+    chromeTextScale: 1.0,
   );
 
   AppearanceSettings copyWith({
     ThemeMode? themeMode,
     Color? accent,
     bool? highContrast,
+    double? chromeTextScale,
   }) => AppearanceSettings(
     themeMode: themeMode ?? this.themeMode,
     accent: accent ?? this.accent,
     highContrast: highContrast ?? this.highContrast,
+    chromeTextScale: chromeTextScale ?? this.chromeTextScale,
   );
 
   @override
@@ -76,10 +92,12 @@ class AppearanceSettings {
       other is AppearanceSettings &&
       other.themeMode == themeMode &&
       other.accent == accent &&
-      other.highContrast == highContrast;
+      other.highContrast == highContrast &&
+      other.chromeTextScale == chromeTextScale;
 
   @override
-  int get hashCode => Object.hash(themeMode, accent, highContrast);
+  int get hashCode =>
+      Object.hash(themeMode, accent, highContrast, chromeTextScale);
 }
 
 // -- encoding ------------------------------------------------------------
@@ -150,6 +168,25 @@ String encodeHighContrast(bool value) => value ? 'true' : 'false';
 
 bool decodeHighContrast(String? value) => value == 'true';
 
+/// Two decimal places — plenty for a ratio a slider drives in steps of
+/// 0.05, and stable across locales since this never goes through
+/// `NumberFormat`.
+String encodeChromeTextScale(double value) => value.toStringAsFixed(2);
+
+/// Falls back to the default on anything unparseable or out of range,
+/// rather than throwing — the same reasoning [decodeThemeMode] states: this
+/// runs before the first frame, and a row a future build cannot make sense
+/// of must still produce something renderable.
+double decodeChromeTextScale(String? value) {
+  final parsed = value == null ? null : double.tryParse(value);
+  if (parsed == null ||
+      parsed < chromeTextScaleMin ||
+      parsed > chromeTextScaleMax) {
+    return AppearanceSettings.defaults.chromeTextScale;
+  }
+  return parsed;
+}
+
 // -- controller ----------------------------------------------------------
 
 /// Holds the current appearance and writes changes through to the database.
@@ -184,11 +221,15 @@ class AppearanceController extends ChangeNotifier {
     final themeMode = await repository.preference(AppearanceKeys.themeMode);
     final accent = await repository.preference(AppearanceKeys.accent);
     final contrast = await repository.preference(AppearanceKeys.highContrast);
+    final textScale = await repository.preference(
+      AppearanceKeys.chromeTextScale,
+    );
 
     _settings = AppearanceSettings(
       themeMode: decodeThemeMode(themeMode),
       accent: decodeAccent(accent),
       highContrast: decodeHighContrast(contrast),
+      chromeTextScale: decodeChromeTextScale(textScale),
     );
 
     notifyListeners();
@@ -215,6 +256,17 @@ class AppearanceController extends ChangeNotifier {
 
     await _persist(AppearanceKeys.highContrast, encodeHighContrast(value));
     _settings = _settings.copyWith(highContrast: value);
+    notifyListeners();
+  }
+
+  Future<void> setChromeTextScale(double value) async {
+    if (value == _settings.chromeTextScale) return;
+
+    await _persist(
+      AppearanceKeys.chromeTextScale,
+      encodeChromeTextScale(value),
+    );
+    _settings = _settings.copyWith(chromeTextScale: value);
     notifyListeners();
   }
 

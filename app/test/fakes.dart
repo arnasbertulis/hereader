@@ -158,9 +158,11 @@ class FakeApi implements ApiClient {
   Future<Session> logIn(String email, String password) =>
       throw UnimplementedError('The sync engine does not sign in.');
 
+  // Settings' account sheet does sign out through this, unlike the rest of
+  // this block: mirrors the real ApiClient.logOut's fall-through to clearing
+  // local storage, without the server round trip these tests don't need.
   @override
-  Future<void> logOut() =>
-      throw UnimplementedError('The sync engine does not sign out.');
+  Future<void> logOut() => auth.clear();
 
   @override
   void dispose() {}
