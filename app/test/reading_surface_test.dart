@@ -353,6 +353,18 @@ void main() {
       // A dark app, a profile that follows it, and a reader who reaches for
       // the switch. What they pin is the surface in front of them, not the
       // class default, so nothing on screen moves when they do it.
+      //
+      // A tall physical size, so the editor's ListView mounts every row's
+      // sliver in one pass. ADR 0031 raised every role that used to sit
+      // below the 16px base — the switch and the polarity control are far
+      // enough down the list that, at a phone-sized viewport, the default
+      // Scrollable can flicker out of `find.byType(Scrollable)` mid-drag as
+      // the name field's own EditableText scrollable mounts and unmounts
+      // around it.
+      addTearDown(tester.view.reset);
+      tester.view.physicalSize = const Size(400, 3000);
+      tester.view.devicePixelRatio = 1.0;
+
       await tester.pumpWidget(editor(_profile(), app: Brightness.dark));
       await tester.pumpAndSettle();
 
