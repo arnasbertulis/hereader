@@ -256,32 +256,19 @@ void main() {
     await tester.pumpWidget(harness.app);
     await tester.pumpAndSettle();
 
-    // Sync reports itself in Settings. The library carried this control
-    // until the add button took its bar, and Home carried a copy before
-    // that.
+    // Sync reports itself in the account block at the top of Settings (ADR
+    // 0034 §2), which replaced the separate Account and Sync screens.
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
 
-    // The index row answers without being opened, which is what every row on
-    // that screen is for.
-    expect(find.text('Off. Sign in to turn it on.'), findsOneWidget);
+    // The account block answers without being opened, which is what it is
+    // for.
     expect(find.text('Not signed in'), findsOneWidget);
+    expect(find.text('Sign in to carry your place'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(ListTile, 'Sync'));
-    await tester.pumpAndSettle();
-
-    // Reading works signed out, so this is an invitation rather than a gate.
-    // It says where to go rather than offering a button that would take the
-    // reader somewhere they did not ask to be.
-    expect(find.byIcon(AppIcons.syncSignedOut), findsOneWidget);
-    expect(find.text('Sync is off'), findsOneWidget);
-    expect(find.text('Sign in under Account to turn sync on.'), findsOneWidget);
-
-    // And the run button is off, since there is nothing to run against.
+    // And its sync button is off, since there is nothing to run against.
     expect(
-      tester
-          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Sync now'))
-          .onPressed,
+      tester.widget<IconButton>(find.byType(IconButton)).onPressed,
       isNull,
     );
 
@@ -566,17 +553,16 @@ void main() {
     await tester.pumpAndSettle();
 
     for (final section in const [
-      'Account',
       'Reading profiles',
       'Appearance',
       'Reading',
-      'Sync',
       'About',
     ]) {
       expect(find.text(section), findsOneWidget);
     }
 
-    // The row states where it leads rather than only naming a section.
+    // The account block replaced the old Account and Sync sections (ADR
+    // 0034 §2); it states its fact directly rather than only naming itself.
     expect(find.text('Not signed in'), findsOneWidget);
 
     await _disposeTree(tester);
