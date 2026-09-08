@@ -27,7 +27,25 @@ class AppearanceScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Appearance')),
+      appBar: AppBar(
+        title: const Text('Appearance'),
+        // Introduces all three sections below, so it lives on the screen's
+        // own AppBar rather than trailing whichever section happens to be
+        // last — see #343. InfoDot is a bare IconButton with no dependency
+        // on SectionHeader, so it drops in unchanged.
+        actions: const [
+          InfoDot(
+            semanticLabel: 'About appearance settings',
+            explanation:
+                'These three stay on this device. A phone read '
+                'outdoors and a desktop in a dim room can want '
+                'different ones.\n\n'
+                'None of them touch the reading surface. The colours '
+                'a word is drawn in belong to the reading profile you '
+                'chose, under Reading profiles.',
+          ),
+        ],
+      ),
       body: ListenableBuilder(
         listenable: controller,
         builder: (context, _) {
@@ -107,19 +125,7 @@ class AppearanceScreen extends StatelessWidget {
                   ),
                 ),
 
-                SectionHeader(
-                  'Contrast',
-                  info: InfoDot(
-                    semanticLabel: 'About appearance settings',
-                    explanation:
-                        'These three stay on this device. A phone read '
-                        'outdoors and a desktop in a dim room can want '
-                        'different ones.\n\n'
-                        'None of them touch the reading surface. The colours '
-                        'a word is drawn in belong to the reading profile you '
-                        'chose, under Reading profiles.',
-                  ),
-                ),
+                const SectionHeader('Contrast'),
                 ListTile(
                   onTap: () =>
                       controller.setHighContrast(!settings.highContrast),
