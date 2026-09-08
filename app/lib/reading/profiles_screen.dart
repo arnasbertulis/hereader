@@ -68,13 +68,16 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   }
 
   Future<void> _duplicate(ReadingProfile source) async {
-    // ProfileActions.duplicate writes the fork's own pointer; the
-    // subscription below picks it up without a reload here.
+    // Same rule ProfileActions.duplicate follows: the fork is saved but not
+    // made active, so there is no active-profile pointer to pick up here.
     await _profileActions.duplicate(context, source);
   }
 
   Future<void> _edit(ReadingProfile profile) async {
-    final result = await Navigator.of(context).push<ReadingProfile>(
+    // Same rule ProfileActions.duplicate follows: editing a preset forks it,
+    // but the fork is not made active. Activating a profile is a separate,
+    // explicit choice made from the list, not a side effect of editing.
+    await Navigator.of(context).push<ReadingProfile>(
       MaterialPageRoute(
         builder: (_) => ProfileEditScreen(
           profile: profile,
@@ -83,19 +86,6 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
         ),
       ),
     );
-
-    if (!mounted) return;
-
-    // The editor forked a preset. Same rule ProfileActions.duplicate
-    // follows: a profile just created by editing is the one to read with,
-    // regardless of what was active when the fork happened. Writing the
-    // pointer is enough; the subscription below delivers the result.
-    if (result != null && result.id != profile.id) {
-      await widget.repository.setActiveProfile(
-        result.id,
-        hlc: await widget.issueStamp(),
-      );
-    }
   }
 
   Future<void> _delete(ReadingProfile profile) async {

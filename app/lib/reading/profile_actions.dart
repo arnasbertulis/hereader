@@ -21,21 +21,18 @@ class ProfileActions {
 
   const ProfileActions({required this.repository, required this.issueStamp});
 
-  /// Forks [source], makes the fork active, and opens it for editing.
+  /// Forks [source] and opens the fork for editing.
   ///
-  /// The fork is selected before the editor opens: the reader asked to make
-  /// it and is about to customise it, not carry on with whatever was active
-  /// before it existed. If the editor forks again — editing a preset always
-  /// does — the second fork replaces it as active in turn.
+  /// The fork is not made active. The reader is exploring what a copy would
+  /// look like, or comparing it against what is already in use; neither
+  /// should switch what the app reads with. Activating a profile is a
+  /// separate, explicit choice made from the list.
   Future<void> duplicate(BuildContext context, ReadingProfile source) async {
     final copy = source.fork(id: ReadingProfile.newId());
     await repository.saveProfile(copy, hlc: await issueStamp());
     if (!context.mounted) return;
 
-    await repository.setActiveProfile(copy.id, hlc: await issueStamp());
-    if (!context.mounted) return;
-
-    final result = await Navigator.of(context).push<ReadingProfile>(
+    await Navigator.of(context).push<ReadingProfile>(
       MaterialPageRoute(
         builder: (_) => ProfileEditScreen(
           profile: copy,
@@ -44,11 +41,6 @@ class ProfileActions {
         ),
       ),
     );
-    if (!context.mounted) return;
-
-    if (result != null && result.id != copy.id) {
-      await repository.setActiveProfile(result.id, hlc: await issueStamp());
-    }
   }
 
   /// Confirms, then deletes [profile]. Returns whether it was deleted.
