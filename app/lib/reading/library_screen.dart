@@ -545,7 +545,11 @@ class _ControlsRow extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(filter.label, style: theme.textTheme.labelLarge),
+                  _CaptionedValue(
+                    caption: 'Show',
+                    value: filter.label,
+                    theme: theme,
+                  ),
                   const Icon(AppIcons.openMenu),
                 ],
               ),
@@ -579,26 +583,71 @@ class _ControlsRow extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(sort.label, style: theme.textTheme.labelLarge),
+                      _CaptionedValue(
+                        caption: 'Sort',
+                        value: sort.label,
+                        theme: theme,
+                      ),
                       const Icon(AppIcons.openMenu),
                     ],
                   ),
                 ),
               ),
-              // The label says which end the list starts from rather than
-              // "ascending", which means the newest books under one field
-              // and the letter A under another. Pressing it reads as
-              // swapping the ends, and the label changes to the end you
-              // land on.
-              TextButton.icon(
+              // Outlined rather than the two menus' bare text-plus-chevron:
+              // this one acts immediately on tap instead of opening a list,
+              // so it needs a shape a reader can tell apart from "Show" and
+              // "Sort" before they tap it, not just after. The label still
+              // says which end the list starts from rather than "ascending",
+              // which means the newest books under one field and the letter
+              // A under another. Pressing it reads as swapping the ends, and
+              // the label changes to the end you land on.
+              OutlinedButton.icon(
                 onPressed: onFlip,
                 icon: const Icon(AppIcons.flipSortDirection, size: 20),
-                label: Text(sort.endLabel(reversed: reversed)),
+                label: _CaptionedValue(
+                  caption: 'Order',
+                  value: sort.endLabel(reversed: reversed),
+                  theme: theme,
+                ),
               ),
             ],
           ),
         ],
       ),
+    );
+  }
+}
+
+/// A control's name stacked above the value it currently holds, shared by
+/// the two menu buttons and the order toggle so all three say what they
+/// govern before the reader reads the value — "Show"/"Sort"/"Order" above
+/// "All"/"Recently added"/"Newest first" rather than the value standing
+/// alone as if it were the control's name.
+class _CaptionedValue extends StatelessWidget {
+  final String caption;
+  final String value;
+  final ThemeData theme;
+
+  const _CaptionedValue({
+    required this.caption,
+    required this.value,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          caption,
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        Text(value, style: theme.textTheme.labelLarge),
+      ],
     );
   }
 }

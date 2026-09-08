@@ -254,6 +254,28 @@ void main() {
       await _disposeTree(tester);
     });
 
+    testWidgets(
+      'the filter, sort and direction controls each name what they govern '
+      'and the direction control has a shape the other two do not',
+      (tester) async {
+        await addBook('book-1', title: 'Zeno');
+
+        await pump(tester, width: 360);
+
+        expect(find.text('Show'), findsOneWidget);
+        expect(find.text('Sort'), findsOneWidget);
+        expect(find.text('Order'), findsOneWidget);
+
+        // The two menus share PopupMenuButton; the direction control is an
+        // OutlinedButton instead, so it reads as an immediate action rather
+        // than a third menu even before it is pressed.
+        expect(find.byType(PopupMenuButton<LibrarySort>), findsOneWidget);
+        expect(find.byType(OutlinedButton), findsOneWidget);
+
+        await _disposeTree(tester);
+      },
+    );
+
     testWidgets('a book nobody has opened stays last when progress flips', (
       tester,
     ) async {
