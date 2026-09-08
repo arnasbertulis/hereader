@@ -11,6 +11,7 @@ import '../data/library_repository.dart';
 import '../sync/sync_engine.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
+import '../theme/content_width.dart';
 import 'add_menu.dart';
 import 'add_menu_dispatcher.dart';
 import 'book_cover.dart';
@@ -430,41 +431,43 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
     final filtered = books.where(_filter.matches).toList();
 
-    return Column(
-      children: [
-        _ControlsRow(
-          filter: _filter,
-          onFilter: _busy ? null : _chooseFilter,
-          sort: _sort,
-          reversed: _reversed,
-          onSort: _busy ? null : _chooseSort,
-          onFlip: _busy ? null : _flipSort,
-        ),
-        Expanded(
-          child: filtered.isEmpty
-              ? _FilteredEmptyState(
-                  filter: _filter,
-                  onAdd: _busy ? null : () => _addForFilter(_filter),
-                )
-              : RefreshIndicator(
-                  // Pull to sync: the periodic timer is five minutes, which
-                  // is a long time to wait when you have just put down
-                  // another device. The status readout lives in settings
-                  // now; this is the gesture, not a second copy of the
-                  // state.
-                  onRefresh: widget.sync.syncNow,
-                  child: _BookShelf(
-                    books: filtered,
-                    coverOf: _repo.coverOf,
-                    pacing: _pacing,
-                    scope: widget.display.timeLeftScope,
-                    onOpen: _busy ? null : _open,
-                    onRemove: _confirmRemove,
-                    onEditNote: _editNote,
+    return ContentWidth(
+      child: Column(
+        children: [
+          _ControlsRow(
+            filter: _filter,
+            onFilter: _busy ? null : _chooseFilter,
+            sort: _sort,
+            reversed: _reversed,
+            onSort: _busy ? null : _chooseSort,
+            onFlip: _busy ? null : _flipSort,
+          ),
+          Expanded(
+            child: filtered.isEmpty
+                ? _FilteredEmptyState(
+                    filter: _filter,
+                    onAdd: _busy ? null : () => _addForFilter(_filter),
+                  )
+                : RefreshIndicator(
+                    // Pull to sync: the periodic timer is five minutes, which
+                    // is a long time to wait when you have just put down
+                    // another device. The status readout lives in settings
+                    // now; this is the gesture, not a second copy of the
+                    // state.
+                    onRefresh: widget.sync.syncNow,
+                    child: _BookShelf(
+                      books: filtered,
+                      coverOf: _repo.coverOf,
+                      pacing: _pacing,
+                      scope: widget.display.timeLeftScope,
+                      onOpen: _busy ? null : _open,
+                      onRemove: _confirmRemove,
+                      onEditNote: _editNote,
+                    ),
                   ),
-                ),
-        ),
-      ],
+          ),
+        ],
+      ),
     );
   }
 }
