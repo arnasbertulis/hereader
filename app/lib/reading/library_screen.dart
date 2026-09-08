@@ -526,7 +526,13 @@ class _ControlsRow extends StatelessWidget {
             onSelected: onFilter,
             itemBuilder: (context) => [
               for (final option in _LibraryFilter.values)
-                PopupMenuItem(value: option, child: Text(option.label)),
+                PopupMenuItem(
+                  value: option,
+                  child: _MenuChoiceLabel(
+                    label: option.label,
+                    chosen: option == filter,
+                  ),
+                ),
             ],
             child: Padding(
               padding: const EdgeInsets.symmetric(
@@ -554,7 +560,13 @@ class _ControlsRow extends StatelessWidget {
                 onSelected: onSort,
                 itemBuilder: (context) => [
                   for (final option in LibrarySort.values)
-                    PopupMenuItem(value: option, child: Text(option.label)),
+                    PopupMenuItem(
+                      value: option,
+                      child: _MenuChoiceLabel(
+                        label: option.label,
+                        chosen: option == sort,
+                      ),
+                    ),
                 ],
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
@@ -584,6 +596,37 @@ class _ControlsRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// A menu row for one of several mutually exclusive choices, marking the
+/// chosen one with a leading check rather than a background tint.
+///
+/// Tint is reserved for hover and keyboard focus (ADR 0032); before this,
+/// these two menus were the one place selection and hover read as the same
+/// rectangle. The check sits at the same size and colour as the row's own
+/// text, matching the treatment `SegmentedButton` already gives its selected
+/// segment — the same rule, applied to a menu instead of a row of buttons.
+class _MenuChoiceLabel extends StatelessWidget {
+  final String label;
+  final bool chosen;
+
+  const _MenuChoiceLabel({required this.label, required this.chosen});
+
+  @override
+  Widget build(BuildContext context) {
+    final textColor = DefaultTextStyle.of(context).style.color;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 20,
+          child: chosen ? Icon(Icons.check, size: 18, color: textColor) : null,
+        ),
+        const SizedBox(width: 8),
+        Text(label),
+      ],
     );
   }
 }

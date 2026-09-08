@@ -128,6 +128,80 @@ void main() {
     await _disposeTree(tester);
   });
 
+  testWidgets(
+    'the filter menu marks the active option with a check, not just a tint',
+    (tester) async {
+      await addBook('book-1', title: 'Romeo and Juliet');
+      await addNote('note-1', title: 'My note');
+
+      await pump(tester);
+
+      await tester.tap(find.text('All'));
+      await tester.pumpAndSettle();
+
+      Finder rowFor(String label) => find
+          .ancestor(of: find.text(label).last, matching: find.byType(Row))
+          .first;
+
+      // "All" is the active filter: its row carries the check that used to
+      // be a background tint alone (ADR 0032) — the same tint the menu still
+      // uses for hover and keyboard focus.
+      expect(
+        find.descendant(of: rowFor('All'), matching: find.byIcon(Icons.check)),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: rowFor('Books'),
+          matching: find.byIcon(Icons.check),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: rowFor('Notes'),
+          matching: find.byIcon(Icons.check),
+        ),
+        findsNothing,
+      );
+
+      await _disposeTree(tester);
+    },
+  );
+
+  testWidgets(
+    'the sort menu marks the active option with a check, not just a tint',
+    (tester) async {
+      await addBook('book-1', title: 'Romeo and Juliet');
+
+      await pump(tester);
+
+      await tester.tap(find.text('Recently added'));
+      await tester.pumpAndSettle();
+
+      Finder rowFor(String label) => find
+          .ancestor(of: find.text(label).last, matching: find.byType(Row))
+          .first;
+
+      expect(
+        find.descendant(
+          of: rowFor('Recently added'),
+          matching: find.byIcon(Icons.check),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: rowFor('Title'),
+          matching: find.byIcon(Icons.check),
+        ),
+        findsNothing,
+      );
+
+      await _disposeTree(tester);
+    },
+  );
+
   testWidgets('choosing Notes hides books and shows notes', (tester) async {
     await addBook('book-1', title: 'Romeo and Juliet');
     await addNote('note-1', title: 'My note');
