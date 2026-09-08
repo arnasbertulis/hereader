@@ -1336,12 +1336,32 @@ class _ReaderScreenState extends State<ReaderScreen>
                                 // picture meaning two things. Both are named
                                 // in `AppIcons`, which is where that
                                 // distinction is visible side by side.
-                                child: IconButton(
-                                  onPressed: _openChapters,
-                                  iconSize: _secondaryIconSize,
-                                  color: ink,
-                                  icon: const Icon(AppIcons.chapters),
-                                  tooltip: 'Chapters',
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      onPressed: _openChapters,
+                                      iconSize: _secondaryIconSize,
+                                      color: ink,
+                                      icon: const Icon(AppIcons.chapters),
+                                      tooltip: 'Chapters',
+                                    ),
+                                    // ADR 0035 §2: a tooltip never draws on
+                                    // touch, so the name has to be visible
+                                    // text. `ExcludeSemantics` keeps a screen
+                                    // reader from reading the tooltip's
+                                    // semantic label and this caption back to
+                                    // back.
+                                    ExcludeSemantics(
+                                      child: Text(
+                                        'Chapters',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelSmall
+                                            ?.copyWith(color: ink),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
@@ -1817,52 +1837,86 @@ class _Controls extends StatelessWidget {
             const SizedBox(height: AppSpacing.lg),
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: _controlsMaxWidth),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  IconButton(
-                    key: readerBackParagraphButtonKey,
-                    onPressed: onBackParagraph,
-                    iconSize: _secondaryIconSize,
-                    color: ink,
-                    // `color` is the enabled colour only, and this row sets
-                    // it explicitly rather than taking a scheme role, so the
-                    // disabled one has to be set explicitly too or the glyph
-                    // falls back to the theme's `onSurface` over a
-                    // background the theme has never seen. The same ink,
-                    // dimmed: nothing else on this screen could carry
-                    // "unavailable", and ADR 0015's one ink is not broken by
-                    // an opacity.
-                    disabledColor: _dimmed(ink),
-                    icon: const Icon(AppIcons.backParagraph),
-                    tooltip: 'Back a paragraph',
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      IconButton(
+                        key: readerBackParagraphButtonKey,
+                        onPressed: onBackParagraph,
+                        iconSize: _secondaryIconSize,
+                        color: ink,
+                        // `color` is the enabled colour only, and this row sets
+                        // it explicitly rather than taking a scheme role, so the
+                        // disabled one has to be set explicitly too or the glyph
+                        // falls back to the theme's `onSurface` over a
+                        // background the theme has never seen. The same ink,
+                        // dimmed: nothing else on this screen could carry
+                        // "unavailable", and ADR 0015's one ink is not broken by
+                        // an opacity.
+                        disabledColor: _dimmed(ink),
+                        icon: const Icon(AppIcons.backParagraph),
+                        tooltip: 'Back a paragraph',
+                      ),
+                      IconButton(
+                        key: readerBackSentenceButtonKey,
+                        onPressed: onBackSentence,
+                        iconSize: _secondaryIconSize,
+                        color: ink,
+                        disabledColor: _dimmed(ink),
+                        icon: const Icon(AppIcons.backSentence),
+                        tooltip: 'Back a sentence',
+                      ),
+                      IconButton(
+                        key: readerSentenceButtonKey,
+                        onPressed: onSentence,
+                        iconSize: _secondaryIconSize,
+                        color: ink,
+                        disabledColor: _dimmed(ink),
+                        icon: const Icon(AppIcons.skipSentence),
+                        tooltip: 'Forward a sentence',
+                      ),
+                      IconButton(
+                        key: readerParagraphButtonKey,
+                        onPressed: onParagraph,
+                        iconSize: _secondaryIconSize,
+                        color: ink,
+                        disabledColor: _dimmed(ink),
+                        icon: const Icon(AppIcons.skipParagraph),
+                        tooltip: 'Forward a paragraph',
+                      ),
+                    ],
                   ),
-                  IconButton(
-                    key: readerBackSentenceButtonKey,
-                    onPressed: onBackSentence,
-                    iconSize: _secondaryIconSize,
-                    color: ink,
-                    disabledColor: _dimmed(ink),
-                    icon: const Icon(AppIcons.backSentence),
-                    tooltip: 'Back a sentence',
+                  const SizedBox(height: AppSpacing.xs),
+                  // ADR 0035 §3: one label per axis, not per button — a
+                  // tooltip on each of the four would repeat "paragraph" or
+                  // "sentence" twice and still not fit `_controlsMaxWidth` at
+                  // ADR 0031's base size (see the ADR's "label all four"
+                  // alternative, rejected for exactly that). Both labels sit
+                  // on the row's shared centre: the outer pair's midpoint
+                  // and the inner pair's midpoint are the same point, so a
+                  // second line rather than a second column is what keeps
+                  // them from overlapping. Direction is the glyph's job, not
+                  // the word's.
+                  ExcludeSemantics(
+                    child: Text(
+                      'Paragraph',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelSmall?.copyWith(color: ink),
+                    ),
                   ),
-                  IconButton(
-                    key: readerSentenceButtonKey,
-                    onPressed: onSentence,
-                    iconSize: _secondaryIconSize,
-                    color: ink,
-                    disabledColor: _dimmed(ink),
-                    icon: const Icon(AppIcons.skipSentence),
-                    tooltip: 'Forward a sentence',
-                  ),
-                  IconButton(
-                    key: readerParagraphButtonKey,
-                    onPressed: onParagraph,
-                    iconSize: _secondaryIconSize,
-                    color: ink,
-                    disabledColor: _dimmed(ink),
-                    icon: const Icon(AppIcons.skipParagraph),
-                    tooltip: 'Forward a paragraph',
+                  ExcludeSemantics(
+                    child: Text(
+                      'Sentence',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelSmall?.copyWith(color: ink),
+                    ),
                   ),
                 ],
               ),
@@ -1873,28 +1927,91 @@ class _Controls extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  IconButton(
-                    onPressed: onClose,
-                    iconSize: _secondaryIconSize,
-                    color: ink,
-                    icon: const Icon(AppIcons.closeBook),
-                    tooltip: 'Back to library',
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          onPressed: onClose,
+                          iconSize: _secondaryIconSize,
+                          color: ink,
+                          icon: const Icon(AppIcons.closeBook),
+                          tooltip: 'Back to library',
+                        ),
+                        // ADR 0035 §2: every transport control names itself
+                        // in visible text now, not only in a tooltip that
+                        // never draws on touch. `Expanded` gives each of the
+                        // three a fixed share of `_controlsMaxWidth` so a
+                        // longer label (this one, "Reading profile") can't
+                        // push the row wider than the cap #329 set.
+                        ExcludeSemantics(
+                          child: Text(
+                            'Back to library',
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(
+                              context,
+                            ).textTheme.labelSmall?.copyWith(color: ink),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  IconButton(
-                    key: readerPlayButtonKey,
-                    onPressed: onToggle,
-                    iconSize: _primaryIconSize,
-                    color: ink,
-                    icon: Icon(stopping ? AppIcons.pause : AppIcons.play),
-                    tooltip: toggleLabel,
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          key: readerPlayButtonKey,
+                          onPressed: onToggle,
+                          iconSize: _primaryIconSize,
+                          color: ink,
+                          icon: Icon(stopping ? AppIcons.pause : AppIcons.play),
+                          tooltip: toggleLabel,
+                        ),
+                        ExcludeSemantics(
+                          child: Text(
+                            toggleLabel,
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(
+                              context,
+                            ).textTheme.labelSmall?.copyWith(color: ink),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  IconButton(
-                    key: readerProfileButtonKey,
-                    onPressed: onProfile,
-                    iconSize: _secondaryIconSize,
-                    color: ink,
-                    icon: const Icon(AppIcons.readingProfile),
-                    tooltip: 'Reading profile',
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          key: readerProfileButtonKey,
+                          onPressed: onProfile,
+                          iconSize: _secondaryIconSize,
+                          color: ink,
+                          icon: const Icon(AppIcons.readingProfile),
+                          tooltip: 'Reading profile',
+                        ),
+                        ExcludeSemantics(
+                          child: Text(
+                            'Reading profile',
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(
+                              context,
+                            ).textTheme.labelSmall?.copyWith(color: ink),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
