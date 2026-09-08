@@ -8,8 +8,9 @@ import '../theme/content_width.dart';
 import 'custom_accent_screen.dart';
 import 'info_dot.dart';
 import 'section_header.dart';
+import 'setting_slider.dart';
 
-/// Theme, accent and contrast for app chrome.
+/// Theme, accent, contrast and text size for app chrome.
 ///
 /// Every control here retheme the whole app on the frame it is tapped, so
 /// the screen is its own preview and carries none of the separate preview
@@ -37,12 +38,12 @@ class AppearanceScreen extends StatelessWidget {
           InfoDot(
             semanticLabel: 'About appearance settings',
             explanation:
-                'These three stay on this device. A phone read '
+                'These four stay on this device. A phone read '
                 'outdoors and a desktop in a dim room can want '
                 'different ones.\n\n'
                 'None of them touch the reading surface. The colours '
                 'a word is drawn in belong to the reading profile you '
-                'chose, under Reading profiles.',
+                'chose, under Reading profiles, and so does its size.',
           ),
         ],
       ),
@@ -152,6 +153,28 @@ class AppearanceScreen extends StatelessWidget {
                       ),
                     ],
                   ),
+                ),
+
+                SectionHeader(
+                  'Text size',
+                  info: InfoDot(
+                    semanticLabel: 'About text size',
+                    explanation:
+                        'Scales labels, dialogs and every other piece of '
+                        'text outside the reading surface.\n\n'
+                        'The RSVP word has its own size, set from the '
+                        'reading profile you chose.',
+                  ),
+                ),
+                SettingSlider(
+                  label: 'Chrome text size',
+                  valueLabel: '${(settings.chromeTextScale * 100).round()}%',
+                  value: settings.chromeTextScale,
+                  min: chromeTextScaleMin,
+                  max: chromeTextScaleMax,
+                  divisions: ((chromeTextScaleMax - chromeTextScaleMin) / 0.05)
+                      .round(),
+                  onChanged: controller.setChromeTextScale,
                 ),
               ],
             ),
