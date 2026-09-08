@@ -459,6 +459,44 @@ double scaledFontSizePt(double basePt, double availableWidth) {
   return grown.clamp(basePt, PresentationConfig.maxFontSizePt);
 }
 
+/// Shrinks [basePt] so [text] fits on one line inside [availableWidth],
+/// the scale-to-fit counterpart to [scaledFontSizePt]'s scale-to-fill
+/// (ADR 0035 §4).
+///
+/// Floored at [PresentationConfig.minFontSizePt] — the reader's chosen size
+/// is never shrunk past the smallest size the type-size slider itself
+/// allows. A token still wider than [availableWidth] at that floor is left
+/// for the caller to clip rather than wrap or shrink further: holding the
+/// anchor still is the point of this surface, and a word so long it
+/// outgrows the smallest legible size is rarer than one merely wider than
+/// the profile's chosen size.
+///
+/// Takes [presentation] rather than a bare [TextStyle] so the measurement
+/// uses the exact style — font family, letter spacing — the word will
+/// actually be painted in; a narrower stand-in style would fit a token this
+/// function then renders too wide.
+double fitFontSizePt(
+  String text,
+  ResolvedPresentation presentation, {
+  required double basePt,
+  required double availableWidth,
+}) {
+  if (text.isEmpty || availableWidth <= 0) return basePt;
+  final painter = TextPainter(
+    text: TextSpan(
+      text: text,
+      style: readingTextStyle(presentation, fontSizePt: basePt),
+    ),
+    textDirection: TextDirection.ltr,
+    maxLines: 1,
+  )..layout();
+  if (painter.width <= availableWidth) return basePt;
+  final fitted = basePt * (availableWidth / painter.width);
+  return fitted < PresentationConfig.minFontSizePt
+      ? PresentationConfig.minFontSizePt
+      : fitted;
+}
+
 // -- descriptions -------------------------------------------------------
 
 /// The pacing to *estimate* a time from, for a profile.

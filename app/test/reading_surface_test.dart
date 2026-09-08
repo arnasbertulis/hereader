@@ -7,6 +7,7 @@ import 'package:app/reading/reader_screen.dart';
 import 'package:app/reading/rsvp_view.dart';
 import 'package:app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
@@ -130,6 +131,95 @@ void main() {
         );
       }
     });
+
+    // #365. Before this, a token wider than the viewport wrapped across
+    // several lines and pushed the fixation point up, which is the one
+    // thing this surface exists not to do (ADR 0035 §4).
+    testWidgets('shrinks a word wider than the viewport to one line', (
+      tester,
+    ) async {
+      addTearDown(tester.view.reset);
+      tester.view.physicalSize = const Size(320, 600);
+      tester.view.devicePixelRatio = 1.0;
+
+      const longWord = 'pneumonoultramicroscopicsilicovolcanoconiosis';
+      const presentation = PresentationConfig(fontSizePt: 44);
+      final resolved = resolvePresentation(presentation, Brightness.light);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RsvpView(update: _showing(longWord), presentation: resolved),
+        ),
+      );
+
+      final word = tester.widget<Text>(find.text(longWord));
+      expect(word.maxLines, 1);
+      expect(word.softWrap, false);
+      expect(word.style?.fontSize, lessThan(presentation.fontSizePt));
+      expect(
+        word.style!.fontSize!,
+        greaterThanOrEqualTo(PresentationConfig.minFontSizePt),
+      );
+
+      final paragraph = tester.renderObject<RenderParagraph>(
+        find.descendant(
+          of: find.byType(RsvpView),
+          matching: find.byType(RichText),
+        ),
+      );
+      expect(paragraph.didExceedMaxLines, false);
+    });
+
+    testWidgets('a word that fits keeps the profile font size', (tester) async {
+      addTearDown(tester.view.reset);
+      // Wide enough that the word fits without shrinking, and at or below
+      // scaledFontSizePt's 400px reference width so grow-to-fill leaves the
+      // profile's own font size untouched too — isolating this test to the
+      // shrink-to-fit path leaving a fitting word alone.
+      tester.view.physicalSize = const Size(400, 600);
+      tester.view.devicePixelRatio = 1.0;
+
+      const presentation = PresentationConfig(fontSizePt: 44);
+      final resolved = resolvePresentation(presentation, Brightness.light);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RsvpView(update: _showing('reading'), presentation: resolved),
+        ),
+      );
+
+      final word = tester.widget<Text>(find.text('reading'));
+      expect(word.style?.fontSize, presentation.fontSizePt);
+    });
+
+    testWidgets(
+      'floors an extreme word at minFontSizePt instead of shrinking further',
+      (tester) async {
+        addTearDown(tester.view.reset);
+        tester.view.physicalSize = const Size(150, 400);
+        tester.view.devicePixelRatio = 1.0;
+
+        // Long enough that even the floor size overflows 150 logical px, so
+        // this exercises the clip path rather than only the shrink path.
+        const extremeWord =
+            'pneumonoultramicroscopicsilicovolcanoconiosisantidisestablishmentarianism';
+        const presentation = PresentationConfig(fontSizePt: 44);
+        final resolved = resolvePresentation(presentation, Brightness.light);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: RsvpView(
+              update: _showing(extremeWord),
+              presentation: resolved,
+            ),
+          ),
+        );
+
+        final word = tester.widget<Text>(find.text(extremeWord));
+        expect(word.style?.fontSize, PresentationConfig.minFontSizePt);
+        expect(word.maxLines, 1);
+      },
+    );
   });
 
   group('the reader screen', () {

@@ -209,6 +209,17 @@ class PresentationConfig {
   /// growing past what "large" is meant to look like on a desktop monitor.
   static const double maxFontSizePt = 96;
 
+  /// Floor on the type-size slider and on how far the fixed-anchor RSVP
+  /// surface may shrink a token that is too wide for the measure (ADR
+  /// 0035 §4).
+  ///
+  /// The same number both ways: a word never shrinks below the smallest
+  /// size a reader could deliberately have chosen, so scale-to-fit never
+  /// produces type smaller than this profile system already treats as
+  /// usable. A token still too wide at this size is clipped rather than
+  /// shrunk further or wrapped — see `rsvp_view.dart`.
+  static const double minFontSizePt = 12;
+
   /// Every field except the two nullable ones.
   ///
   /// [polarity] and [tintArgb] each mean something by being null, and

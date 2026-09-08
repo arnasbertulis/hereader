@@ -28,6 +28,10 @@ class RsvpView extends StatelessWidget {
 
   const RsvpView({super.key, required this.update, required this.presentation});
 
+  /// Horizontal breathing room around the word. Named once so the fit
+  /// calculation and the Padding it fits inside can't drift apart.
+  static const _horizontalPadding = EdgeInsets.symmetric(horizontal: 16);
+
   /// Index of the letter to highlight. Preference only: no study behind it.
   int _orpIndex(String word) {
     final n = word.length;
@@ -55,10 +59,32 @@ class RsvpView extends StatelessWidget {
     // the settings preview ballooning to the size the reader gets.
     return LayoutBuilder(
       builder: (context, constraints) {
-        final fontSizePt = scaledFontSizePt(
+        final filledFontSizePt = scaledFontSizePt(
           config.fontSizePt,
           constraints.maxWidth,
         );
+
+        // Reads off the same padding fact the Padding below is built from:
+        // the word never sees the horizontal padding it is drawn inside, so
+        // fitting to the full box width would let a fitted word still touch
+        // the fitted-to edge.
+        final availableTextWidth =
+            (constraints.maxWidth - _horizontalPadding.horizontal).clamp(
+              0.0,
+              double.infinity,
+            );
+
+        // Grow-to-fill decides the size a short word gets; scale-to-fit only
+        // ever shrinks *this* word further, never past what the profile
+        // already allows the reader to choose (ADR 0035 §4).
+        final fontSizePt = token == null
+            ? filledFontSizePt
+            : fitFontSizePt(
+                token.text,
+                presentation,
+                basePt: filledFontSizePt,
+                availableWidth: availableTextWidth,
+              );
         final style = readingTextStyle(presentation, fontSizePt: fontSizePt);
 
         Widget word;
@@ -85,6 +111,9 @@ class RsvpView extends StatelessWidget {
             key: ValueKey('${update!.index}'),
             style: style,
             textAlign: TextAlign.center,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.clip,
           );
         } else {
           word = Text(
@@ -92,6 +121,9 @@ class RsvpView extends StatelessWidget {
             key: ValueKey('${update!.index}'),
             style: style,
             textAlign: TextAlign.center,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.clip,
           );
         }
 
@@ -104,7 +136,7 @@ class RsvpView extends StatelessWidget {
               config.anchorY * 2 - 1,
             ),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: _horizontalPadding,
               child: transition == 0
                   ? word
                   : AnimatedSwitcher(

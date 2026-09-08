@@ -434,7 +434,7 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 label: 'Type size',
                 value: presentation.fontSizePt,
                 valueLabel: '${presentation.fontSizePt.round()} pt',
-                min: 12,
+                min: PresentationConfig.minFontSizePt,
                 max: PresentationConfig.maxFontSizePt,
                 divisions: 84,
                 enabled: _editable,

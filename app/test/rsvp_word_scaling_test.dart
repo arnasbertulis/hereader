@@ -51,7 +51,12 @@ void main() {
     testWidgets('stays at the profile size in a narrow, phone-sized viewport', (
       tester,
     ) async {
-      await _pumpAtWidth(tester, width: 300, fontSizePt: 44);
+      // 400: at scaledFontSizePt's own reference width, so grow-to-fill
+      // leaves the profile size untouched, and wide enough under the test
+      // font that shrink-to-fit (#365) has nothing to shrink here either --
+      // this test is about the grow-only floor. The shrink-to-fit floor has
+      // its own coverage in reading_surface_test.dart.
+      await _pumpAtWidth(tester, width: 400, fontSizePt: 44);
 
       final word = tester.widget<Text>(find.text('reading'));
       expect(word.style?.fontSize, 44);
