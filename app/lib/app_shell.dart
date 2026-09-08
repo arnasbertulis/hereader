@@ -230,15 +230,24 @@ class _AppShellState extends State<AppShell> {
   /// label.
   ///
   /// [AppNav.barHeight] is shorter than Material's 80dp default, which is
-  /// only safe while the label is the size the theme says. Nothing here
-  /// clamps the scaler, so the height follows it instead: the extra a
-  /// scaled label needs is added to the base rather than taken out of the
-  /// icon's room.
+  /// only safe while the label is [_unscaledLabelSize] — the size
+  /// `labelMedium` is declared at in `app_typography.dart` before either the
+  /// in-app chrome text-scale setting or the OS text scaler touch it. The
+  /// theme's `labelMedium.fontSize` already has the chrome scale baked in
+  /// (`appTextTheme(scheme, {scale})`), so growth has to be measured against
+  /// that unscaled base rather than against the already-scaled size, or a
+  /// chrome-scale-only change (OS scaler at its default) would compute zero
+  /// growth. Nothing here clamps either scaler, so the height follows both
+  /// instead: the extra a scaled label needs is added to the base rather
+  /// than taken out of the icon's room.
+  static const _unscaledLabelSize = 12.0;
+
   double _barHeight(BuildContext context) {
     final label = Theme.of(context).textTheme.labelMedium;
-    final size = label?.fontSize ?? 12;
+    final size = label?.fontSize ?? _unscaledLabelSize;
     final lineHeight = label?.height ?? 1.2;
-    final grown = MediaQuery.textScalerOf(context).scale(size) - size;
+    final grown =
+        MediaQuery.textScalerOf(context).scale(size) - _unscaledLabelSize;
 
     return AppNav.barHeight + grown * lineHeight;
   }

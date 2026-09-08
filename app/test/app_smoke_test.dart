@@ -540,6 +540,46 @@ void main() {
     await _disposeTree(tester);
   });
 
+  testWidgets(
+    'the navigation bar grows with the chrome text-scale setting too, '
+    'even at the OS default',
+    (tester) async {
+      final harness = _Harness.create();
+      addTearDown(harness.close);
+      addTearDown(tester.view.reset);
+
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(400, 800);
+
+      await tester.pumpWidget(harness.app);
+      await tester.pumpAndSettle();
+
+      // The bar's height at the default chrome scale includes a hairline
+      // divider on top of `AppNav.barHeight`, so a bare `greaterThan
+      // (AppNav.barHeight)` would pass even if chrome-scale growth were
+      // broken. Compare before and after instead, so the hairline's
+      // constant offset cancels out and only the chrome-scale-driven
+      // growth remains.
+      final before = tester.getSize(find.byKey(appNavBarKey)).height;
+
+      // The OS scaler is untouched (its default is 1.0), so any growth here
+      // has to come from the in-app chrome text-scale setting alone — the
+      // regression this guards is `_barHeight` measuring growth against the
+      // already chrome-scaled label instead of the unscaled base, which
+      // makes chrome-scale-only growth compute to zero.
+      await harness.appearance.setChromeTextScale(chromeTextScaleMax);
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getSize(find.byKey(appNavBarKey)).height,
+        greaterThan(before),
+      );
+      expect(tester.takeException(), isNull);
+
+      await _disposeTree(tester);
+    },
+  );
+
   testWidgets('settings is an index of sections, not one long scroll', (
     tester,
   ) async {
@@ -596,6 +636,7 @@ void main() {
           themeMode: ThemeMode.dark,
           accent: AppAccents.rust.color,
           highContrast: false,
+          chromeTextScale: 1.0,
         ),
       ),
       'Dark · Rust',
@@ -609,6 +650,7 @@ void main() {
           themeMode: ThemeMode.light,
           accent: const Color(0xFF123456),
           highContrast: true,
+          chromeTextScale: 1.0,
         ),
       ),
       'Light · Custom · High contrast',

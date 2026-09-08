@@ -21,14 +21,19 @@ import 'package:flutter/material.dart';
 /// uses of `bodyMedium`/`labelSmall` are numeric readouts.
 const String? _fontFamily = null;
 
-TextTheme appTextTheme(ColorScheme scheme) {
+/// [scale] is the reader's chrome text-size choice from Appearance (#338),
+/// a multiple of the sizes below — ADR 0031 states every role as a ratio of
+/// a 16px base for exactly this reason, so one lever moves every size in
+/// this table together rather than the call sites needing to know about it
+/// individually.
+TextTheme appTextTheme(ColorScheme scheme, {double scale = 1.0}) {
   TextStyle style({
     required double size,
     required FontWeight weight,
     required double height,
   }) => TextStyle(
     fontFamily: _fontFamily,
-    fontSize: size,
+    fontSize: size * scale,
     fontWeight: weight,
     height: height,
     color: scheme.onSurface,
