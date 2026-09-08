@@ -44,9 +44,7 @@ void main() {
   }
 
   group('ProfileActions.duplicate', () {
-    testWidgets('forks and activates the source before the editor opens', (
-      tester,
-    ) async {
+    testWidgets('forks the preset without activating it', (tester) async {
       final context = await harness(tester);
 
       final future = actions.duplicate(context, Presets.standard);
@@ -55,7 +53,7 @@ void main() {
       final saved = await repository.allProfiles();
       final mine = saved.where((p) => !p.isBuiltIn).toList();
       expect(mine, hasLength(1));
-      expect((await repository.activeProfile()).id, mine.single.id);
+      expect((await repository.activeProfile()).id, Presets.standard.id);
       expect(find.byType(ProfileEditScreen), findsOneWidget);
 
       // Close the editor without forking again so the pending future
@@ -65,20 +63,19 @@ void main() {
       await future;
     });
 
-    testWidgets('leaves the fork active once the editor closes unforked', (
+    testWidgets('leaves the source active once the editor closes', (
       tester,
     ) async {
       final context = await harness(tester);
 
       final future = actions.duplicate(context, Presets.standard);
       await tester.pumpAndSettle();
-      final forkId = (await repository.activeProfile()).id;
 
       await tester.pageBack();
       await tester.pumpAndSettle();
       await future;
 
-      expect((await repository.activeProfile()).id, forkId);
+      expect((await repository.activeProfile()).id, Presets.standard.id);
     });
   });
 

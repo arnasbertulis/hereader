@@ -149,7 +149,7 @@ void main() {
       await disposeTree(tester);
     });
 
-    testWidgets('copying a preset from the sheet selects the copy', (
+    testWidgets('copying a preset from the sheet does not select the copy', (
       tester,
     ) async {
       await tester.pumpWidget(reader());
@@ -169,7 +169,7 @@ void main() {
           .where((p) => !p.isBuiltIn)
           .toList();
       expect(mine, hasLength(1));
-      expect((await repository.activeProfile()).id, mine.single.id);
+      expect((await repository.activeProfile()).id, Presets.standard.id);
 
       await disposeTree(tester);
     });

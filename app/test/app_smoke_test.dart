@@ -379,10 +379,9 @@ void main() {
     // editing one produces a copy.
     expect(mine.single.id, isNot(startsWith('builtin.')));
 
-    // A copy is what the reader asked to make and is about to customise, so
-    // it becomes the active profile as soon as it exists rather than only
-    // when the source happened to be active already.
-    expect((await harness.repository.activeProfile()).id, mine.single.id);
+    // Making a copy is exploration, not a switch: the preset stays active
+    // until the reader explicitly selects the copy from the list.
+    expect((await harness.repository.activeProfile()).id, Presets.standard.id);
 
     await _disposeTree(tester);
   });
