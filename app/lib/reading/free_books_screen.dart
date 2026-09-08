@@ -10,6 +10,7 @@ import '../net/http_transport.dart';
 import '../sync/sync_engine.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
+import '../theme/content_width.dart';
 import 'book_cover.dart';
 import 'book_importer.dart';
 import 'book_opener.dart';
@@ -323,33 +324,35 @@ class _FreeBooksScreenState extends State<FreeBooksScreen> {
         ),
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            _FiltersRow(
-              category: _browse.category,
-              categories: _categories,
-              onCategory: _onCategoryChanged,
-              language: _browse.language,
-              languages: _languages,
-              onLanguage: _onLanguageChanged,
-              sort: _browse.sort,
-              onSort: _onSortChanged,
-              direction: _browse.direction,
-              reversed: _reversed,
-              onFlip: _onFlipDirection,
-            ),
-            Expanded(
-              // [CatalogueBrowse.state] is a broadcast stream and replays
-              // nothing, so the [BrowseLoading] that `start()` emitted back in
-              // `initState` — before this ever subscribed — is gone. It is the
-              // initial data instead, which is the same state it stood for.
-              child: StreamBuilder<BrowseState>(
-                stream: _browse.state,
-                initialData: const BrowseLoading(),
-                builder: (context, snapshot) => _body(snapshot.data!),
+        child: ContentWidth(
+          child: Column(
+            children: [
+              _FiltersRow(
+                category: _browse.category,
+                categories: _categories,
+                onCategory: _onCategoryChanged,
+                language: _browse.language,
+                languages: _languages,
+                onLanguage: _onLanguageChanged,
+                sort: _browse.sort,
+                onSort: _onSortChanged,
+                direction: _browse.direction,
+                reversed: _reversed,
+                onFlip: _onFlipDirection,
               ),
-            ),
-          ],
+              Expanded(
+                // [CatalogueBrowse.state] is a broadcast stream and replays
+                // nothing, so the [BrowseLoading] that `start()` emitted back in
+                // `initState` — before this ever subscribed — is gone. It is the
+                // initial data instead, which is the same state it stood for.
+                child: StreamBuilder<BrowseState>(
+                  stream: _browse.state,
+                  initialData: const BrowseLoading(),
+                  builder: (context, snapshot) => _body(snapshot.data!),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

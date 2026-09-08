@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 
 import '../data/library_repository.dart';
 import '../sync/sync_engine.dart';
+import '../theme/content_width.dart';
 import 'book_opener.dart';
 import 'library_book.dart';
 
@@ -243,75 +244,79 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
         appBar: AppBar(
           title: Text(widget.isEditing ? 'Edit note' : 'Write a note'),
         ),
-        body: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                controller: _titleController,
-                enabled: !_busy,
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  labelText: 'Title',
-                  hintText: 'Untitled note',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: TextField(
-                  controller: _bodyController,
+        body: ContentWidth(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: _titleController,
                   enabled: !_busy,
-                  maxLines: null,
-                  expands: true,
-                  textAlignVertical: TextAlignVertical.top,
-                  onChanged: (_) => setState(() {}),
+                  textInputAction: TextInputAction.next,
                   decoration: const InputDecoration(
-                    labelText: 'Note',
-                    hintText: 'Write what you want to read',
+                    labelText: 'Title',
+                    hintText: 'Untitled note',
                     border: OutlineInputBorder(),
-                    alignLabelWithHint: true,
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      key: noteEditorSaveButtonKey,
-                      onPressed: (hasText && !_busy)
-                          ? () => _save(enterReader: false)
-                          : null,
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(56),
-                      ),
-                      child: const Text('Save'),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: TextField(
+                    controller: _bodyController,
+                    enabled: !_busy,
+                    maxLines: null,
+                    expands: true,
+                    textAlignVertical: TextAlignVertical.top,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      labelText: 'Note',
+                      hintText: 'Write what you want to read',
+                      border: OutlineInputBorder(),
+                      alignLabelWithHint: true,
                     ),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: FilledButton(
-                      key: noteEditorSaveAndReadButtonKey,
-                      onPressed: (hasText && !_busy)
-                          ? () => _save(enterReader: true)
-                          : null,
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(56),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        key: noteEditorSaveButtonKey,
+                        onPressed: (hasText && !_busy)
+                            ? () => _save(enterReader: false)
+                            : null,
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(56),
+                        ),
+                        child: const Text('Save'),
                       ),
-                      child: _busy
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Save and read'),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: FilledButton(
+                        key: noteEditorSaveAndReadButtonKey,
+                        onPressed: (hasText && !_busy)
+                            ? () => _save(enterReader: true)
+                            : null,
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size.fromHeight(56),
+                        ),
+                        child: _busy
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Text('Save and read'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
