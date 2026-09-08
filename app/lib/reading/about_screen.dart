@@ -127,6 +127,21 @@ class _AboutScreenState extends State<AboutScreen> {
             ),
 
             const SizedBox(height: AppSpacing.xl),
+            Text('About sync', style: theme.textTheme.titleMedium),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Sync carries your place in each book and your reading '
+              'profiles. It does not carry the books themselves: an EPUB '
+              'stays on the device you added it to.\n\n'
+              'Changes you make offline are kept and sent the next time the '
+              'app reaches the service. Sync also runs by itself every few '
+              'minutes while the app is open.\n\n'
+              'When two devices land far apart in the same book, the app '
+              'asks which place to keep rather than picking one.',
+              style: theme.textTheme.bodyMedium,
+            ),
+
+            const SizedBox(height: AppSpacing.xl),
             Text('Licence', style: theme.textTheme.titleMedium),
             const SizedBox(height: AppSpacing.sm),
             Text(

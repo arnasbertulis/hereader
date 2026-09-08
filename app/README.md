@@ -145,7 +145,12 @@ lib/
    │                             gets decided. The ARGB helpers and WCAG
    │                             maths it used to hold live in rsvp_engine,
    │                             so they run in a browser
-   ├─ settings_screen.dart      An index of sections, each its own subpage
+   ├─ settings_screen.dart      An index of sections, each its own subpage,
+   │                             topped by an inline account block: signed-in
+   │                             state and the sync fact on one row, a sheet
+   │                             for signing out, and a sync-now icon button.
+   │                             No Account or Sync screen — a destination
+   │                             whose entire purpose is one control is a row
    ├─ reading_display.dart      Whether a tile's time counts down to the end
    │                             of the chapter or the end of the book. One
    │                             preference, in the AppearanceController
@@ -173,12 +178,6 @@ lib/
    │                             cannot reliably hit a small target. The one
    │                             RGB picker, used by custom_accent_screen.dart
    │                             and the profile editor's background field
-   ├─ sync_screen.dart          What sync has done and a way to run it now.
-   │                             Reports rather than configures, and shows no
-   │                             count of what is waiting — see Sync below
-   ├─ account_screen.dart       The session, the device, and the way in and
-   │                             out of an account. Signing out keeps books
-   │                             and places, and the dialog says so
    └─ about_screen.dart         What this is, what it is built on, and what
                                  it does not claim. No version number: the
                                  app carries no real one
@@ -450,8 +449,9 @@ an error neither `NetworkException` nor `ApiException` describes. An earlier
 version of this code let such an error escape uncaught, which left the sync
 indicator spinning indefinitely with no work actually running.
 
-Sync reports itself in one place, the Sync section of Settings: what the last
-run did, when it finished, and a button to run one now. Home carried a copy of
+Sync reports itself in one place, the account block at the top of Settings:
+what the last run did, when it finished, and a button to run one now. Home
+carried a copy of
 that state and dropped it in the UI pass; the library dropped its own with the
 app bar. Keeping four statuses in step across three screens is work nobody
 opens the app to see the result of. `sync/sync_button.dart` is what those bars
