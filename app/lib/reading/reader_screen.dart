@@ -202,6 +202,16 @@ class _ReaderScreenState extends State<ReaderScreen>
   /// The pointer-down pauses before the tap is arbitrated, so by the time
   /// `onTap` fires the answer is already gone. See [_grabSurface].
   bool _wasPlayingAtDown = false;
+
+  /// True while the reading-profile sheet is up.
+  ///
+  /// `showModalBottomSheet` opens a route of its own, and unlike the
+  /// drawer's in-tree scrim, that route's barrier does not stop the surface
+  /// underneath from being hit-tested too: a tap that dismisses the sheet
+  /// reaches the surface in the same gesture and was toggling playback and
+  /// hiding the controls along with it (issue #366). The surface has to
+  /// refuse the tap itself, the same way it already does for [_drawerOpen].
+  bool _profileSheetOpen = false;
   StreamSubscription<PlaybackUpdate>? _sub;
 
   /// The same subscription Home, Library and the full profiles screen hold:
@@ -541,6 +551,8 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   bool get _drawerOpen => _scaffoldKey.currentState?.isDrawerOpen ?? false;
 
+  bool get _surfaceBlocked => _drawerOpen || _profileSheetOpen;
+
   void _toggle() {
     if (_session.state == PlaybackState.playing ||
         _session.state == PlaybackState.awaitingAdvance) {
@@ -555,7 +567,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     // shortcuts are bound above the Scaffold and stay live while the panel
     // is open. Advancing a word the reader cannot see, because they are
     // choosing a chapter, is not what either key meant.
-    if (_drawerOpen) return;
+    if (_surfaceBlocked) return;
 
     if (_session.state == PlaybackState.awaitingAdvance) {
       _session.advance();
@@ -576,7 +588,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   /// Records what it interrupted, because `onTap` fires afterwards and by
   /// then the state it needs to branch on has already been changed here.
   void _grabSurface() {
-    if (_drawerOpen) return;
+    if (_surfaceBlocked) return;
 
     _wasPlayingAtDown = _session.state == PlaybackState.playing;
     _session.pause();
@@ -590,7 +602,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   /// one-shot rewind suppression, so pressing play does not undo the scrub —
   /// ADR 0022's guarantee, reached from a drag instead of a jump.
   void _releaseSurface() {
-    if (_drawerOpen) return;
+    if (_surfaceBlocked) return;
     _session.stopHere();
   }
 
@@ -599,12 +611,12 @@ class _ReaderScreenState extends State<ReaderScreen>
   /// The pointer-down has already paused, so a tap on moving text has done
   /// its job by arriving. Only a tap that landed on stopped text starts it.
   void _scrollTap() {
-    if (_drawerOpen || _wasPlayingAtDown) return;
+    if (_surfaceBlocked || _wasPlayingAtDown) return;
     _session.play();
   }
 
   void _scrubSurface(double dx) {
-    if (_drawerOpen) return;
+    if (_surfaceBlocked) return;
     _session.scrubBy(dx);
   }
 
@@ -616,7 +628,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   /// ships to.
   void _onSurfaceSignal(PointerSignalEvent event) {
     if (event is! PointerScrollEvent) return;
-    if (_drawerOpen || !_session.scrolling) return;
+    if (_surfaceBlocked || !_session.scrolling) return;
 
     _session.pause();
     _session.scrubBy(event.scrollDelta.dy);
@@ -632,7 +644,7 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   /// Runs [action] only while the reading surface has the reader's attention.
   void _whenReading(VoidCallback action) {
-    if (_drawerOpen) return;
+    if (_surfaceBlocked) return;
     action();
   }
 
@@ -734,93 +746,102 @@ class _ReaderScreenState extends State<ReaderScreen>
     // this height scrolls inside it rather than clipping.
     final maxSheetHeight = MediaQuery.sizeOf(context).height * 0.9;
 
-    final intent = await showModalBottomSheet<_ProfileIntent>(
-      context: context,
-      backgroundColor: sheet.backgroundColor,
-      elevation: sheet.elevation,
-      shape: sheet.shape,
-      // No `surfaceTintColor` here: `BottomSheetThemeData` carries one and
-      // `showModalBottomSheet` takes no parameter for it. Nothing is lost.
-      // `Material` applies a surface tint through `ElevationOverlay`, which
-      // returns the colour unchanged at elevation 0, and `sheet.elevation`
-      // is 0 for the reason every other panel in this app is.
-      isScrollControlled: true,
-      showDragHandle: true,
-      constraints: BoxConstraints(maxHeight: maxSheetHeight),
-      builder: (_) => Theme(
-        data: chrome,
-        child: SafeArea(
-          child: StreamBuilder<List<ReadingProfile>>(
-            stream: widget.repository.watchProfiles(),
-            builder: (context, snapshot) {
-              final profiles = snapshot.data;
-              if (profiles == null) {
-                return const Padding(
-                  padding: EdgeInsets.all(AppSpacing.xxl),
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
+    // Guards the surface below against the same tap that dismisses this
+    // sheet — see [_profileSheetOpen]. `finally` clears it on every exit,
+    // not just a clean pop.
+    _profileSheetOpen = true;
+    final _ProfileIntent? intent;
+    try {
+      intent = await showModalBottomSheet<_ProfileIntent>(
+        context: context,
+        backgroundColor: sheet.backgroundColor,
+        elevation: sheet.elevation,
+        shape: sheet.shape,
+        // No `surfaceTintColor` here: `BottomSheetThemeData` carries one and
+        // `showModalBottomSheet` takes no parameter for it. Nothing is lost.
+        // `Material` applies a surface tint through `ElevationOverlay`, which
+        // returns the colour unchanged at elevation 0, and `sheet.elevation`
+        // is 0 for the reason every other panel in this app is.
+        isScrollControlled: true,
+        showDragHandle: true,
+        constraints: BoxConstraints(maxHeight: maxSheetHeight),
+        builder: (_) => Theme(
+          data: chrome,
+          child: SafeArea(
+            child: StreamBuilder<List<ReadingProfile>>(
+              stream: widget.repository.watchProfiles(),
+              builder: (context, snapshot) {
+                final profiles = snapshot.data;
+                if (profiles == null) {
+                  return const Padding(
+                    padding: EdgeInsets.all(AppSpacing.xxl),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
 
-              return ListView(
-                shrinkWrap: true,
-                children: [
-                  const SectionHeader('Profile'),
-                  for (final profile in profiles)
-                    ProfileRow(
-                      profile: profile,
-                      selected: profile.id == _profile.id,
-                      onSelect: () =>
-                          Navigator.of(context).pop(_SelectProfile(profile)),
-                      onEdit: () =>
-                          Navigator.of(context).pop(_EditProfile(profile)),
-                      onDuplicate: () =>
-                          Navigator.of(context).pop(_CopyProfile(profile)),
-                      onDelete: profile.isBuiltIn
-                          ? null
-                          : () => Navigator.of(
-                              context,
-                            ).pop(_DeleteProfile(profile)),
-                    ),
-                  const Divider(height: 1),
-                  // Below the list rather than above it. The sheet is
-                  // primarily the profile picker, and a tile at the top
-                  // pushed the last profile out of a shrink-wrapped sheet's
-                  // viewport — `reader_profile_menu_test.dart` counts them.
-                  const SectionHeader('Display'),
-                  SwitchListTile(
-                    key: readerScrollModeKey,
-                    secondary: const Icon(AppIcons.sectionReading),
-                    title: const Text('Sliding text'),
-                    subtitle: const Text(
-                      'One line moves past a fixed mark, instead of one word '
-                      'at a time. Drag to move through the book.',
-                    ),
-                    value:
-                        _profile.presentation.mode ==
-                        PresentationMode.continuousScroll,
-                    onChanged: (on) => Navigator.of(context).pop(
-                      _SetMode(
-                        on
-                            ? PresentationMode.continuousScroll
-                            : PresentationMode.fixedSingle,
-                        profiles,
+                return ListView(
+                  shrinkWrap: true,
+                  children: [
+                    const SectionHeader('Profile'),
+                    for (final profile in profiles)
+                      ProfileRow(
+                        profile: profile,
+                        selected: profile.id == _profile.id,
+                        onSelect: () =>
+                            Navigator.of(context).pop(_SelectProfile(profile)),
+                        onEdit: () =>
+                            Navigator.of(context).pop(_EditProfile(profile)),
+                        onDuplicate: () =>
+                            Navigator.of(context).pop(_CopyProfile(profile)),
+                        onDelete: profile.isBuiltIn
+                            ? null
+                            : () => Navigator.of(
+                                context,
+                              ).pop(_DeleteProfile(profile)),
+                      ),
+                    const Divider(height: 1),
+                    // Below the list rather than above it. The sheet is
+                    // primarily the profile picker, and a tile at the top
+                    // pushed the last profile out of a shrink-wrapped sheet's
+                    // viewport — `reader_profile_menu_test.dart` counts them.
+                    const SectionHeader('Display'),
+                    SwitchListTile(
+                      key: readerScrollModeKey,
+                      secondary: const Icon(AppIcons.sectionReading),
+                      title: const Text('Sliding text'),
+                      subtitle: const Text(
+                        'One line moves past a fixed mark, instead of one word '
+                        'at a time. Drag to move through the book.',
+                      ),
+                      value:
+                          _profile.presentation.mode ==
+                          PresentationMode.continuousScroll,
+                      onChanged: (on) => Navigator.of(context).pop(
+                        _SetMode(
+                          on
+                              ? PresentationMode.continuousScroll
+                              : PresentationMode.fixedSingle,
+                          profiles,
+                        ),
                       ),
                     ),
-                  ),
-                  const SectionHeader('Manage'),
-                  ListTile(
-                    leading: const Icon(AppIcons.sectionProfiles),
-                    title: const Text('Reading profiles'),
-                    onTap: () =>
-                        Navigator.of(context).pop(const _ManageProfiles()),
-                  ),
-                ],
-              );
-            },
+                    const SectionHeader('Manage'),
+                    ListTile(
+                      leading: const Icon(AppIcons.sectionProfiles),
+                      title: const Text('Reading profiles'),
+                      onTap: () =>
+                          Navigator.of(context).pop(const _ManageProfiles()),
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
         ),
-      ),
-    );
+      );
+    } finally {
+      _profileSheetOpen = false;
+    }
 
     if (!mounted || intent == null) return;
 
