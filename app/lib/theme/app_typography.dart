@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-/// The type scale for app chrome, per section 3.2 of the UI brief.
+/// The type scale for app chrome — four roles, expressed as ratios of a
+/// 16-logical-pixel base, per ADR 0031.
 ///
 /// **Known gap, stated rather than hidden:** the brief specifies Atkinson
 /// Hyperlegible Next, bundled as an asset under `app/assets/fonts/`, two
@@ -18,9 +19,19 @@ import 'package:flutter/material.dart';
 /// Percentages and word counts should use `FontFeature.tabularFigures()` at
 /// the call site, so a readout does not shift width as it counts. Left to
 /// the call site rather than baked into a text style here, since only some
-/// uses of `bodyMedium`/`labelSmall` are numeric readouts.
+/// uses of `bodyLarge`/`labelSmall` are numeric readouts.
 const String? _fontFamily = null;
 
+/// ADR 0031 section 3: every `TextTheme` slot the app or a component theme
+/// can resolve is declared here, aliased onto one of the four roles below.
+/// A partial `TextTheme` merges onto `Typography`'s Material 3 defaults
+/// rather than replacing them, so an undeclared slot silently reappears at
+/// Material's size, weight and letter-spacing — the defect this ADR closes.
+/// `displayLarge`, `displayMedium`, `displaySmall`, `headlineLarge` and
+/// `headlineMedium` are omitted: zero call sites resolve any of them (About's
+/// app name uses the Screen title role instead), and no component theme in
+/// this app defaults to them.
+///
 /// [scale] is the reader's chrome text-size choice from Appearance (#338),
 /// a multiple of the sizes below — ADR 0031 states every role as a ratio of
 /// a 16px base for exactly this reason, so one lever moves every size in
@@ -31,22 +42,50 @@ TextTheme appTextTheme(ColorScheme scheme, {double scale = 1.0}) {
     required double size,
     required FontWeight weight,
     required double height,
+    Color? color,
   }) => TextStyle(
     fontFamily: _fontFamily,
     fontSize: size * scale,
     fontWeight: weight,
     height: height,
-    color: scheme.onSurface,
+    color: color ?? scheme.onSurface,
   );
 
+  // ADR 0031 section 1: four roles, expressed as ratios of a 16px base —
+  // one lever moves the whole scale.
+  const base = 16.0;
+  final screenTitle = style(
+    size: base * 1.5,
+    weight: FontWeight.w600,
+    height: 1.25,
+  );
+  final sectionHeader = style(
+    size: base * 1.25,
+    weight: FontWeight.w600,
+    height: 1.30,
+    color: scheme.onSurfaceVariant,
+  );
+  final rowLabel = style(size: base, weight: FontWeight.w600, height: 1.30);
+  final secondary = style(
+    size: base,
+    weight: FontWeight.w400,
+    height: 1.45,
+    color: scheme.onSurfaceVariant,
+  );
+
+  // ADR 0031 section 2: nothing sits below the base. There is no 14 tier
+  // and no 12 tier — every slot below resolves to one of the four styles
+  // above rather than to a smaller size of its own.
   return TextTheme(
-    displaySmall: style(size: 32, weight: FontWeight.w600, height: 1.20),
-    headlineSmall: style(size: 24, weight: FontWeight.w600, height: 1.25),
-    titleMedium: style(size: 16, weight: FontWeight.w600, height: 1.30),
-    bodyLarge: style(size: 16, weight: FontWeight.w400, height: 1.45),
-    bodyMedium: style(size: 14, weight: FontWeight.w400, height: 1.45),
-    labelLarge: style(size: 14, weight: FontWeight.w600, height: 1.20),
-    labelMedium: style(size: 12, weight: FontWeight.w600, height: 1.20),
-    labelSmall: style(size: 12, weight: FontWeight.w400, height: 1.20),
+    headlineSmall: screenTitle,
+    titleLarge: sectionHeader,
+    titleMedium: rowLabel,
+    titleSmall: rowLabel,
+    bodyLarge: secondary,
+    bodyMedium: secondary,
+    bodySmall: secondary,
+    labelLarge: rowLabel,
+    labelMedium: secondary,
+    labelSmall: secondary,
   );
 }

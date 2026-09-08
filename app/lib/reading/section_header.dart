@@ -4,12 +4,14 @@ import '../theme/app_tokens.dart';
 
 /// A header introducing a group of rows on a settings or profiles screen.
 ///
-/// Rendered in [TextTheme.titleMedium] — larger and heavier than the rows it
-/// heads, never smaller or dimmer. Four screens each declared their own copy
-/// of this widget; one had drifted to `titleSmall` (which falls back to
-/// Material's default because `app_typography.dart` never defines that role)
-/// and a fifth inline copy added `onSurfaceVariant` dimming on top. Both
-/// inverted the intended hierarchy. See issue #346.
+/// Rendered in [TextTheme.titleLarge] — the Section header role from
+/// ADR 0031: its own size (20/w600), distinct from the Row label it heads
+/// (16/w600), separated by size and `onSurfaceVariant` colour rather than by
+/// colour alone. Four screens each declared their own copy of this widget;
+/// one had drifted to `titleSmall` (which fell back to Material's default
+/// because `app_typography.dart` never defined that role) and a fifth inline
+/// copy added `onSurfaceVariant` dimming on top. Both inverted the intended
+/// hierarchy. See issue #346.
 class SectionHeader extends StatelessWidget {
   final String title;
   final EdgeInsetsGeometry padding;
@@ -32,7 +34,7 @@ class SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = Text(title, style: Theme.of(context).textTheme.titleMedium);
+    final text = Text(title, style: Theme.of(context).textTheme.titleLarge);
 
     return Semantics(
       header: true,

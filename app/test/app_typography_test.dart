@@ -6,9 +6,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// #338: `scale` is the one lever ADR 0031 states every chrome role as a
 /// ratio of a 16px base for. These expected values are literal, worked out
-/// by hand from the sizes `app_typography.dart` declares — 16, 24 and 32 —
-/// rather than recomputed the way [appTextTheme] computes them, so a bug in
-/// the multiplication itself would still fail the test.
+/// by hand from the sizes `app_typography.dart` declares — 16, 20 and 24,
+/// the base, Section header and Screen title roles — rather than recomputed
+/// the way [appTextTheme] computes them, so a bug in the multiplication
+/// itself would still fail the test. There is no larger role: ADR 0031
+/// section 3 omits `displaySmall` and the other unused Material slots
+/// rather than giving them a size of their own.
 void main() {
   final scheme = buildScheme(
     accent: AppAccents.defaultAccent.color,
@@ -21,8 +24,8 @@ void main() {
 
     expect(theme.bodyLarge!.fontSize, 16);
     expect(theme.titleMedium!.fontSize, 16);
+    expect(theme.titleLarge!.fontSize, 20);
     expect(theme.headlineSmall!.fontSize, 24);
-    expect(theme.displaySmall!.fontSize, 32);
   });
 
   test('scales every role by the same multiple', () {
@@ -30,8 +33,8 @@ void main() {
 
     expect(theme.bodyLarge!.fontSize, 20);
     expect(theme.titleMedium!.fontSize, 20);
+    expect(theme.titleLarge!.fontSize, 25);
     expect(theme.headlineSmall!.fontSize, 30);
-    expect(theme.displaySmall!.fontSize, 40);
   });
 
   test('a scale below 1.0 shrinks every role by the same multiple', () {
