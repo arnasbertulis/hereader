@@ -71,3 +71,25 @@ final PageTransitionsTheme quietPageTransitions = PageTransitionsTheme(
       platform: const QuietPageTransitionsBuilder(),
   },
 );
+
+/// A route that arrives and leaves without any transition, for a destination
+/// too dissimilar from its neighbours to share a screen with them even
+/// briefly.
+///
+/// [QuietPageTransitionsBuilder] fades the incoming route in over a
+/// stationary outgoing one; it never drives `secondaryAnimation`, so for most
+/// of the transition both routes are on screen at once, each legible. ADR
+/// 0034 section 3 rejects fixing that everywhere by making the outgoing
+/// route genuinely leave too — that would make every screen change busier —
+/// and instead opts the reader route, the one pairing this ever reads as two
+/// superimposed screens (#374: the reader's single word over a settings
+/// list), out of the transition entirely.
+class NoFadePageRoute<T> extends PageRouteBuilder<T> {
+  NoFadePageRoute({required WidgetBuilder builder, super.settings})
+    : super(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            builder(context),
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
+      );
+}

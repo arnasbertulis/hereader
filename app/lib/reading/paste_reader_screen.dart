@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
+import '../theme/page_transitions.dart';
 import 'library_book.dart';
 import 'reader_screen.dart';
 
@@ -57,7 +58,7 @@ class _PasteReaderScreenState extends State<PasteReaderScreen> {
     if (text.isEmpty) return;
 
     Navigator.of(context).push(
-      MaterialPageRoute(
+      NoFadePageRoute<void>(
         builder: (_) => ReaderScreen(
           book: LibraryBook(id: 'pasted', title: 'Pasted text', text: text),
           repository: widget.repository,
