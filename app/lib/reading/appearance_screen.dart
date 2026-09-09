@@ -10,6 +10,12 @@ import 'info_dot.dart';
 import 'section_header.dart';
 import 'setting_slider.dart';
 
+/// Identifies the screen-summary [InfoDot] in the AppBar's actions — see #430.
+const Key appearanceInfoDotKey = Key('appearance-info-dot');
+
+/// Identifies the Contrast section's header — see #430.
+const Key appearanceContrastHeaderKey = Key('appearance-contrast-header');
+
 /// Theme, accent, contrast and text size for app chrome.
 ///
 /// Every control here retheme the whole app on the frame it is tapped, so
@@ -36,6 +42,7 @@ class AppearanceScreen extends StatelessWidget {
         // on SectionHeader, so it drops in unchanged.
         actions: const [
           InfoDot(
+            key: appearanceInfoDotKey,
             semanticLabel: 'About appearance settings',
             explanation:
                 'These four stay on this device. A phone read '
@@ -126,7 +133,10 @@ class AppearanceScreen extends StatelessWidget {
                   ),
                 ),
 
-                const SectionHeader('Contrast'),
+                const SectionHeader(
+                  'Contrast',
+                  key: appearanceContrastHeaderKey,
+                ),
                 ListTile(
                   onTap: () =>
                       controller.setHighContrast(!settings.highContrast),
