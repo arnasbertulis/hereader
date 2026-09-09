@@ -120,8 +120,22 @@ String? remainingLabel(
   final remaining = tokensLeft(book, scope);
   if (remaining == null) return null;
 
-  final left = remainingReadingTime(remainingTokens: remaining, config: pacing);
-  if (left == null) return '$remaining words left';
+  return remainingTimeLabel(remaining, pacing);
+}
+
+/// Phrases a token count still ahead as reading time, in [pacing].
+///
+/// The single formatter behind both [remainingLabel] (the Library tile) and
+/// the reader screen's own progress readout, so the two say the same thing
+/// about the same book instead of drifting apart word by word (issue #432).
+/// Falls back to a words-left count only when [pacing] cannot honestly name
+/// a duration — elicited pacing has no fixed rate to convert from.
+String remainingTimeLabel(int remainingTokens, PacingConfig pacing) {
+  final left = remainingReadingTime(
+    remainingTokens: remainingTokens,
+    config: pacing,
+  );
+  if (left == null) return '$remainingTokens words left';
 
   final minutes = left.inMinutes;
   if (minutes < 1) return 'Under a minute left';

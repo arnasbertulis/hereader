@@ -9,6 +9,7 @@ import '../data/library_repository.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
+import 'book_progress.dart';
 import 'library_book.dart';
 import 'mode_fork.dart';
 import 'profile_actions.dart';
@@ -1392,11 +1393,12 @@ class _ReaderScreenState extends State<ReaderScreen>
                           // `_session.index` the last one seen — the same +1
                           // correction `BookSummary.progress` and
                           // `tokensLeft` in `book_progress.dart` both make,
-                          // so this reads the same as the Library tile's own
-                          // count would if the reader carried a
-                          // `PacingConfig` to phrase it in minutes instead.
+                          // so this is the same count the Library tile's own
+                          // `remainingTimeLabel` phrases in minutes for the
+                          // same book.
                           wordsLeft:
                               widget.book.text.length - (_session.index + 1),
+                          pacing: _profile.pacing,
                           presentation: presentation,
                           onClose: _closeOrDismiss,
                           onToggle: _toggle,
@@ -1724,6 +1726,11 @@ class _Controls extends StatelessWidget {
   /// `TokenizedText` is shorter than expected) reads as "no words left"
   /// rather than a negative count.
   final int wordsLeft;
+
+  /// The active profile's pacing, so [wordsLeft] can be phrased as time
+  /// left the same way the Library tile phrases it for the same book — see
+  /// `remainingTimeLabel` in `book_progress.dart`.
+  final PacingConfig pacing;
   final ResolvedPresentation presentation;
   final VoidCallback onClose;
   final VoidCallback onToggle;
@@ -1744,6 +1751,7 @@ class _Controls extends StatelessWidget {
     required this.bookTitle,
     required this.progress,
     required this.wordsLeft,
+    required this.pacing,
     required this.presentation,
     required this.onClose,
     required this.onToggle,
@@ -1777,13 +1785,13 @@ class _Controls extends StatelessWidget {
 
     // What #367 found missing outright: nothing on the reading surface named
     // the book, and the only percentage on screen was the one handed to a
-    // screen reader. `wordsLeft` stands in for the Library tile's own
-    // pacing-based "Under a minute left" — this row has no `PacingConfig` to
-    // phrase it in minutes, so it says the same fact in the unit it does
-    // have, in the same words `book_progress.dart`'s own fallback uses.
+    // screen reader. `remainingTimeLabel` phrases `wordsLeft` the same way
+    // the Library tile phrases it for the same book (issue #432) — falling
+    // back to a words-left count only where `book_progress.dart`'s own
+    // fallback would, under elicited pacing with no fixed rate to convert.
     final percent = (progress * 100).round();
     final progressLabel = wordsLeft > 0
-        ? '$percent% · $wordsLeft words left'
+        ? '$percent% · ${remainingTimeLabel(wordsLeft, pacing)}'
         : '$percent%';
 
     return SafeArea(
