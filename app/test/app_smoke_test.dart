@@ -366,9 +366,9 @@ void main() {
     // editing one produces a copy.
     expect(mine.single.id, isNot(startsWith('builtin.')));
 
-    // Making a copy is exploration, not a switch: the preset stays active
-    // until the reader explicitly selects the copy from the list.
-    expect((await harness.repository.activeProfile()).id, Presets.standard.id);
+    // The copy is what the reader is about to customise, so it becomes
+    // active immediately rather than leaving the preset selected underneath.
+    expect((await harness.repository.activeProfile()).id, mine.single.id);
 
     await _disposeTree(tester);
   });

@@ -125,6 +125,7 @@ class AddMenuDispatcher {
         builder: (_) => PasteReaderScreen(
           repository: repository,
           issueStamp: sync.issueStamp,
+          auth: sync.auth,
         ),
       ),
     );

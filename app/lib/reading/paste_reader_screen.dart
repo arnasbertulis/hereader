@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
+import '../sync/auth_store.dart';
 import '../theme/content_width.dart';
 import '../theme/page_transitions.dart';
 import 'library_book.dart';
@@ -20,10 +21,16 @@ class PasteReaderScreen extends StatefulWidget {
   final LibraryRepository repository;
   final Future<String> Function() issueStamp;
 
+  /// Threaded through to the reader for its delete-confirmation wording.
+  /// Optional and `null` in the widget tests that never exercise it; every
+  /// real caller passes it.
+  final AuthStore? auth;
+
   const PasteReaderScreen({
     super.key,
     required this.repository,
     required this.issueStamp,
+    this.auth,
   });
 
   @override
@@ -64,6 +71,7 @@ class _PasteReaderScreenState extends State<PasteReaderScreen> {
           book: LibraryBook(id: 'pasted', title: 'Pasted text', text: text),
           repository: widget.repository,
           issueStamp: widget.issueStamp,
+          auth: widget.auth,
           // Nothing to save to. Pasted text has no book row, so a position
           // against it would fail the foreign key, and a place in text that
           // exists only in this session is not worth syncing anyway. Stated
