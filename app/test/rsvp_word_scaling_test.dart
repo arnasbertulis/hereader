@@ -84,5 +84,31 @@ void main() {
       final word = tester.widget<Text>(find.text('reading'));
       expect(word.style?.fontSize, PresentationConfig.maxFontSizePt);
     });
+
+    testWidgets(
+      'keeps growing past 1600px instead of plateauing there (#429)',
+      (tester) async {
+        await _pumpAtWidth(tester, width: 1600, fontSizePt: 44);
+        final at1600 = tester
+            .widget<Text>(find.text('reading'))
+            .style
+            ?.fontSize;
+
+        await _pumpAtWidth(tester, width: 1920, fontSizePt: 44);
+        final at1920 = tester
+            .widget<Text>(find.text('reading'))
+            .style
+            ?.fontSize;
+
+        await _pumpAtWidth(tester, width: 2560, fontSizePt: 44);
+        final at2560 = tester
+            .widget<Text>(find.text('reading'))
+            .style
+            ?.fontSize;
+
+        expect(at1920, greaterThan(at1600!));
+        expect(at2560, greaterThan(at1600));
+      },
+    );
   });
 }

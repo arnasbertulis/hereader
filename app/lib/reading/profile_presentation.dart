@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
@@ -450,12 +452,20 @@ TextStyle readingTextStyle(
 /// actually uses the space a desktop or ultrawide window gives it instead
 /// of sitting at phone size in a sea of empty space, without growing past
 /// what "large" is meant to look like.
+///
+/// Grows with the square root of the width ratio rather than linearly.
+/// A linear ratio against a phone-portrait [referenceWidth] hits
+/// [PresentationConfig.maxFontSizePt] by well under 1000px of available
+/// width, so a 1920px or 2560px viewport — the two ultrawide repro cases
+/// #328 asked for — rendered identically to a ~900px one (#429). The square
+/// root keeps the word visibly growing out past 1600px before the ceiling
+/// takes over.
 double scaledFontSizePt(double basePt, double availableWidth) {
   // Roughly phone-portrait width, so nothing grows on a phone; not shared
   // with anything else — a single local const, not a profile field.
   const referenceWidth = 400.0;
   if (availableWidth <= referenceWidth) return basePt;
-  final grown = basePt * (availableWidth / referenceWidth);
+  final grown = basePt * math.sqrt(availableWidth / referenceWidth);
   return grown.clamp(basePt, PresentationConfig.maxFontSizePt);
 }
 
