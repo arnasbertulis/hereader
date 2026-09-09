@@ -72,4 +72,21 @@ void main() {
 
     await disposeTree(tester);
   });
+
+  testWidgets(
+    'shows the Library tile\'s time-left phrasing, not a words-left count',
+    (tester) async {
+      await tester.pumpWidget(reader());
+      await tester.pumpAndSettle();
+
+      // #367 asked for the same "Under a minute left" phrasing the Library
+      // tile already shows for this book; #378 shipped a words-left count
+      // instead because `_Controls` had no `PacingConfig` at hand (#432).
+      // Nine words at the default profile's pacing is well under a minute.
+      expect(find.textContaining('Under a minute left'), findsOneWidget);
+      expect(find.textContaining('words left'), findsNothing);
+
+      await disposeTree(tester);
+    },
+  );
 }
