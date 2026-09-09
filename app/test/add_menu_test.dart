@@ -84,6 +84,45 @@ void main() {
     },
   );
 
+  testWidgets('#431: the menu states what it is for', (tester) async {
+    await pumpMenu(tester, const Size(502, 900));
+
+    expect(find.text('Add to your library'), findsOneWidget);
+  });
+
+  testWidgets('#431: cancel pops the dialog with no choice', (tester) async {
+    AddChoice? result;
+    await tester.binding.setSurfaceSize(const Size(502, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Builder(
+              builder: (context) => ElevatedButton(
+                onPressed: () async {
+                  result = await showDialog<AddChoice>(
+                    context: context,
+                    builder: (_) => const AddMenu(),
+                  );
+                },
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(addMenuCancelKey));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AddMenu), findsNothing);
+    expect(result, isNull);
+  });
+
   testWidgets(
     '#330: a visible scrollbar hints at the cut-off option when the menu '
     'overflows the viewport',
