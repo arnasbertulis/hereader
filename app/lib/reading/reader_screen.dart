@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
+import '../sync/auth_store.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
@@ -169,6 +170,12 @@ class ReaderScreen extends StatefulWidget {
   /// Supplies a clock stamp. Pass `syncEngine.issueStamp`.
   final Future<String> Function() issueStamp;
 
+  /// Whether deleting a profile from here reaches every device or only this
+  /// one. Pass `syncEngine.auth`. Optional and `null` in the widget tests
+  /// that never exercise delete's confirmation copy; every real caller
+  /// passes it.
+  final AuthStore? auth;
+
   /// Called whenever the reader's place is worth recording: on every
   /// deliberate stop, every fifteen seconds of movement between them, when
   /// the app is hidden, and when the book closes. See ADR 0011.
@@ -182,6 +189,7 @@ class ReaderScreen extends StatefulWidget {
     required this.book,
     required this.repository,
     required this.issueStamp,
+    this.auth,
     required this.onSave,
   });
 
@@ -892,7 +900,11 @@ class _ReaderScreenState extends State<ReaderScreen>
         // Deleting the active profile clears the pointer in the repository,
         // and the subscription resolves that back to Standard rather than a
         // dangling id.
-        await _profileActions.delete(context, profile);
+        await _profileActions.delete(
+          context,
+          profile,
+          signedIn: widget.auth?.isSignedIn ?? false,
+        );
 
       case _SetMode(:final mode, :final profiles):
         await _setMode(mode, profiles);
@@ -903,6 +915,7 @@ class _ReaderScreenState extends State<ReaderScreen>
             builder: (_) => ProfilesScreen(
               repository: widget.repository,
               issueStamp: widget.issueStamp,
+              auth: widget.auth,
             ),
           ),
         );

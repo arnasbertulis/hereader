@@ -224,6 +224,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ProfilesScreen(
                             repository: widget.repository,
                             issueStamp: widget.issueStamp,
+                            auth: widget.api.auth,
                           ),
                         ),
                       ),

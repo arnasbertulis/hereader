@@ -44,7 +44,7 @@ void main() {
   }
 
   group('ProfileActions.duplicate', () {
-    testWidgets('forks the preset without activating it', (tester) async {
+    testWidgets('forks the preset and activates the fork', (tester) async {
       final context = await harness(tester);
 
       final future = actions.duplicate(context, Presets.standard);
@@ -53,7 +53,7 @@ void main() {
       final saved = await repository.allProfiles();
       final mine = saved.where((p) => !p.isBuiltIn).toList();
       expect(mine, hasLength(1));
-      expect((await repository.activeProfile()).id, Presets.standard.id);
+      expect((await repository.activeProfile()).id, mine.single.id);
       expect(find.byType(ProfileEditScreen), findsOneWidget);
 
       // Close the editor without forking again so the pending future
@@ -63,7 +63,21 @@ void main() {
       await future;
     });
 
-    testWidgets('leaves the source active once the editor closes', (
+    testWidgets('keeps the fork active once the editor closes', (tester) async {
+      final context = await harness(tester);
+
+      final future = actions.duplicate(context, Presets.standard);
+      await tester.pumpAndSettle();
+      final forkId = (await repository.activeProfile()).id;
+
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await future;
+
+      expect((await repository.activeProfile()).id, forkId);
+    });
+
+    testWidgets('announces the switch with an undo once the editor closes', (
       tester,
     ) async {
       final context = await harness(tester);
@@ -75,8 +89,58 @@ void main() {
       await tester.pumpAndSettle();
       await future;
 
-      expect((await repository.activeProfile()).id, Presets.standard.id);
+      expect(
+        find.text('Now reading with ${Presets.standard.name} (copy)'),
+        findsOneWidget,
+      );
+      expect(find.text('Undo'), findsOneWidget);
     });
+
+    testWidgets('undo restores whichever profile was active before', (
+      tester,
+    ) async {
+      final context = await harness(tester);
+      final outgoingId = (await repository.activeProfile()).id;
+
+      final future = actions.duplicate(context, Presets.standard);
+      await tester.pumpAndSettle();
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      await future;
+
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+
+      expect((await repository.activeProfile()).id, outgoingId);
+    });
+
+    testWidgets(
+      'undo restores the pre-duplicate profile even if the editor forked '
+      'again',
+      (tester) async {
+        final context = await harness(tester);
+        final outgoingId = (await repository.activeProfile()).id;
+
+        final future = actions.duplicate(context, Presets.standard);
+        await tester.pumpAndSettle();
+
+        // The editor forks again and pops with its own fork, the way
+        // editing a preset always does. ProfileEditScreen saves the fork
+        // before popping with it; do the same here.
+        final refork = Presets.standard.fork(id: ReadingProfile.newId());
+        await repository.saveProfile(refork, hlc: await _stamp());
+        Navigator.of(context).pop(refork);
+        await tester.pumpAndSettle();
+        await future;
+
+        expect((await repository.activeProfile()).id, refork.id);
+
+        await tester.tap(find.text('Undo'));
+        await tester.pumpAndSettle();
+
+        expect((await repository.activeProfile()).id, outgoingId);
+      },
+    );
   });
 
   group('ProfileActions.delete', () {
@@ -86,11 +150,13 @@ void main() {
       return profile;
     }
 
-    testWidgets('shows the shared confirmation copy', (tester) async {
+    testWidgets('signed in: states the copy reaches every device', (
+      tester,
+    ) async {
       final context = await harness(tester);
       final profile = await savedFork();
 
-      unawaited(actions.delete(context, profile));
+      unawaited(actions.delete(context, profile, signedIn: true));
       await tester.pumpAndSettle();
 
       expect(find.text('Delete ${profile.name}?'), findsOneWidget);
@@ -106,13 +172,35 @@ void main() {
       await tester.pumpAndSettle();
     });
 
+    testWidgets('signed out: states the removal is local to this device', (
+      tester,
+    ) async {
+      final context = await harness(tester);
+      final profile = await savedFork();
+
+      unawaited(actions.delete(context, profile, signedIn: false));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete ${profile.name}?'), findsOneWidget);
+      expect(
+        find.text(
+          'This removes it from this device. Presets are not '
+          'affected.',
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Keep'));
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('keeps the profile and returns false when not confirmed', (
       tester,
     ) async {
       final context = await harness(tester);
       final profile = await savedFork();
 
-      final future = actions.delete(context, profile);
+      final future = actions.delete(context, profile, signedIn: true);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Keep'));
       await tester.pumpAndSettle();
@@ -128,7 +216,7 @@ void main() {
       final context = await harness(tester);
       final profile = await savedFork();
 
-      final future = actions.delete(context, profile);
+      final future = actions.delete(context, profile, signedIn: true);
       await tester.pumpAndSettle();
       await tester.tap(find.text('Delete'));
       await tester.pumpAndSettle();

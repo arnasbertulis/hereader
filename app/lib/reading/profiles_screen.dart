@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
+import '../sync/auth_store.dart';
 import '../theme/content_width.dart';
 import 'info_dot.dart';
 import 'profile_actions.dart';
@@ -35,10 +36,17 @@ class ProfilesScreen extends StatefulWidget {
   /// one.
   final Future<String> Function() issueStamp;
 
+  /// Whether deleting a profile from here reaches every device or only this
+  /// one. Pass `syncEngine.auth`. Optional and `null` in the widget tests
+  /// that never exercise delete's confirmation copy; every real caller
+  /// passes it.
+  final AuthStore? auth;
+
   const ProfilesScreen({
     super.key,
     required this.repository,
     required this.issueStamp,
+    this.auth,
   });
 
   @override
@@ -68,15 +76,15 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   }
 
   Future<void> _duplicate(ReadingProfile source) async {
-    // Same rule ProfileActions.duplicate follows: the fork is saved but not
-    // made active, so there is no active-profile pointer to pick up here.
+    // ProfileActions.duplicate writes the fork's own pointer and announces
+    // the switch; no reload needed here.
     await _profileActions.duplicate(context, source);
   }
 
   Future<void> _edit(ReadingProfile profile) async {
-    // Same rule ProfileActions.duplicate follows: editing a preset forks it,
-    // but the fork is not made active. Activating a profile is a separate,
-    // explicit choice made from the list, not a side effect of editing.
+    // Editing a preset forks it via ProfileEditScreen's own save path, which
+    // does not go through ProfileActions.duplicate and so does not activate
+    // the fork or announce anything.
     await Navigator.of(context).push<ReadingProfile>(
       MaterialPageRoute(
         builder: (_) => ProfileEditScreen(
@@ -91,7 +99,11 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   Future<void> _delete(ReadingProfile profile) async {
     // Deleting the active profile clears the pointer in the repository, and
     // `watchActiveProfile` resolves that back to Standard; no reload needed.
-    await _profileActions.delete(context, profile);
+    await _profileActions.delete(
+      context,
+      profile,
+      signedIn: widget.auth?.isSignedIn ?? false,
+    );
   }
 
   @override

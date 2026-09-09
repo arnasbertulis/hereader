@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
@@ -21,18 +23,29 @@ class ProfileActions {
 
   const ProfileActions({required this.repository, required this.issueStamp});
 
-  /// Forks [source] and opens the fork for editing.
+  /// Forks [source], makes the fork active, and opens it for editing.
   ///
-  /// The fork is not made active. The reader is exploring what a copy would
-  /// look like, or comparing it against what is already in use; neither
-  /// should switch what the app reads with. Activating a profile is a
-  /// separate, explicit choice made from the list.
+  /// The fork is selected before the editor opens: the reader asked to make
+  /// it and is about to customise it, not carry on with whatever was active
+  /// before it existed. If the editor forks again — editing a preset always
+  /// does — the second fork replaces it as active in turn.
+  ///
+  /// The switch is announced after the editor closes, with an undo that
+  /// restores whichever profile was active before this call started, even if
+  /// the editor forked again while it was open. The [SnackBar] outlives the
+  /// 4-second default: this app's audience is exactly the audience likely to
+  /// miss a short-lived announcement.
   Future<void> duplicate(BuildContext context, ReadingProfile source) async {
+    final outgoingId = (await repository.activeProfile()).id;
+
     final copy = source.fork(id: ReadingProfile.newId());
     await repository.saveProfile(copy, hlc: await issueStamp());
     if (!context.mounted) return;
 
-    await Navigator.of(context).push<ReadingProfile>(
+    await repository.setActiveProfile(copy.id, hlc: await issueStamp());
+    if (!context.mounted) return;
+
+    final result = await Navigator.of(context).push<ReadingProfile>(
       MaterialPageRoute(
         builder: (_) => ProfileEditScreen(
           profile: copy,
@@ -41,21 +54,57 @@ class ProfileActions {
         ),
       ),
     );
+    if (!context.mounted) return;
+
+    final active = result ?? copy;
+    if (result != null && result.id != copy.id) {
+      await repository.setActiveProfile(result.id, hlc: await issueStamp());
+    }
+    if (!context.mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Now reading with ${active.name}'),
+        duration: const Duration(seconds: 10),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () => unawaited(_restoreActive(outgoingId)),
+        ),
+      ),
+    );
+  }
+
+  /// Restores [id] as active, for the duplicate-announcement's undo.
+  ///
+  /// A private helper rather than an inline closure so the undo captures
+  /// [id] as it was when [duplicate] started, never whatever the editor left
+  /// active by the time the reader taps it.
+  Future<void> _restoreActive(String id) async {
+    await repository.setActiveProfile(id, hlc: await issueStamp());
   }
 
   /// Confirms, then deletes [profile]. Returns whether it was deleted.
   ///
   /// The confirmation wording lives here, not in each screen, so changing
   /// what deletion warns about is one edit rather than two that can drift
-  /// apart.
-  Future<bool> delete(BuildContext context, ReadingProfile profile) async {
+  /// apart. [signedIn] decides which consequence it states: a signed-in
+  /// reader's profiles sync, so deleting one reaches every device; a
+  /// signed-out reader's profiles never leave this device.
+  Future<bool> delete(
+    BuildContext context,
+    ReadingProfile profile, {
+    required bool signedIn,
+  }) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Delete ${profile.name}?'),
-        content: const Text(
-          'This removes it from every device signed in to your account. '
-          'Presets are not affected.',
+        content: Text(
+          signedIn
+              ? 'This removes it from every device signed in to your '
+                    'account. Presets are not affected.'
+              : 'This removes it from this device. Presets are not '
+                    'affected.',
         ),
         actions: [
           TextButton(

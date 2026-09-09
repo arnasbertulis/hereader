@@ -106,6 +106,7 @@ class BookOpener {
             // device and to remember which one was picked.
             repository: repository,
             issueStamp: sync.issueStamp,
+            auth: sync.auth,
             // The screen decides when a place is worth recording — ADR 0011
             // — and this decides how. It is called throughout the session
             // now, not once at the end.
