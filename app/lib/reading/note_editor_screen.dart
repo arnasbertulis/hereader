@@ -293,14 +293,14 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                       ),
                     ),
                     const SizedBox(width: 16),
-                    Expanded(
+                    Center(
                       child: FilledButton(
                         key: noteEditorSaveAndReadButtonKey,
                         onPressed: (hasText && !_busy)
                             ? () => _save(enterReader: true)
                             : null,
                         style: FilledButton.styleFrom(
-                          minimumSize: const Size.fromHeight(56),
+                          minimumSize: const Size(200, 56),
                         ),
                         child: _busy
                             ? const SizedBox(
