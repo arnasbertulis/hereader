@@ -24,6 +24,9 @@ const Key addMenuNoteKey = Key('add-menu-note');
 /// See [addMenuFreeBooksKey].
 const Key addMenuPasteKey = Key('add-menu-paste');
 
+/// See [addMenuFreeBooksKey].
+const Key addMenuCancelKey = Key('add-menu-cancel');
+
 /// Four ways to start reading, listed.
 ///
 /// The library's own add button opens this, and so does Home's empty state —
@@ -109,6 +112,37 @@ class _AddMenuState extends State<AddMenu> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // A title and a visible way out, per #362's own follow-up:
+                  // #380 fixed the four rows themselves but left the menu an
+                  // unnamed panel dismissible only by tap-outside or back
+                  // gesture. A row rather than a second [SectionHeader] copy
+                  // — that widget's `info` slot sits beside the title, not
+                  // pinned to the far edge, which is where Cancel reads as a
+                  // way out rather than a fifth option.
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.xl,
+                      AppSpacing.lg,
+                      AppSpacing.md,
+                      AppSpacing.sm,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Add to your library',
+                            style: theme.textTheme.titleLarge,
+                          ),
+                        ),
+                        TextButton(
+                          key: addMenuCancelKey,
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Cancel'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(),
                   _AddMenuOption(
                     key: addMenuFreeBooksKey,
                     choice: AddChoice.freeBooks,
