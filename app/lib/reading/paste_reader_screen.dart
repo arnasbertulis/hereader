@@ -119,12 +119,14 @@ class _PasteReaderScreenState extends State<PasteReaderScreen> {
                   child: const Text('Paste'),
                 ),
                 const SizedBox(height: 8),
-                FilledButton(
-                  onPressed: _start,
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(56),
+                Center(
+                  child: FilledButton(
+                    onPressed: _start,
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size(200, 56),
+                    ),
+                    child: const Text('Read this'),
                   ),
-                  child: const Text('Read this'),
                 ),
               ] else
                 FilledButton(
