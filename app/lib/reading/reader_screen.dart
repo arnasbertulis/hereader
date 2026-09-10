@@ -105,6 +105,15 @@ const Key readerParagraphButtonKey = Key('reader-paragraph-button');
 const Key readerBackSentenceButtonKey = Key('reader-back-sentence-button');
 const Key readerBackParagraphButtonKey = Key('reader-back-paragraph-button');
 
+/// Opens the chapter list — present only when the book declares any. Keyed
+/// for the same reason as [readerPlayButtonKey]: assertable without relying
+/// on the tooltip string it also carries.
+const Key readerChaptersButtonKey = Key('reader-chapters-button');
+
+/// Leaves the reader for the library. Keyed for the same reason as
+/// [readerPlayButtonKey].
+const Key readerBackToLibraryButtonKey = Key('reader-back-to-library-button');
+
 /// Where the reader stopped.
 ///
 /// The token index travels alongside the locator because the service has no
@@ -1467,6 +1476,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                               child: Padding(
                                 padding: const EdgeInsets.all(AppSpacing.lg),
                                 child: IconButton(
+                                  key: readerChaptersButtonKey,
                                   onPressed: _openChapters,
                                   iconSize: _secondaryIconSize,
                                   color: ink,
@@ -2136,6 +2146,7 @@ class _Controls extends StatelessWidget {
                 children: [
                   Expanded(
                     child: IconButton(
+                      key: readerBackToLibraryButtonKey,
                       onPressed: onClose,
                       iconSize: _secondaryIconSize,
                       color: ink,

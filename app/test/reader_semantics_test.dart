@@ -9,6 +9,24 @@ import 'package:rsvp_engine/rsvp_engine.dart';
 
 import 'test_database.dart';
 
+/// Every control on the transport row, keyed rather than found by label —
+/// ADR 0037's own instruction. A chaptered book is required for this list
+/// to be exhaustive: Chapters only exists in the tree when the book
+/// declares any (see 'the legend lists Chapters only for a chaptered
+/// book' below).
+const _transportControlKeys = [
+  readerTapBackKey,
+  readerTapForwardKey,
+  readerBackParagraphButtonKey,
+  readerBackSentenceButtonKey,
+  readerSentenceButtonKey,
+  readerParagraphButtonKey,
+  readerChaptersButtonKey,
+  readerBackToLibraryButtonKey,
+  readerPlayButtonKey,
+  readerProfileButtonKey,
+];
+
 Future<String> _stamp() async => '0000000000001-00000-test';
 
 TokenizedText _text() => TokenizedText.from(const [
@@ -240,6 +258,143 @@ void main() {
       );
 
       handle.dispose();
+      await disposeTree(tester);
+    });
+  });
+
+  // The decision on #413: every control a screen reader can land on has to
+  // say what it is, and say it only once. `label` carries that for the
+  // hand-built tap zones (ADR 0020); `tooltip` carries it for every
+  // `IconButton` (the comment on the group above explains why that is a
+  // separate `SemanticsData` field, not `label`, for those). Either way, a
+  // visible `Text` descendant would be ADR 0037 §1 painting the name a
+  // second time.
+  group('every transport control names itself and nothing paints it', () {
+    testWidgets(
+      'each control has a non-empty accessible name and no Text descendant',
+      (tester) async {
+        final handle = tester.ensureSemantics();
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ReaderScreen(
+              book: LibraryBook(
+                id: 'b',
+                title: 'A Book',
+                text: text,
+                chapters: [
+                  Chapter(
+                    title: 'Chapter One',
+                    depth: 0,
+                    tokenIndex: text.startOfBlock('one')!,
+                  ),
+                  Chapter(
+                    title: 'Chapter Two',
+                    depth: 0,
+                    tokenIndex: text.startOfBlock('two')!,
+                  ),
+                ],
+              ),
+              repository: LibraryRepository(database),
+              issueStamp: _stamp,
+              onSave: (_) async {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        for (final key in _transportControlKeys) {
+          final node = tester.getSemantics(find.byKey(key));
+          final accessibleName = node.label.isNotEmpty
+              ? node.label
+              : node.tooltip;
+          expect(
+            accessibleName,
+            isNotEmpty,
+            reason: '$key has no label and no tooltip',
+          );
+          expect(
+            find.descendant(
+              of: find.byKey(key),
+              matching: find.byType(Text),
+            ),
+            findsNothing,
+            reason: '$key paints a Text descendant',
+          );
+        }
+
+        handle.dispose();
+        await disposeTree(tester);
+      },
+    );
+  });
+
+  // ADR 0035 §1: hierarchy on this row is size and position, never fill or
+  // colour. Every control passes `color: ink` and nothing on the row sets a
+  // `style` with its own `backgroundColor` — this pins both halves of that
+  // rule so a future control cannot earn prominence by being filled.
+  group('the transport row never fills or tints a control', () {
+    testWidgets('every control shares one ink colour and draws no fill', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReaderScreen(
+            book: LibraryBook(
+              id: 'b',
+              title: 'A Book',
+              text: text,
+              chapters: [
+                Chapter(
+                  title: 'Chapter One',
+                  depth: 0,
+                  tokenIndex: text.startOfBlock('one')!,
+                ),
+                Chapter(
+                  title: 'Chapter Two',
+                  depth: 0,
+                  tokenIndex: text.startOfBlock('two')!,
+                ),
+              ],
+            ),
+            repository: LibraryRepository(database),
+            issueStamp: _stamp,
+            onSave: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      const iconButtonKeys = [
+        readerBackParagraphButtonKey,
+        readerBackSentenceButtonKey,
+        readerSentenceButtonKey,
+        readerParagraphButtonKey,
+        readerChaptersButtonKey,
+        readerBackToLibraryButtonKey,
+        readerPlayButtonKey,
+        readerProfileButtonKey,
+      ];
+
+      final colours = <Color?>{};
+      for (final key in iconButtonKeys) {
+        final button = tester.widget<IconButton>(find.byKey(key));
+        expect(
+          button.style,
+          isNull,
+          reason: '$key sets a ButtonStyle, which can carry a fill',
+        );
+        colours.add(button.color);
+      }
+
+      expect(
+        colours,
+        hasLength(1),
+        reason:
+            'every transport control should resolve the same ink colour, '
+            'never one of its own',
+      );
+
       await disposeTree(tester);
     });
   });
