@@ -291,17 +291,20 @@ void main() {
         await tester.tap(find.byKey(readerLegendInfoDotKey));
         await tester.pumpAndSettle();
 
-        expect(find.text('Back a paragraph'), findsOneWidget);
-        expect(find.text('Back a sentence'), findsOneWidget);
-        expect(find.text('Forward a sentence'), findsOneWidget);
-        expect(find.text('Forward a paragraph'), findsOneWidget);
-        expect(find.text('Back to library'), findsOneWidget);
-        expect(find.text('Read'), findsOneWidget);
-        expect(find.text('Reading profile'), findsOneWidget);
+        expect(find.byKey(readerLegendEntryBackParagraphKey), findsOneWidget);
+        expect(find.byKey(readerLegendEntryBackSentenceKey), findsOneWidget);
+        expect(find.byKey(readerLegendEntryForwardSentenceKey), findsOneWidget);
+        expect(
+          find.byKey(readerLegendEntryForwardParagraphKey),
+          findsOneWidget,
+        );
+        expect(find.byKey(readerLegendEntryBackToLibraryKey), findsOneWidget);
+        expect(find.byKey(readerLegendEntryPlayKey), findsOneWidget);
+        expect(find.byKey(readerLegendEntryReadingProfileKey), findsOneWidget);
         // The book behind `reader()` declares no chapters.
-        expect(find.text('Chapters'), findsNothing);
-        expect(find.text('Tap anywhere'), findsOneWidget);
-        expect(find.text('Drag sideways'), findsOneWidget);
+        expect(find.byKey(readerLegendEntryChaptersKey), findsNothing);
+        expect(find.byKey(readerLegendEntryTapAnywhereKey), findsOneWidget);
+        expect(find.byKey(readerLegendEntryDragSidewaysKey), findsOneWidget);
 
         await disposeTree(tester);
       },
@@ -341,7 +344,7 @@ void main() {
       await tester.tap(find.byKey(readerLegendInfoDotKey));
       await tester.pumpAndSettle();
 
-      expect(find.text('Chapters'), findsOneWidget);
+      expect(find.byKey(readerLegendEntryChaptersKey), findsOneWidget);
 
       await disposeTree(tester);
     });

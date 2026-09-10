@@ -44,6 +44,40 @@ const Key readerProfileButtonKey = Key('reader-profile-button');
 /// screen the way [appearanceInfoDotKey] does for Appearance's own.
 const Key readerLegendInfoDotKey = Key('reader-legend-info-dot');
 
+/// Keys for each legend entry in the transport legend — used to assert
+/// presence of controls in tests, and to find them without relying on
+/// text strings that might change. Keys for:
+/// - Back a paragraph
+/// - Back a sentence
+/// - Forward a sentence
+/// - Forward a paragraph
+/// - Back to library
+/// - Play/Pause (Read/Stop)
+/// - Reading profile
+/// - Chapters (conditional)
+/// - Tap anywhere gesture
+/// - Drag sideways gesture
+const Key readerLegendEntryBackParagraphKey = Key(
+  'reader-legend-back-paragraph',
+);
+const Key readerLegendEntryBackSentenceKey = Key('reader-legend-back-sentence');
+const Key readerLegendEntryForwardSentenceKey = Key(
+  'reader-legend-forward-sentence',
+);
+const Key readerLegendEntryForwardParagraphKey = Key(
+  'reader-legend-forward-paragraph',
+);
+const Key readerLegendEntryBackToLibraryKey = Key(
+  'reader-legend-back-to-library',
+);
+const Key readerLegendEntryPlayKey = Key('reader-legend-play');
+const Key readerLegendEntryReadingProfileKey = Key(
+  'reader-legend-reading-profile',
+);
+const Key readerLegendEntryChaptersKey = Key('reader-legend-chapters');
+const Key readerLegendEntryTapAnywhereKey = Key('reader-legend-tap-anywhere');
+const Key readerLegendEntryDragSidewaysKey = Key('reader-legend-drag-sideways');
+
 /// The three regions the reading surface is divided into.
 ///
 /// Left and right step by the reader's configured amount and stop; the centre
@@ -687,50 +721,60 @@ class _ReaderScreenState extends State<ReaderScreen>
       icon: AppIcons.backParagraph,
       name: 'Back a paragraph',
       description: 'Moves back one paragraph.',
+      key: readerLegendEntryBackParagraphKey,
     ),
     const _LegendEntry(
       icon: AppIcons.backSentence,
       name: 'Back a sentence',
       description: 'Moves back one sentence.',
+      key: readerLegendEntryBackSentenceKey,
     ),
     const _LegendEntry(
       icon: AppIcons.skipSentence,
       name: 'Forward a sentence',
       description: 'Moves forward one sentence.',
+      key: readerLegendEntryForwardSentenceKey,
     ),
     const _LegendEntry(
       icon: AppIcons.skipParagraph,
       name: 'Forward a paragraph',
       description: 'Moves forward one paragraph.',
+      key: readerLegendEntryForwardParagraphKey,
     ),
     const _LegendEntry(
       icon: AppIcons.closeBook,
       name: 'Back to library',
       description: 'Leaves the book and returns to your library.',
+      key: readerLegendEntryBackToLibraryKey,
     ),
     _LegendEntry(
       icon: _isStopping(state) ? AppIcons.pause : AppIcons.play,
       name: _toggleLabelFor(state),
       description: 'Starts or pauses the reading.',
+      key: readerLegendEntryPlayKey,
     ),
     const _LegendEntry(
       icon: AppIcons.readingProfile,
       name: 'Reading profile',
       description: 'Opens reading profile settings.',
+      key: readerLegendEntryReadingProfileKey,
     ),
     if (_chapters.isNotEmpty)
       const _LegendEntry(
         icon: AppIcons.chapters,
         name: 'Chapters',
         description: "Opens this book's chapter list.",
+        key: readerLegendEntryChaptersKey,
       ),
     const _LegendEntry(
       name: 'Tap anywhere',
       description: 'Plays or pauses the book.',
+      key: readerLegendEntryTapAnywhereKey,
     ),
     const _LegendEntry(
       name: 'Drag sideways',
       description: 'Moves through the book.',
+      key: readerLegendEntryDragSidewaysKey,
     ),
   ];
 
@@ -869,9 +913,9 @@ class _ReaderScreenState extends State<ReaderScreen>
                             Navigator.of(context).pop(_CopyProfile(profile)),
                         onDelete: profile.isBuiltIn
                             ? null
-                            : () => Navigator.of(
-                                context,
-                              ).pop(_DeleteProfile(profile)),
+                            : () =>
+                                  Navigator.of(context)
+                                      .pop(_DeleteProfile(profile)),
                       ),
                     const Divider(height: 1),
                     // Below the list rather than above it. The sheet is
@@ -1232,23 +1276,23 @@ class _ReaderScreenState extends State<ReaderScreen>
           const SingleActivator(
             LogicalKeyboardKey.arrowRight,
             control: true,
-          ): () =>
-              _jumpTo(_nextSentence)?.call(),
+          ): () => _jumpTo(_nextSentence)
+              ?.call(),
           const SingleActivator(
             LogicalKeyboardKey.arrowLeft,
             control: true,
-          ): () =>
-              _jumpTo(_previousSentence)?.call(),
+          ): () => _jumpTo(_previousSentence)
+              ?.call(),
           const SingleActivator(
             LogicalKeyboardKey.arrowRight,
             shift: true,
-          ): () =>
-              _jumpTo(_nextParagraph)?.call(),
+          ): () => _jumpTo(_nextParagraph)
+              ?.call(),
           const SingleActivator(
             LogicalKeyboardKey.arrowLeft,
             shift: true,
-          ): () =>
-              _jumpTo(_previousParagraph)?.call(),
+          ): () => _jumpTo(_previousParagraph)
+              ?.call(),
           const SingleActivator(LogicalKeyboardKey.keyC): _openChapters,
           const SingleActivator(LogicalKeyboardKey.escape): _closeOrDismiss,
         },
@@ -1808,11 +1852,13 @@ class _LegendEntry {
   final IconData? icon;
   final String name;
   final String description;
+  final Key? key;
 
   const _LegendEntry({
     this.icon,
     required this.name,
     required this.description,
+    this.key,
   });
 }
 
@@ -1837,6 +1883,7 @@ class _ReaderLegend extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
               child: Row(
+                key: entry.key,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(
@@ -1971,9 +2018,8 @@ class _Controls extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(color: ink),
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(color: ink),
             ),
             const SizedBox(height: AppSpacing.sm),
             // The one accent on this screen, where the accent survives the
