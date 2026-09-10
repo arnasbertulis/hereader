@@ -957,7 +957,13 @@ class _BookTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                BookCoverFuture(bookId: book.id, cover: cover, width: width),
+                BookCoverFuture(
+                  bookId: book.id,
+                  sourceFormat: BookSourceFormat.fromName(book.sourceFormat),
+                  title: book.title,
+                  cover: cover,
+                  width: width,
+                ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   book.title,
@@ -1047,7 +1053,13 @@ class _BookRow extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  BookCoverFuture(bookId: book.id, cover: cover, width: 72),
+                  BookCoverFuture(
+                    bookId: book.id,
+                    sourceFormat: BookSourceFormat.fromName(book.sourceFormat),
+                    title: book.title,
+                    cover: cover,
+                    width: 72,
+                  ),
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: Column(
