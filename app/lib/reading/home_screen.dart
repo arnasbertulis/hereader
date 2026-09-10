@@ -15,6 +15,7 @@ import 'add_menu_dispatcher.dart';
 import 'book_cover.dart';
 import 'book_opener.dart';
 import 'book_progress.dart';
+import 'library_book.dart';
 import 'profile_presentation.dart';
 import 'reading_display.dart';
 import 'section_header.dart';
@@ -464,6 +465,10 @@ class _ContinueTile extends StatelessWidget {
                     children: [
                       BookCoverFuture(
                         bookId: book.id,
+                        sourceFormat: BookSourceFormat.fromName(
+                          book.sourceFormat,
+                        ),
+                        title: book.title,
                         cover: cover,
                         width: _continueTileCoverWidth,
                       ),
@@ -662,6 +667,8 @@ class _RecentTile extends StatelessWidget {
             children: [
               BookCoverFuture(
                 bookId: book.id,
+                sourceFormat: BookSourceFormat.fromName(book.sourceFormat),
+                title: book.title,
                 cover: cover,
                 width: constraints.maxWidth,
               ),

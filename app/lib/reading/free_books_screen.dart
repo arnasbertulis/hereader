@@ -14,6 +14,7 @@ import '../theme/content_width.dart';
 import 'book_cover.dart';
 import 'book_importer.dart';
 import 'book_opener.dart';
+import 'library_book.dart';
 
 /// Identifies the search field for tests, which have no button label to
 /// match against — the field carries no text of its own until the reader
@@ -777,6 +778,10 @@ class _EntryTile extends StatelessWidget {
                   children: [
                     BookCoverFuture(
                       bookId: entry.bookId,
+                      // Every catalogue entry is an EPUB; Free Books never
+                      // lists a Note.
+                      sourceFormat: BookSourceFormat.epub,
+                      title: entry.title,
                       cover: cover,
                       width: width,
                     ),
