@@ -119,6 +119,20 @@ four equal jumps around a centre, and asymmetric sizing would undercut that
 before hierarchy is even a question here — hierarchy on this screen is still
 play against everything else, unchanged.
 
+## Amendment, 2026-09-10: a jump that cannot move is not drawn
+
+§1 disables a jump rather than moving nowhere, and the disabled state was drawn
+as the glyph at 38% of the ink (`_dimmed()`, `reader_screen.dart:1695`). On the
+dark reader background that sits near the floor of what a reader with low
+contrast sensitivity can tell from the surface (#434).
+
+A disabled jump is now not drawn. Its slot keeps its size, so the row does not
+shift, and its `Semantics` label names the unavailable move ("No earlier
+sentence", "No later paragraph"). No visible text is added: this only happens
+at the start or end of the text, where the reason is the page itself, and ADR
+0037 takes visible labels off this row. The manual pass below, which saw the
+jumps "greying out", describes the behaviour this replaces.
+
 ## Verification
 
 `dart test` and `dart test -p chrome` in `packages/rsvp_engine`: 226 tests
