@@ -123,7 +123,9 @@ void main() {
 
     expect(find.text('All'), findsOneWidget);
     expect(find.text('Romeo and Juliet'), findsOneWidget);
-    expect(find.text('My note'), findsOneWidget);
+    // Twice: once on the Note's generated face (issue #335) and once on the
+    // tile's own title label underneath it.
+    expect(find.text('My note'), findsNWidgets(2));
 
     await _disposeTree(tester);
   });
@@ -213,7 +215,9 @@ void main() {
     await tester.tap(find.text('Notes').last);
     await tester.pumpAndSettle();
 
-    expect(find.text('My note'), findsOneWidget);
+    // Twice: once on the Note's generated face (issue #335) and once on the
+    // tile's own title label underneath it.
+    expect(find.text('My note'), findsNWidgets(2));
     expect(find.text('Romeo and Juliet'), findsNothing);
 
     await _disposeTree(tester);
@@ -307,7 +311,9 @@ void main() {
     await pump(tester);
 
     expect(find.text('Notes'), findsOneWidget);
-    expect(find.text('My note'), findsOneWidget);
+    // Twice: once on the Note's generated face (issue #335) and once on the
+    // tile's own title label underneath it.
+    expect(find.text('My note'), findsNWidgets(2));
     expect(find.text('Romeo and Juliet'), findsNothing);
 
     await _disposeTree(tester);
@@ -414,7 +420,9 @@ void main() {
 
         expect(find.text('All'), findsOneWidget);
         expect(find.text('Books'), findsNothing);
-        expect(find.text('My note'), findsOneWidget);
+        // Twice: once on the Note's generated face (issue #335) and once on
+        // the tile's own title label underneath it.
+        expect(find.text('My note'), findsNWidgets(2));
 
         await _disposeTree(tester);
       },
@@ -472,7 +480,9 @@ void main() {
 
         expect(find.text('All'), findsOneWidget);
         expect(find.text('Books'), findsNothing);
-        expect(find.text('My note, edited'), findsOneWidget);
+        // Twice: once on the Note's generated face (issue #335) and once on
+        // the tile's own title label underneath it.
+        expect(find.text('My note, edited'), findsNWidgets(2));
 
         await _disposeTree(tester);
       },
