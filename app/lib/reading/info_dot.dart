@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 
+/// Key for the dialog-path "Close" button, so a test can drive it without
+/// asserting on its label — see `.claude/rules/app.md`.
+const Key infoDotCloseButtonKey = Key('info-dot-close-button');
+
 /// The (i) that moves a setting's second and third sentences off the page.
 ///
 /// Every explanation used to print unconditionally, at [bodySmall], whether
@@ -19,17 +23,32 @@ import '../theme/app_tokens.dart';
 /// [semanticLabel] must name what the explanation is about — `'About high
 /// contrast'`, never `'info'` or `'button'` — or a screen reader announces
 /// the same word at every row on the page.
+///
+/// [explanation] is plain text. A caller whose disclosure is not prose —
+/// the reader transport legend's list of controls, ADR 0037 §2 — passes
+/// [contentBuilder] instead; exactly one of the two is required.
 class InfoDot extends StatelessWidget {
   final String semanticLabel;
-  final String explanation;
+  final String? explanation;
+  final WidgetBuilder? contentBuilder;
 
   const InfoDot({
     super.key,
     required this.semanticLabel,
-    required this.explanation,
-  });
+    this.explanation,
+    this.contentBuilder,
+  }) : assert(
+         explanation != null || contentBuilder != null,
+         'InfoDot needs either explanation or contentBuilder',
+       );
 
   static const _wideBreakpoint = 600.0;
+
+  Widget _content(BuildContext context, TextTheme textTheme) {
+    final builder = contentBuilder;
+    if (builder != null) return builder(context);
+    return Text(explanation!, style: textTheme.bodyLarge);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -59,9 +78,10 @@ class InfoDot extends StatelessWidget {
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: Text(semanticLabel),
-          content: Text(explanation, style: theme.textTheme.bodyLarge),
+          content: _content(dialogContext, theme.textTheme),
           actions: [
             TextButton(
+              key: infoDotCloseButtonKey,
               onPressed: () => Navigator.of(dialogContext).pop(),
               child: const Text('Close'),
             ),
@@ -87,7 +107,7 @@ class InfoDot extends StatelessWidget {
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Text(explanation, style: theme.textTheme.bodyLarge),
+            child: _content(sheetContext, theme.textTheme),
           ),
         ),
       ),

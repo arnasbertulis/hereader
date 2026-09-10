@@ -11,6 +11,7 @@ import '../theme/app_icons.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_tokens.dart';
 import 'book_progress.dart';
+import 'info_dot.dart';
 import 'library_book.dart';
 import 'mode_fork.dart';
 import 'profile_actions.dart';
@@ -37,6 +38,11 @@ const Key readerPlayButtonKey = Key('reader-play-button');
 /// the full profiles screen. Keyed for the same reason as
 /// [readerPlayButtonKey].
 const Key readerProfileButtonKey = Key('reader-profile-button');
+
+/// Opens the transport legend — see ADR 0037. Keyed for the same reason as
+/// [readerPlayButtonKey], and to tell it apart from any other [InfoDot] on
+/// screen the way [appearanceInfoDotKey] does for Appearance's own.
+const Key readerLegendInfoDotKey = Key('reader-legend-info-dot');
 
 /// The three regions the reading surface is divided into.
 ///
@@ -668,6 +674,65 @@ class _ReaderScreenState extends State<ReaderScreen>
     _session.pause();
     _scaffoldKey.currentState?.openDrawer();
   }
+
+  /// What the legend behind the InfoDot lists — see ADR 0037 §2.
+  ///
+  /// Every control currently on the row, glyph and name matching what it
+  /// draws, plus the two gestures that draw no glyph at all. Chapters is
+  /// included only when the book declares chapters, the same gate the
+  /// control on the row itself uses, so the legend never names a control the
+  /// reader cannot find.
+  List<_LegendEntry> _legendEntries(PlaybackState state) => [
+    const _LegendEntry(
+      icon: AppIcons.backParagraph,
+      name: 'Back a paragraph',
+      description: 'Moves back one paragraph.',
+    ),
+    const _LegendEntry(
+      icon: AppIcons.backSentence,
+      name: 'Back a sentence',
+      description: 'Moves back one sentence.',
+    ),
+    const _LegendEntry(
+      icon: AppIcons.skipSentence,
+      name: 'Forward a sentence',
+      description: 'Moves forward one sentence.',
+    ),
+    const _LegendEntry(
+      icon: AppIcons.skipParagraph,
+      name: 'Forward a paragraph',
+      description: 'Moves forward one paragraph.',
+    ),
+    const _LegendEntry(
+      icon: AppIcons.closeBook,
+      name: 'Back to library',
+      description: 'Leaves the book and returns to your library.',
+    ),
+    _LegendEntry(
+      icon: _isStopping(state) ? AppIcons.pause : AppIcons.play,
+      name: _toggleLabelFor(state),
+      description: 'Starts or pauses the reading.',
+    ),
+    const _LegendEntry(
+      icon: AppIcons.readingProfile,
+      name: 'Reading profile',
+      description: 'Opens reading profile settings.',
+    ),
+    if (_chapters.isNotEmpty)
+      const _LegendEntry(
+        icon: AppIcons.chapters,
+        name: 'Chapters',
+        description: "Opens this book's chapter list.",
+      ),
+    const _LegendEntry(
+      name: 'Tap anywhere',
+      description: 'Plays or pauses the book.',
+    ),
+    const _LegendEntry(
+      name: 'Drag sideways',
+      description: 'Moves through the book.',
+    ),
+  ];
 
   /// Jumps to a chapter and leaves the session paused there.
   ///
@@ -1334,48 +1399,56 @@ class _ReaderScreenState extends State<ReaderScreen>
                           Positioned(
                             top: 0,
                             left: 0,
+                            // A bare glyph in the surface's own ink. The
+                            // filled tonal disc this replaced took
+                            // `secondaryContainer`, which is an accent
+                            // role, so it drew a coloured circle over a
+                            // background the reader had chosen.
+                            //
+                            // A list rather than a book: the book glyph
+                            // is what the Library tab uses, and the same
+                            // picture meaning "your books" in one place
+                            // and "this book's chapters" in another is a
+                            // picture meaning two things. Both are named
+                            // in `AppIcons`, which is where that
+                            // distinction is visible side by side.
+                            //
+                            // ADR 0037 §1: no transport control draws a
+                            // text label any more, including this one's.
+                            // The name still lives in the tooltip (for a
+                            // pointer) and the `Semantics` label it carries
+                            // (for assistive technology), and now also in
+                            // the legend behind the InfoDot below.
                             child: SafeArea(
                               child: Padding(
                                 padding: const EdgeInsets.all(AppSpacing.lg),
-                                // A bare glyph in the surface's own ink. The
-                                // filled tonal disc this replaced took
-                                // `secondaryContainer`, which is an accent
-                                // role, so it drew a coloured circle over a
-                                // background the reader had chosen.
-                                //
-                                // A list rather than a book: the book glyph
-                                // is what the Library tab uses, and the same
-                                // picture meaning "your books" in one place
-                                // and "this book's chapters" in another is a
-                                // picture meaning two things. Both are named
-                                // in `AppIcons`, which is where that
-                                // distinction is visible side by side.
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      onPressed: _openChapters,
-                                      iconSize: _secondaryIconSize,
-                                      color: ink,
-                                      icon: const Icon(AppIcons.chapters),
-                                      tooltip: 'Chapters',
-                                    ),
-                                    // ADR 0035 §2: a tooltip never draws on
-                                    // touch, so the name has to be visible
-                                    // text. `ExcludeSemantics` keeps a screen
-                                    // reader from reading the tooltip's
-                                    // semantic label and this caption back to
-                                    // back.
-                                    ExcludeSemantics(
-                                      child: Text(
-                                        'Chapters',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelSmall
-                                            ?.copyWith(color: ink),
-                                      ),
-                                    ),
-                                  ],
+                                child: IconButton(
+                                  onPressed: _openChapters,
+                                  iconSize: _secondaryIconSize,
+                                  color: ink,
+                                  icon: const Icon(AppIcons.chapters),
+                                  tooltip: 'Chapters',
+                                ),
+                              ),
+                            ),
+                          ),
+                        // ADR 0037 §2: the (i) is chrome, shown only while
+                        // paused like everything else on this row, and
+                        // closing its sheet must not start playback (ADR
+                        // 0035 §5) — `InfoDot` never touches playback.
+                        if (showControls)
+                          Positioned(
+                            top: 0,
+                            right: 0,
+                            child: SafeArea(
+                              child: Padding(
+                                padding: const EdgeInsets.all(AppSpacing.lg),
+                                child: InfoDot(
+                                  key: readerLegendInfoDotKey,
+                                  semanticLabel: 'About the reading controls',
+                                  contentBuilder: (context) => _ReaderLegend(
+                                    entries: _legendEntries(state),
+                                  ),
                                 ),
                               ),
                             ),
@@ -1709,6 +1782,93 @@ const double _controlsMaxWidth = 360;
 /// cannot be pressed anywhere else in the app.
 Color _dimmed(Color ink) => ink.withValues(alpha: 0.38);
 
+/// Whether the play button's glyph and tooltip read as "stop" rather than
+/// "go" — `_toggle` pauses from [PlaybackState.awaitingAdvance] as well as
+/// from [PlaybackState.playing], so both states show and name the button
+/// the same way. One function rather than the row and the legend each
+/// working this out, so the two can never disagree about what the button
+/// currently does.
+bool _isStopping(PlaybackState state) =>
+    state == PlaybackState.playing || state == PlaybackState.awaitingAdvance;
+
+/// What tapping the play button does, in the current state. Shared between
+/// the transport row and the legend behind the InfoDot (ADR 0037 §2) for the
+/// same reason as [_isStopping].
+String _toggleLabelFor(PlaybackState state) => switch (state) {
+  PlaybackState.playing => 'Pause',
+  PlaybackState.awaitingAdvance => 'Stop advancing',
+  PlaybackState.finished => 'Read again',
+  _ => 'Read',
+};
+
+/// One line of the transport legend (ADR 0037 §2): a control on the row —
+/// glyph, name, what it does — or, with [icon] left null, one of the two
+/// gestures that draw no glyph at all.
+class _LegendEntry {
+  final IconData? icon;
+  final String name;
+  final String description;
+
+  const _LegendEntry({
+    this.icon,
+    required this.name,
+    required this.description,
+  });
+}
+
+/// The InfoDot's content while paused — every transport control currently on
+/// the row, plus the two gestures no glyph carries. ADR 0037 §2: this is now
+/// the one place that names a control in words; the row itself only draws
+/// glyphs.
+class _ReaderLegend extends StatelessWidget {
+  final List<_LegendEntry> entries;
+
+  const _ReaderLegend({required this.entries});
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final entry in entries)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 28,
+                    child: entry.icon == null
+                        ? null
+                        : Icon(entry.icon, size: 20),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          entry.name,
+                          style: textTheme.bodyLarge?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(entry.description, style: textTheme.bodyMedium),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Progress, a row of four sentence and paragraph jumps, then exit, play and
 /// profile.
 ///
@@ -1783,18 +1943,11 @@ class _Controls extends StatelessWidget {
     // both states show the glyph for what the button does. The old row read
     // its icon off `playing` alone and offered a play glyph under elicited
     // pacing on a button that pauses.
-    final stopping =
-        state == PlaybackState.playing ||
-        state == PlaybackState.awaitingAdvance;
+    final stopping = _isStopping(state);
 
     // What tapping the button does. `_surfaceLabel` says what tapping the
     // surface does, and under elicited pacing those differ.
-    final toggleLabel = switch (state) {
-      PlaybackState.playing => 'Pause',
-      PlaybackState.awaitingAdvance => 'Stop advancing',
-      PlaybackState.finished => 'Read again',
-      _ => 'Read',
-    };
+    final toggleLabel = _toggleLabelFor(state);
 
     // What #367 found missing outright: nothing on the reading surface named
     // the book, and the only percentage on screen was the one handed to a
@@ -1868,182 +2021,100 @@ class _Controls extends StatelessWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
+            // ADR 0037 §1: no transport control draws a text label, the two
+            // axis labels ("Paragraph"/"Sentence") included — supersedes ADR
+            // 0035 §3. Each button keeps its own tooltip and `Semantics`
+            // label; the pair's names now live in the legend behind the
+            // InfoDot instead of standing text under the row.
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: _controlsMaxWidth),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      IconButton(
-                        key: readerBackParagraphButtonKey,
-                        onPressed: onBackParagraph,
-                        iconSize: _secondaryIconSize,
-                        color: ink,
-                        // `color` is the enabled colour only, and this row sets
-                        // it explicitly rather than taking a scheme role, so the
-                        // disabled one has to be set explicitly too or the glyph
-                        // falls back to the theme's `onSurface` over a
-                        // background the theme has never seen. The same ink,
-                        // dimmed: nothing else on this screen could carry
-                        // "unavailable", and ADR 0015's one ink is not broken by
-                        // an opacity.
-                        disabledColor: _dimmed(ink),
-                        icon: const Icon(AppIcons.backParagraph),
-                        tooltip: 'Back a paragraph',
-                      ),
-                      IconButton(
-                        key: readerBackSentenceButtonKey,
-                        onPressed: onBackSentence,
-                        iconSize: _secondaryIconSize,
-                        color: ink,
-                        disabledColor: _dimmed(ink),
-                        icon: const Icon(AppIcons.backSentence),
-                        tooltip: 'Back a sentence',
-                      ),
-                      IconButton(
-                        key: readerSentenceButtonKey,
-                        onPressed: onSentence,
-                        iconSize: _secondaryIconSize,
-                        color: ink,
-                        disabledColor: _dimmed(ink),
-                        icon: const Icon(AppIcons.skipSentence),
-                        tooltip: 'Forward a sentence',
-                      ),
-                      IconButton(
-                        key: readerParagraphButtonKey,
-                        onPressed: onParagraph,
-                        iconSize: _secondaryIconSize,
-                        color: ink,
-                        disabledColor: _dimmed(ink),
-                        icon: const Icon(AppIcons.skipParagraph),
-                        tooltip: 'Forward a paragraph',
-                      ),
-                    ],
+                  IconButton(
+                    key: readerBackParagraphButtonKey,
+                    onPressed: onBackParagraph,
+                    iconSize: _secondaryIconSize,
+                    color: ink,
+                    // `color` is the enabled colour only, and this row sets
+                    // it explicitly rather than taking a scheme role, so the
+                    // disabled one has to be set explicitly too or the glyph
+                    // falls back to the theme's `onSurface` over a
+                    // background the theme has never seen. The same ink,
+                    // dimmed: nothing else on this screen could carry
+                    // "unavailable", and ADR 0015's one ink is not broken by
+                    // an opacity.
+                    disabledColor: _dimmed(ink),
+                    icon: const Icon(AppIcons.backParagraph),
+                    tooltip: 'Back a paragraph',
                   ),
-                  const SizedBox(height: AppSpacing.xs),
-                  // ADR 0035 §3: one label per axis, not per button — a
-                  // tooltip on each of the four would repeat "paragraph" or
-                  // "sentence" twice and still not fit `_controlsMaxWidth` at
-                  // ADR 0031's base size (see the ADR's "label all four"
-                  // alternative, rejected for exactly that). Both labels sit
-                  // on the row's shared centre: the outer pair's midpoint
-                  // and the inner pair's midpoint are the same point, so a
-                  // second line rather than a second column is what keeps
-                  // them from overlapping. Direction is the glyph's job, not
-                  // the word's.
-                  ExcludeSemantics(
-                    child: Text(
-                      'Paragraph',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.labelSmall?.copyWith(color: ink),
-                    ),
+                  IconButton(
+                    key: readerBackSentenceButtonKey,
+                    onPressed: onBackSentence,
+                    iconSize: _secondaryIconSize,
+                    color: ink,
+                    disabledColor: _dimmed(ink),
+                    icon: const Icon(AppIcons.backSentence),
+                    tooltip: 'Back a sentence',
                   ),
-                  ExcludeSemantics(
-                    child: Text(
-                      'Sentence',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.labelSmall?.copyWith(color: ink),
-                    ),
+                  IconButton(
+                    key: readerSentenceButtonKey,
+                    onPressed: onSentence,
+                    iconSize: _secondaryIconSize,
+                    color: ink,
+                    disabledColor: _dimmed(ink),
+                    icon: const Icon(AppIcons.skipSentence),
+                    tooltip: 'Forward a sentence',
+                  ),
+                  IconButton(
+                    key: readerParagraphButtonKey,
+                    onPressed: onParagraph,
+                    iconSize: _secondaryIconSize,
+                    color: ink,
+                    disabledColor: _dimmed(ink),
+                    icon: const Icon(AppIcons.skipParagraph),
+                    tooltip: 'Forward a paragraph',
                   ),
                 ],
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
+            // ADR 0037 §1: supersedes ADR 0035 §2 — none of Close, Play or
+            // Profile draws a text label any more. Each keeps its tooltip
+            // and its `Semantics` label (the button's own name strings,
+            // unchanged), and the legend behind the InfoDot lists all three.
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: _controlsMaxWidth),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          onPressed: onClose,
-                          iconSize: _secondaryIconSize,
-                          color: ink,
-                          icon: const Icon(AppIcons.closeBook),
-                          tooltip: 'Back to library',
-                        ),
-                        // ADR 0035 §2: every transport control names itself
-                        // in visible text now, not only in a tooltip that
-                        // never draws on touch. `Expanded` gives each of the
-                        // three a fixed share of `_controlsMaxWidth` so a
-                        // longer label (this one, "Reading profile") can't
-                        // push the row wider than the cap #329 set.
-                        ExcludeSemantics(
-                          child: Text(
-                            'Back to library',
-                            textAlign: TextAlign.center,
-                            maxLines: 1,
-                            softWrap: false,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(
-                              context,
-                            ).textTheme.labelSmall?.copyWith(color: ink),
-                          ),
-                        ),
-                      ],
+                    child: IconButton(
+                      onPressed: onClose,
+                      iconSize: _secondaryIconSize,
+                      color: ink,
+                      icon: const Icon(AppIcons.closeBook),
+                      tooltip: 'Back to library',
                     ),
                   ),
                   Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          key: readerPlayButtonKey,
-                          onPressed: onToggle,
-                          iconSize: _primaryIconSize,
-                          color: ink,
-                          icon: Icon(stopping ? AppIcons.pause : AppIcons.play),
-                          tooltip: toggleLabel,
-                        ),
-                        ExcludeSemantics(
-                          child: Text(
-                            toggleLabel,
-                            textAlign: TextAlign.center,
-                            maxLines: 1,
-                            softWrap: false,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(
-                              context,
-                            ).textTheme.labelSmall?.copyWith(color: ink),
-                          ),
-                        ),
-                      ],
+                    child: IconButton(
+                      key: readerPlayButtonKey,
+                      onPressed: onToggle,
+                      iconSize: _primaryIconSize,
+                      color: ink,
+                      icon: Icon(stopping ? AppIcons.pause : AppIcons.play),
+                      tooltip: toggleLabel,
                     ),
                   ),
                   Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          key: readerProfileButtonKey,
-                          onPressed: onProfile,
-                          iconSize: _secondaryIconSize,
-                          color: ink,
-                          icon: const Icon(AppIcons.readingProfile),
-                          tooltip: 'Reading profile',
-                        ),
-                        ExcludeSemantics(
-                          child: Text(
-                            'Reading profile',
-                            textAlign: TextAlign.center,
-                            maxLines: 1,
-                            softWrap: false,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(
-                              context,
-                            ).textTheme.labelSmall?.copyWith(color: ink),
-                          ),
-                        ),
-                      ],
+                    child: IconButton(
+                      key: readerProfileButtonKey,
+                      onPressed: onProfile,
+                      iconSize: _secondaryIconSize,
+                      color: ink,
+                      icon: const Icon(AppIcons.readingProfile),
+                      tooltip: 'Reading profile',
                     ),
                   ),
                 ],
