@@ -455,7 +455,9 @@ class _ProblemView extends StatelessWidget {
               FilledButton(
                 key: freeBooksRetryButtonKey,
                 onPressed: onRetry,
-                style: FilledButton.styleFrom(minimumSize: const Size(200, 56)),
+                style: FilledButton.styleFrom(
+                  minimumSize: AppButton.contentMinSize,
+                ),
                 child: const Text('Try again'),
               ),
             ],
@@ -497,7 +499,9 @@ class _LoadMoreError extends StatelessWidget {
           FilledButton(
             key: freeBooksLoadMoreRetryButtonKey,
             onPressed: onRetry,
-            style: FilledButton.styleFrom(minimumSize: const Size(200, 56)),
+            style: FilledButton.styleFrom(
+              minimumSize: AppButton.contentMinSize,
+            ),
             child: const Text('Try again'),
           ),
         ],
