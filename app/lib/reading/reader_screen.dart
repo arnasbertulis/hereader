@@ -1835,17 +1835,29 @@ class _Controls extends StatelessWidget {
             // `AppRadii.md` rather than `.sm`: #367 measured the `.sm` bar
             // at about 4px, a hairline next to the type sizes the rest of
             // this row uses.
-            LinearProgressIndicator(
-              value: progress,
-              minHeight: AppRadii.md * 2,
+            //
+            // #444: `LinearProgressIndicator` rounds the fill rect on its
+            // own terms, so a fill narrower than the radius pokes a square
+            // edge past the track's rounded end. The outer `ClipRRect`
+            // clips the flat-edged fill (`borderRadius: BorderRadius.zero`
+            // below) to the track's rounded silhouette instead — a thin
+            // curved sliver near zero, nothing at exactly zero. No
+            // minimum-width capsule: that would paint progress that isn't
+            // there.
+            ClipRRect(
               borderRadius: BorderRadius.circular(AppRadii.md),
-              color: readerProgressFillFor(
-                scheme: Theme.of(context).colorScheme,
-                presentation: presentation,
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: AppRadii.md * 2,
+                borderRadius: BorderRadius.zero,
+                color: readerProgressFillFor(
+                  scheme: Theme.of(context).colorScheme,
+                  presentation: presentation,
+                ),
+                backgroundColor: readerTrackFor(presentation),
+                semanticsLabel: 'Progress through the book',
+                semanticsValue: '$percent%',
               ),
-              backgroundColor: readerTrackFor(presentation),
-              semanticsLabel: 'Progress through the book',
-              semanticsValue: '$percent%',
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(
