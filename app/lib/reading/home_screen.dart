@@ -40,6 +40,7 @@ const double _continueBarHeight = 4;
 /// not which book is in the tile.
 const Key homeContinueTileKey = Key('home-continue-tile');
 const Key homeRecentlyReadHeaderKey = Key('home-recently-read-header');
+const Key homeContinueOpenGlyphKey = Key('home-continue-open-glyph');
 
 /// The first screen, and the one that answers "where was I".
 ///
@@ -502,7 +503,16 @@ class _ContinueTile extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: AppSpacing.md),
-                      _OpenGlyph(busy: busy, enabled: onOpen != null),
+                      SizedBox(
+                        height: _continueTileCoverWidth * kCoverAspect,
+                        child: Center(
+                          child: _OpenGlyph(
+                            key: homeContinueOpenGlyphKey,
+                            busy: busy,
+                            enabled: onOpen != null,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -525,7 +535,7 @@ class _OpenGlyph extends StatelessWidget {
   final bool busy;
   final bool enabled;
 
-  const _OpenGlyph({required this.busy, required this.enabled});
+  const _OpenGlyph({super.key, required this.busy, required this.enabled});
 
   @override
   Widget build(BuildContext context) {

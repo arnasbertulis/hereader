@@ -4,6 +4,7 @@ import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
 import 'package:app/reading/add_menu.dart';
 import 'package:app/reading/add_menu_dispatcher.dart';
+import 'package:app/reading/book_cover.dart';
 import 'package:app/reading/book_importer.dart';
 import 'package:app/reading/free_books_screen.dart';
 import 'package:app/reading/home_screen.dart';
@@ -253,4 +254,29 @@ void main() {
 
     await _disposeTree(tester);
   });
+
+  testWidgets(
+    'the open glyph centres against the cover, not the row top (#448)',
+    (tester) async {
+      await repository.addBook(
+        fixtureBook(id: 'epub-1', title: 'Pride and Prejudice'),
+        Uint8List(0),
+      );
+
+      await pump(tester);
+
+      final coverCentreY = tester
+          .getRect(find.byType(BookCoverFuture))
+          .center
+          .dy;
+      final glyphCentreY = tester
+          .getRect(find.byKey(homeContinueOpenGlyphKey))
+          .center
+          .dy;
+
+      expect(glyphCentreY, closeTo(coverCentreY, 0.5));
+
+      await _disposeTree(tester);
+    },
+  );
 }
