@@ -1,5 +1,6 @@
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
+import 'package:app/reading/info_dot.dart';
 import 'package:app/reading/library_book.dart';
 import 'package:app/reading/reader_screen.dart';
 import 'package:flutter/material.dart';
@@ -239,6 +240,128 @@ void main() {
       );
 
       handle.dispose();
+      await disposeTree(tester);
+    });
+  });
+
+  group('the transport legend', () {
+    // ADR 0037 §1: no transport control draws a text label any more,
+    // including the two axis labels ADR 0035 §3 added.
+    testWidgets('no transport control draws a visible text label', (
+      tester,
+    ) async {
+      await tester.pumpWidget(reader());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sentence'), findsNothing);
+      expect(find.text('Paragraph'), findsNothing);
+      expect(find.text('Back to library'), findsNothing);
+      expect(find.text('Read'), findsNothing);
+      expect(find.text('Reading profile'), findsNothing);
+
+      await disposeTree(tester);
+    });
+
+    // ADR 0037 §2: the (i) is chrome, shown only while paused like
+    // everything else on the row.
+    testWidgets(
+      'the InfoDot is present while paused and absent while playing',
+      (tester) async {
+        await tester.pumpWidget(reader());
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(readerLegendInfoDotKey), findsOneWidget);
+
+        await tester.tap(find.byKey(readerPlayButtonKey));
+        await tester.pump();
+
+        expect(find.byKey(readerLegendInfoDotKey), findsNothing);
+
+        await disposeTree(tester);
+      },
+    );
+
+    testWidgets(
+      'opening it names every control currently on the row, and the two '
+      'gestures no glyph carries',
+      (tester) async {
+        await tester.pumpWidget(reader());
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(readerLegendInfoDotKey));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Back a paragraph'), findsOneWidget);
+        expect(find.text('Back a sentence'), findsOneWidget);
+        expect(find.text('Forward a sentence'), findsOneWidget);
+        expect(find.text('Forward a paragraph'), findsOneWidget);
+        expect(find.text('Back to library'), findsOneWidget);
+        expect(find.text('Read'), findsOneWidget);
+        expect(find.text('Reading profile'), findsOneWidget);
+        // The book behind `reader()` declares no chapters.
+        expect(find.text('Chapters'), findsNothing);
+        expect(find.text('Tap anywhere'), findsOneWidget);
+        expect(find.text('Drag sideways'), findsOneWidget);
+
+        await disposeTree(tester);
+      },
+    );
+
+    testWidgets('the legend lists Chapters only for a chaptered book', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReaderScreen(
+            book: LibraryBook(
+              id: 'b',
+              title: 'A Book',
+              text: text,
+              chapters: [
+                Chapter(
+                  title: 'Chapter One',
+                  depth: 0,
+                  tokenIndex: text.startOfBlock('one')!,
+                ),
+                Chapter(
+                  title: 'Chapter Two',
+                  depth: 0,
+                  tokenIndex: text.startOfBlock('two')!,
+                ),
+              ],
+            ),
+            repository: LibraryRepository(database),
+            issueStamp: _stamp,
+            onSave: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(readerLegendInfoDotKey));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Chapters'), findsOneWidget);
+
+      await disposeTree(tester);
+    });
+
+    // ADR 0035 §5, carried forward by ADR 0037 §2.
+    testWidgets('closing the legend does not start playback', (tester) async {
+      await tester.pumpWidget(reader());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(readerLegendInfoDotKey));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(infoDotCloseButtonKey));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<IconButton>(find.byKey(readerPlayButtonKey)).tooltip,
+        'Read',
+      );
+
       await disposeTree(tester);
     });
   });
