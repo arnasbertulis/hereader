@@ -5,7 +5,8 @@ Date: 2026-09-07
 ## Status
 
 Accepted. Extends ADR 0015 to the transport's own vocabulary. Keeps ADR 0021's
-four jumps and two-row layout unchanged.
+four jumps and two-row layout unchanged. §2 and §3, and the first sentence of
+Verification, are superseded by ADR 0037.
 
 ## Context
 

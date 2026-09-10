@@ -178,7 +178,10 @@ Every substantial decision has an ADR carrying the alternatives that were reject
 | [0032](docs/adr/0032-colour-meanings-are-fixed-at-build-time.md) | Colour meanings are fixed at build time: a curated palette, a pinned error group, and the accent as a fill |
 | [0033](docs/adr/0033-measure-and-control-proportion.md) | Every scrollable body takes a measure, and a control is sized as a control rather than a poster |
 | [0034](docs/adr/0034-a-one-control-destination-is-a-row.md) | A Settings destination whose purpose is one control is a row, and the reader route is opaque |
-| [0035](docs/adr/0035-reader-transport-names-itself.md) | On the reading surface hierarchy is size and position, and every transport control names itself in text |
+| [0035](docs/adr/0035-reader-transport-names-itself.md) | On the reading surface hierarchy is size and position, and every transport control names itself in text (§2–3 superseded by 0037) |
+| [0036](docs/adr/0036-chrome-prose-is-budgeted-in-blocks.md) | Chrome prose is budgeted in blocks: one sentence per control, one per section, checked by a test |
+| [0037](docs/adr/0037-transport-controls-are-named-in-a-legend.md) | Transport controls are named in a legend behind one (i), and the first Play teaches the tap that pauses |
+| [0038](docs/adr/0038-changing-a-preset-forks-it.md) | Changing a Preset forks it, and the Settings row opens the active profile's editor |
 
 ---
 
