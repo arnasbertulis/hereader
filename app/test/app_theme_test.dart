@@ -255,6 +255,125 @@ void main() {
       expect(theme.navigationBarTheme.elevation, 0);
     });
 
+    // #447: a fixed-width SnackBar stretches edge-to-edge on a wide window,
+    // pinning the label and an action like Undo to opposite corners so they
+    // read as two unrelated pieces of UI. Floating plus a capped width keeps
+    // it one grouped unit at any viewport width; the close icon gives a
+    // visible affordance that it will dismiss.
+    test('the snack bar floats and is capped at the measure', () {
+      final theme = appTheme(brightness: Brightness.light);
+
+      expect(theme.snackBarTheme.behavior, SnackBarBehavior.floating);
+      expect(theme.snackBarTheme.width, AppContent.maxWidth);
+      expect(theme.snackBarTheme.showCloseIcon, true);
+    });
+
+    // The width cap is a `SnackBarThemeData.width`, which Flutter enforces
+    // against the incoming constraints rather than forcing verbatim — this
+    // is the check the decision on #447 asked for: confirm that holds at a
+    // phone's width, not just read it off the framework source.
+    testWidgets('the snack bar still fits at a phone width', (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: appTheme(brightness: Brightness.light),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => Center(
+                child: ElevatedButton(
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text('Now reading with Standard (copy)'),
+                        action: SnackBarAction(label: 'Undo', onPressed: () {}),
+                      ),
+                    );
+                  },
+                  child: const Text('show'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('show'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.getSize(find.byType(SnackBar)).width,
+        lessThanOrEqualTo(320),
+      );
+    });
+
+    // #447's actual complaint was a wide window, not a phone: a fixed-width
+    // SnackBar stretches to fill it, pinning the label and Undo to opposite
+    // corners. This confirms the cap holds at the other end too — the label
+    // and action stay a grouped, centered unit instead of a wide window's
+    // width passing through untouched.
+    //
+    // `tester.getSize(find.byType(SnackBar))` isn't usable here: it reports
+    // the Scaffold slot's full-width layout box (always the window width),
+    // not the capped, centered content the box paints inside it — verified
+    // locally with a debug repro before writing this assertion. Measuring
+    // the label's and action's own rects is what actually distinguishes a
+    // capped bar from an edge-to-edge one.
+    testWidgets('the snack bar caps at the measure on a wide window', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(1200, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: appTheme(brightness: Brightness.light),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => Center(
+                child: ElevatedButton(
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text('Now reading with Standard (copy)'),
+                        action: SnackBarAction(label: 'Undo', onPressed: () {}),
+                      ),
+                    );
+                  },
+                  child: const Text('show'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('show'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(tester.takeException(), isNull);
+
+      final labelRect = tester.getRect(
+        find.text('Now reading with Standard (copy)'),
+      );
+      final actionRect = tester.getRect(find.text('Undo'));
+
+      // The label-to-action span stays within the capped measure...
+      expect(
+        actionRect.right - labelRect.left,
+        lessThanOrEqualTo(AppContent.maxWidth),
+      );
+      // ...and centered, not pinned to the window's edges.
+      expect(labelRect.left, greaterThan(100));
+      expect(actionRect.right, lessThan(1100));
+    });
+
     // A selected ListTile is the row telling the reader "this is your
     // current setting". Falling through to colorScheme.primary makes it
     // the dimmest label on screen once the reader picks a mid-tone accent.

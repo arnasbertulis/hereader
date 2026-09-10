@@ -245,6 +245,21 @@ ThemeData appTheme({
       ),
     ),
 
+    // #447: fixed-width (the Material default) stretches a SnackBar
+    // edge-to-edge on a wide window, so a label and an action like Undo sit
+    // pinned to opposite corners rather than reading as one notification.
+    // Floating plus a width cap reads as one grouped unit at any viewport;
+    // `width` only ever shrinks the box, since Flutter enforces it against
+    // whatever constraints the frame actually has, so this stays safe down
+    // to a phone's 320 without a second, narrower value. `showCloseIcon`
+    // gives a visible affordance that the snack bar will dismiss, for the
+    // profile-copy Undo's 10-second duration in particular.
+    snackBarTheme: SnackBarThemeData(
+      behavior: SnackBarBehavior.floating,
+      width: AppContent.maxWidth,
+      showCloseIcon: true,
+    ),
+
     // A fade and two percent of scale, on every platform. The default
     // slides a full screen sideways over 300ms, which is the motion the
     // frame-pacing investigation found worst on Android Chrome: long, slow
