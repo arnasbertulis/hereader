@@ -6,6 +6,8 @@
 /// constant here is a number that cannot.
 library;
 
+import 'dart:ui' show Size;
+
 /// 4dp-based spacing scale. Screen padding is 16 below 600dp and 24 from
 /// 600dp up, applied at the screen level rather than tokenised here, since
 /// it depends on `MediaQuery` rather than being a fixed value.
@@ -38,6 +40,13 @@ abstract final class AppContent {
   /// Prose — About, and any settings description long enough to wrap.
   /// Narrower than [maxWidth]: about 70 characters per line at 16px.
   static const double proseMaxWidth = 640;
+}
+
+/// Minimum size for a content-sized primary button — one that hugs its
+/// label rather than stretching full-bleed. Shared so a future change to
+/// the size is one edit, not a literal repeated at every call site.
+abstract final class AppButton {
+  static const Size contentMinSize = Size(200, 56);
 }
 
 /// Three radii, and no others. Chips and progress-bar ends use [sm]; cards,

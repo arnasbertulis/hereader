@@ -4,6 +4,7 @@ import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
 import '../sync/auth_store.dart';
+import '../theme/app_tokens.dart';
 import '../theme/content_width.dart';
 import '../theme/page_transitions.dart';
 import 'library_book.dart';
@@ -131,7 +132,7 @@ class _PasteReaderScreenState extends State<PasteReaderScreen> {
                   child: FilledButton(
                     onPressed: _start,
                     style: FilledButton.styleFrom(
-                      minimumSize: const Size(200, 56),
+                      minimumSize: AppButton.contentMinSize,
                     ),
                     child: const Text('Read this'),
                   ),

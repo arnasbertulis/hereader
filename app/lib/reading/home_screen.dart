@@ -710,7 +710,9 @@ class _NothingOpenYet extends StatelessWidget {
         Center(
           child: FilledButton.icon(
             onPressed: onAdd,
-            style: FilledButton.styleFrom(minimumSize: const Size(200, 56)),
+            style: FilledButton.styleFrom(
+              minimumSize: AppButton.contentMinSize,
+            ),
             icon: const Icon(AppIcons.add),
             label: const Text('Add something to read'),
           ),
