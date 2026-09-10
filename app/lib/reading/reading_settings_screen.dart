@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import '../theme/content_width.dart';
+import 'control_row.dart';
 import 'info_dot.dart';
 import 'reading_display.dart';
 import 'section_header.dart';
@@ -94,9 +95,9 @@ class ReadingSettingsScreen extends StatelessWidget {
                 ),
               ),
               const Divider(),
-              const ListTile(
-                leading: Icon(AppIcons.placeIsSaved),
-                title: Text('Your place is saved as you read'),
+              const ControlRow(
+                icon: AppIcons.placeIsSaved,
+                title: 'Your place is saved as you read',
                 trailing: InfoDot(
                   semanticLabel: 'About your place being saved',
                   explanation:
@@ -104,9 +105,9 @@ class ReadingSettingsScreen extends StatelessWidget {
                       'every pause, and when you leave the book or the app.',
                 ),
               ),
-              const ListTile(
-                leading: Icon(AppIcons.pausesWhenHidden),
-                title: Text('Playback pauses when the app is hidden'),
+              const ControlRow(
+                icon: AppIcons.pausesWhenHidden,
+                title: 'Playback pauses when the app is hidden',
                 trailing: InfoDot(
                   semanticLabel: 'About pausing when the app is hidden',
                   explanation:
@@ -114,9 +115,9 @@ class ReadingSettingsScreen extends StatelessWidget {
                       'the book on without you.',
                 ),
               ),
-              const ListTile(
-                leading: Icon(AppIcons.frontMatterOffered),
-                title: Text('Front matter is offered, not skipped for you'),
+              const ControlRow(
+                icon: AppIcons.frontMatterOffered,
+                title: 'Front matter is offered, not skipped for you',
                 trailing: InfoDot(
                   semanticLabel: 'About front matter',
                   explanation:
@@ -125,9 +126,9 @@ class ReadingSettingsScreen extends StatelessWidget {
                       'it is if you ignore it.',
                 ),
               ),
-              const ListTile(
-                leading: Icon(AppIcons.chaptersFromTheBook),
-                title: Text('Chapters come from the book'),
+              const ControlRow(
+                icon: AppIcons.chaptersFromTheBook,
+                title: 'Chapters come from the book',
                 trailing: InfoDot(
                   semanticLabel: 'About chapters',
                   explanation:

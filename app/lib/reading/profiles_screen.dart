@@ -145,15 +145,10 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                             'outdoors and a desktop in a dim room can want '
                             'different ones.',
                       ),
+                      supportingText: mine.isEmpty
+                          ? 'Copy a preset below to make one you can change.'
+                          : null,
                     ),
-                    if (mine.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                        child: Text(
-                          'None yet. Copy a preset below to make one you can '
-                          'change.',
-                        ),
-                      ),
                     for (final profile in mine)
                       ProfileRow(
                         profile: profile,
@@ -164,13 +159,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                         onDelete: () => _delete(profile),
                       ),
 
-                    const SectionHeader('Presets'),
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                      child: Text(
-                        'Starting points that ship with the app. Copy one to '
-                        'change it.',
-                      ),
+                    const SectionHeader(
+                      'Presets',
+                      supportingText: 'Copy one to make it your own.',
                     ),
                     for (final profile in presets)
                       ProfileRow(

@@ -16,6 +16,7 @@ import '../theme/appearance.dart';
 import '../theme/content_width.dart';
 import 'about_screen.dart';
 import 'appearance_screen.dart';
+import 'control_row.dart';
 import 'profile_presentation.dart';
 import 'profiles_screen.dart';
 import 'reading_display.dart';
@@ -216,10 +217,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         onSyncNow: _syncNow,
                       ),
                       const Divider(height: AppSpacing.xl),
-                      _IndexRow(
+                      ControlRow(
                         icon: AppIcons.sectionProfiles,
                         title: 'Reading profiles',
-                        value: _profilesValue(profiles),
+                        supportingText: _profilesValue(profiles),
+                        trailing: const Icon(AppIcons.openSection),
                         onTap: () => _push(
                           ProfilesScreen(
                             repository: widget.repository,
@@ -228,27 +230,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                       ),
-                      _IndexRow(
+                      ControlRow(
                         icon: AppIcons.sectionAppearance,
                         title: 'Appearance',
-                        value: describeAppearance(widget.appearance.settings),
+                        supportingText: describeAppearance(
+                          widget.appearance.settings,
+                        ),
+                        trailing: const Icon(AppIcons.openSection),
                         onTap: () => _push(
                           AppearanceScreen(controller: widget.appearance),
                         ),
                       ),
-                      _IndexRow(
+                      ControlRow(
                         icon: AppIcons.sectionReading,
                         title: 'Reading',
-                        value: describeReading(widget.display.timeLeftScope),
+                        supportingText: describeReading(
+                          widget.display.timeLeftScope,
+                        ),
+                        trailing: const Icon(AppIcons.openSection),
                         onTap: () => _push(
                           ReadingSettingsScreen(display: widget.display),
                         ),
                       ),
-                      _IndexRow(
+                      ControlRow(
                         icon: AppIcons.sectionAbout,
                         title: 'About',
-                        value:
+                        supportingText:
                             'Licence, research, and what this app does not claim',
+                        trailing: const Icon(AppIcons.openSection),
                         onTap: () => _push(const AboutScreen()),
                       ),
                     ],
@@ -361,8 +370,6 @@ class _AccountBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return StreamBuilder<Session?>(
       stream: api.auth.sessions,
       initialData: api.auth.current,
@@ -375,17 +382,12 @@ class _AccountBlock extends StatelessWidget {
             final status = syncSnapshot.data?.status ?? SyncStatus.idle;
             final subtitle = _subtitle(status, signedIn);
 
-            return ListTile(
-              leading: Icon(
-                signedIn ? AppIcons.accountSignedIn : AppIcons.accountSignedOut,
-              ),
-              title: Text(signedIn ? 'Signed in' : 'Not signed in'),
-              subtitle: Text(
-                subtitle,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
+            return ControlRow(
+              icon: signedIn
+                  ? AppIcons.accountSignedIn
+                  : AppIcons.accountSignedOut,
+              title: signedIn ? 'Signed in' : 'Not signed in',
+              supportingText: subtitle,
               trailing: IconButton(
                 icon: Icon(_icon(status, signedIn)),
                 tooltip: 'Sync now, $subtitle',
@@ -421,41 +423,5 @@ class _AccountBlock extends StatelessWidget {
       SyncStatus.failed => AppIcons.syncFailed,
       _ => AppIcons.syncIdle,
     };
-  }
-}
-
-/// One section, its current value, and the way into it.
-class _IndexRow extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String value;
-  final VoidCallback onTap;
-
-  const _IndexRow({
-    required this.icon,
-    required this.title,
-    required this.value,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(title),
-      // The value under the title rather than beside it. Beside it is what
-      // the wireframe drew, and at the text sizes this app is built for the
-      // two collide before either wraps.
-      subtitle: Text(
-        value,
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
-      ),
-      trailing: const Icon(AppIcons.openSection),
-      onTap: onTap,
-    );
   }
 }
