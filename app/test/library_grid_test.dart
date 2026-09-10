@@ -222,6 +222,33 @@ void main() {
       await _disposeTree(tester);
     });
 
+    testWidgets('the checkmark centers on the chosen option\'s label', (
+      tester,
+    ) async {
+      await addBook('book-1', title: 'Zeno', wordCount: 1000);
+
+      await pump(tester, width: 360);
+
+      await tester.tap(find.text(LibrarySort.recentlyAdded.label));
+      await tester.pumpAndSettle();
+
+      final check = find.byIcon(Icons.check);
+      expect(check, findsOneWidget);
+
+      final checkBox = find
+          .ancestor(of: check, matching: find.byType(SizedBox))
+          .first;
+      expect(tester.getSize(checkBox), const Size(18, 18));
+
+      final chosenLabel = find.text(LibrarySort.recentlyAdded.label).last;
+      expect(
+        tester.getRect(check).center.dy,
+        closeTo(tester.getRect(chosenLabel).center.dy, 1),
+      );
+
+      await _disposeTree(tester);
+    });
+
     testWidgets('the direction control swaps the ends', (tester) async {
       await addBook('book-1', title: 'Zeno');
       await addBook('book-2', title: 'Alpha');

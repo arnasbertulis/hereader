@@ -671,9 +671,11 @@ class _MenuChoiceLabel extends StatelessWidget {
     final textColor = DefaultTextStyle.of(context).style.color;
     return Row(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         SizedBox(
-          width: 20,
+          width: 18,
+          height: 18,
           child: chosen ? Icon(Icons.check, size: 18, color: textColor) : null,
         ),
         const SizedBox(width: 8),
