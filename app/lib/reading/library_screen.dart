@@ -75,16 +75,68 @@ enum _LibraryFilter {
   };
 }
 
-/// Unscaled height of everything under a cover: two lines of title, one of
-/// author, the progress row, the chapter and time line, and the gaps between
-/// them. Scaled with the reader's text size to give the tile its height,
-/// since a fixed aspect ratio clips the moment text grows.
-///
-/// 96 until the place line arrived above the bar. A tile is measured rather
-/// than laid out to fit, so a line added in there without a number added here
-/// is a line the grid clips — the line itself and the gap that separates it
-/// from the measurement under it.
-const double _textBlockHeight = 118;
+/// Stands in for a title long enough to wrap onto two full lines at any tile
+/// width the shelf produces. Only its wrapped line count matters — the glyphs
+/// themselves never reach the screen.
+const String _worstCaseTitle =
+    'A very long book title that always wraps onto two full lines for '
+    'measurement purposes only';
+
+/// [BookProgressLine]'s two fixed words for "nothing to measure yet" —
+/// see `progressOf`. Unlike every other line in the tile, that Text carries
+/// no `maxLines`, so at a narrow tile and a large text scale it wraps onto a
+/// second line instead of the one every other row gets. A percentage
+/// ("45%") never approaches this width, so it is not measured here.
+const List<String> _worstCaseProgressLabels = ['Not started', 'In progress'];
+
+/// Height of everything under a cover — two lines of title, an author/date
+/// line, the place line and the progress line, plus the gaps between them —
+/// measured with a [TextPainter] at the shelf's current text scaler and tile
+/// width rather than a constant sized once for a smaller case. A line added
+/// to [_BookTile] without a matching measurement added here is a line the
+/// grid clips instead of a number going stale.
+double _measuredTextBlockHeight(
+  BuildContext context,
+  TextScaler scaler,
+  double tileWidth,
+) {
+  final theme = Theme.of(context);
+
+  final title = TextPainter(
+    text: TextSpan(text: _worstCaseTitle, style: theme.textTheme.bodyMedium),
+    textScaler: scaler,
+    textDirection: TextDirection.ltr,
+    maxLines: 2,
+  )..layout(maxWidth: tileWidth);
+
+  // Author/date and place are each capped to one line, so their height
+  // never depends on the tile's width — only on the style and scale.
+  final line = TextPainter(
+    text: TextSpan(text: 'Ag', style: theme.textTheme.labelSmall),
+    textScaler: scaler,
+    textDirection: TextDirection.ltr,
+  )..layout();
+
+  // Progress is not capped to one line, so it is measured at the tile's
+  // width like the title, over both words it can actually show.
+  var progress = 0.0;
+  for (final label in _worstCaseProgressLabels) {
+    final painter = TextPainter(
+      text: TextSpan(text: label, style: theme.textTheme.labelSmall),
+      textScaler: scaler,
+      textDirection: TextDirection.ltr,
+    )..layout(maxWidth: tileWidth);
+    if (painter.height > progress) progress = painter.height;
+  }
+
+  return scaler.scale(AppSpacing.sm) +
+      title.height +
+      line.height + // author or date
+      scaler.scale(AppSpacing.xs) +
+      line.height + // place line
+      scaler.scale(AppSpacing.xs) +
+      progress;
+}
 
 /// Room under the last row for the add button to float over nothing.
 ///
@@ -845,7 +897,8 @@ class _BookShelf extends StatelessWidget {
             // block to a fraction of the cover, so the first reader to raise
             // their text size loses the author line to a clip.
             mainAxisExtent:
-                tileWidth * kCoverAspect + scaler.scale(_textBlockHeight),
+                tileWidth * kCoverAspect +
+                _measuredTextBlockHeight(context, scaler, tileWidth),
           ),
           itemCount: books.length,
           itemBuilder: (context, i) => _BookTile(

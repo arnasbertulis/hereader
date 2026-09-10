@@ -469,6 +469,62 @@ void main() {
     await _disposeTree(tester);
   });
 
+  testWidgets(
+    'a two-line title, author, place and progress fit a two-column tile '
+    'at the default text scale',
+    (tester) async {
+      await addBook(
+        'book-1',
+        title:
+            'A Remarkably Long and Elaborate Title That Wraps Onto Two '
+            'Full Lines',
+        author: 'Shakespeare',
+        wordCount: 1000,
+      );
+      await readTo('book-1', 370);
+
+      // 400 leaves a two-column grid at scale 1: AppShelf.tileWidth (172)
+      // times two plus the column gap fits, a third does not.
+      await pump(tester, width: 400);
+
+      // Worst case per #443: two-line title, author line, place line and
+      // progress line together used to exceed the fixed text-block budget
+      // and clip 13px off the tile's bottom.
+      expect(find.byType(GridView), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await _disposeTree(tester);
+    },
+  );
+
+  testWidgets(
+    'a two-line title, author, place and progress fit a two-column tile '
+    'at doubled text scale',
+    (tester) async {
+      await addBook(
+        'book-1',
+        title:
+            'A Remarkably Long and Elaborate Title That Wraps Onto Two '
+            'Full Lines',
+        author: 'Shakespeare',
+        wordCount: 1000,
+      );
+      await readTo('book-1', 370);
+
+      tester.platformDispatcher.textScaleFactorTestValue = 2;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+      // 600 stays two columns once doubled text takes a column off the
+      // count a plain width/tileWidth division would otherwise give.
+      await pump(tester, width: 600);
+
+      expect(find.byType(GridView), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      await _disposeTree(tester);
+    },
+  );
+
   testWidgets('removing a book is behind the menu', (tester) async {
     await addBook('book-1', title: 'Romeo and Juliet');
 
