@@ -3,6 +3,7 @@ import 'package:app/data/library_repository.dart';
 import 'package:app/reading/library_book.dart';
 import 'package:app/reading/reader_screen.dart';
 import 'package:app/reading/scrolling_text_view.dart';
+import 'package:app/theme/app_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -184,6 +185,31 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(_progress(tester), greaterThan(atOpen));
+
+      await disposeTree(tester);
+    });
+
+    testWidgets("clips the fill to the track's rounded shape, not its own", (
+      tester,
+    ) async {
+      await tester.pumpWidget(reader());
+      await tester.pumpAndSettle();
+
+      final indicatorFinder = find.byType(LinearProgressIndicator);
+      final indicator = tester.widget<LinearProgressIndicator>(indicatorFinder);
+
+      // Flat-edged so the outer `ClipRRect` below is the only thing that
+      // rounds it. An indicator that rounds its own corners rounds a
+      // narrow fill independently of the track and pokes past the track's
+      // curve at low progress (#444).
+      expect(indicator.borderRadius, BorderRadius.zero);
+
+      final clip = tester.widget<ClipRRect>(
+        find
+            .ancestor(of: indicatorFinder, matching: find.byType(ClipRRect))
+            .first,
+      );
+      expect(clip.borderRadius, BorderRadius.circular(AppRadii.md));
 
       await disposeTree(tester);
     });
