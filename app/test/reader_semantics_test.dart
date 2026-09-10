@@ -314,10 +314,7 @@ void main() {
             reason: '$key has no label and no tooltip',
           );
           expect(
-            find.descendant(
-              of: find.byKey(key),
-              matching: find.byType(Text),
-            ),
+            find.descendant(of: find.byKey(key), matching: find.byType(Text)),
             findsNothing,
             reason: '$key paints a Text descendant',
           );

@@ -922,9 +922,9 @@ class _ReaderScreenState extends State<ReaderScreen>
                             Navigator.of(context).pop(_CopyProfile(profile)),
                         onDelete: profile.isBuiltIn
                             ? null
-                            : () =>
-                                  Navigator.of(context)
-                                      .pop(_DeleteProfile(profile)),
+                            : () => Navigator.of(
+                                context,
+                              ).pop(_DeleteProfile(profile)),
                       ),
                     const Divider(height: 1),
                     // Below the list rather than above it. The sheet is
@@ -1285,23 +1285,23 @@ class _ReaderScreenState extends State<ReaderScreen>
           const SingleActivator(
             LogicalKeyboardKey.arrowRight,
             control: true,
-          ): () => _jumpTo(_nextSentence)
-              ?.call(),
+          ): () =>
+              _jumpTo(_nextSentence)?.call(),
           const SingleActivator(
             LogicalKeyboardKey.arrowLeft,
             control: true,
-          ): () => _jumpTo(_previousSentence)
-              ?.call(),
+          ): () =>
+              _jumpTo(_previousSentence)?.call(),
           const SingleActivator(
             LogicalKeyboardKey.arrowRight,
             shift: true,
-          ): () => _jumpTo(_nextParagraph)
-              ?.call(),
+          ): () =>
+              _jumpTo(_nextParagraph)?.call(),
           const SingleActivator(
             LogicalKeyboardKey.arrowLeft,
             shift: true,
-          ): () => _jumpTo(_previousParagraph)
-              ?.call(),
+          ): () =>
+              _jumpTo(_previousParagraph)?.call(),
           const SingleActivator(LogicalKeyboardKey.keyC): _openChapters,
           const SingleActivator(LogicalKeyboardKey.escape): _closeOrDismiss,
         },
@@ -2028,8 +2028,9 @@ class _Controls extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleMedium
-                  ?.copyWith(color: ink),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(color: ink),
             ),
             const SizedBox(height: AppSpacing.sm),
             // The one accent on this screen, where the accent survives the
