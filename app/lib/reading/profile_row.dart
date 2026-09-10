@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../theme/app_icons.dart';
+import 'control_row.dart';
 import 'profile_presentation.dart';
 
 /// One profile in a list: selection state, a description, and an overflow
@@ -30,11 +31,11 @@ class ProfileRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
+    return ControlRow(
       selected: selected,
-      leading: Icon(selected ? AppIcons.chosen : AppIcons.notChosen),
-      title: Text(profile.name),
-      subtitle: Text(describeProfile(profile)),
+      icon: selected ? AppIcons.chosen : AppIcons.notChosen,
+      title: profile.name,
+      supportingText: describeProfile(profile),
       onTap: onSelect,
       trailing: PopupMenuButton<String>(
         // Named rather than an icon row: a reader who needs 48pt type is not

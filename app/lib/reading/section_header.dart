@@ -20,6 +20,13 @@ class SectionHeader extends StatelessWidget {
   /// most headers pass none.
   final Widget? info;
 
+  /// The section's one supporting sentence — ADR 0036's budget: a header and
+  /// at most one sentence, nothing else printed. Taken as a [String] rather
+  /// than a [Widget] for the same reason [ControlRow.supportingText] is: a
+  /// second sentence, or a paragraph, is then a compile-time impossibility
+  /// rather than a review comment. Wraps, never truncates.
+  final String? supportingText;
+
   const SectionHeader(
     this.title, {
     super.key,
@@ -30,19 +37,47 @@ class SectionHeader extends StatelessWidget {
       AppSpacing.sm,
     ),
     this.info,
+    this.supportingText,
   });
 
   @override
   Widget build(BuildContext context) {
-    final text = Text(title, style: Theme.of(context).textTheme.titleLarge);
+    final theme = Theme.of(context);
+    final text = Text(title, style: theme.textTheme.titleLarge);
+    // Flexible, not mainAxisSize.min alone: a Row still hands its Text an
+    // unbounded width to lay out against unless something claims the
+    // remaining space, so the title never wraps and overflows once the info
+    // affordance and a long title compete for room at text scale 2.0.
+    final heading = info == null
+        ? text
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Flexible(child: text),
+              info!,
+            ],
+          );
+    final supporting = supportingText;
 
     return Semantics(
       header: true,
       child: Padding(
         padding: padding,
-        child: info == null
-            ? text
-            : Row(mainAxisSize: MainAxisSize.min, children: [text, info!]),
+        child: supporting == null
+            ? heading
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  heading,
+                  Text(
+                    supporting,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }

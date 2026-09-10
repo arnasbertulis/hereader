@@ -323,7 +323,7 @@ void main() {
     expect(find.text('Standard'), findsOneWidget);
     expect(find.text('Central field loss'), findsOneWidget);
     expect(
-      find.text('None yet. Copy a preset below to make one you can change.'),
+      find.text('Copy a preset below to make one you can change.'),
       findsOneWidget,
     );
 

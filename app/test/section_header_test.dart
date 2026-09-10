@@ -57,4 +57,62 @@ void main() {
     expect(find.text('Contrast'), findsOneWidget);
     expect(find.byIcon(Icons.info), findsOneWidget);
   });
+
+  // ADR 0036: a section carries its header and at most one supporting
+  // sentence, taken as a String for the same reason ControlRow's is — a
+  // second sentence is then a compile-time impossibility.
+  testWidgets('renders no second Text when supportingText is omitted', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: SectionHeader('Presets'))),
+    );
+
+    expect(find.byType(Text), findsOneWidget);
+  });
+
+  testWidgets('renders the supporting sentence below the title', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SectionHeader(
+            'Presets',
+            supportingText: 'Starting points that ship with the app.',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Presets'), findsOneWidget);
+    expect(
+      find.text('Starting points that ship with the app.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('the supporting sentence never truncates at text scale 2.0', (
+    tester,
+  ) async {
+    const sentence =
+        'A sentence long enough to wrap onto more than one line once the '
+        'text scale grows.';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(2.0)),
+          child: const Scaffold(
+            body: SectionHeader('Presets', supportingText: sentence),
+          ),
+        ),
+      ),
+    );
+
+    final supporting = tester.widget<Text>(find.text(sentence));
+
+    expect(supporting.maxLines, isNull);
+    expect(supporting.overflow, isNot(TextOverflow.ellipsis));
+  });
 }

@@ -5,6 +5,7 @@ import '../theme/app_icons.dart';
 import '../theme/app_tokens.dart';
 import '../theme/appearance.dart';
 import '../theme/content_width.dart';
+import 'control_row.dart';
 import 'custom_accent_screen.dart';
 import 'info_dot.dart';
 import 'section_header.dart';
@@ -58,7 +59,6 @@ class AppearanceScreen extends StatelessWidget {
         listenable: controller,
         builder: (context, _) {
           final settings = controller.settings;
-          final theme = Theme.of(context);
 
           return ContentWidth(
             child: ListView(
@@ -66,14 +66,12 @@ class AppearanceScreen extends StatelessWidget {
               children: [
                 const SectionHeader('Theme'),
                 for (final option in _themeOptions)
-                  ListTile(
-                    leading: Icon(
-                      option.mode == settings.themeMode
-                          ? AppIcons.chosen
-                          : AppIcons.notChosen,
-                    ),
-                    title: Text(option.label),
-                    subtitle: Text(option.description),
+                  ControlRow(
+                    icon: option.mode == settings.themeMode
+                        ? AppIcons.chosen
+                        : AppIcons.notChosen,
+                    title: option.label,
+                    supportingText: option.description,
                     selected: option.mode == settings.themeMode,
                     onTap: () => controller.setThemeMode(option.mode),
                   ),
@@ -86,18 +84,8 @@ class AppearanceScreen extends StatelessWidget {
                         'Everything else stays grey, so the colour means '
                         'something wherever it appears.',
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg,
-                    0,
-                    AppSpacing.lg,
-                    AppSpacing.sm,
-                  ),
-                  child: Text(
-                    'Used on buttons, selected rows and progress.',
-                    style: theme.textTheme.bodyMedium,
-                  ),
+                  supportingText:
+                      'Used on buttons, selected rows and progress.',
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(
@@ -137,11 +125,11 @@ class AppearanceScreen extends StatelessWidget {
                   'Contrast',
                   key: appearanceContrastHeaderKey,
                 ),
-                ListTile(
+                ControlRow(
                   onTap: () =>
                       controller.setHighContrast(!settings.highContrast),
-                  title: const Text('High contrast'),
-                  subtitle: const Text('Pure black and white surfaces.'),
+                  title: 'High contrast',
+                  supportingText: 'Pure black and white surfaces.',
                   // A genuine trailing widget, not the InfoDot inside the
                   // tile's own title — see InfoDot's doc comment and #357's
                   // rule 4: that placement risks stealing the row's own tap.
