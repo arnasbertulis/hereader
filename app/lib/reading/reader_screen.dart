@@ -1829,13 +1829,6 @@ const double _secondaryIconSize = 28;
 /// issue #329.
 const double _controlsMaxWidth = 360;
 
-/// A disabled glyph, in the same ink as every enabled one.
-///
-/// Material's own disabled opacity, rather than a number picked here, so a
-/// control that cannot be pressed on the reading surface looks like one that
-/// cannot be pressed anywhere else in the app.
-Color _dimmed(Color ink) => ink.withValues(alpha: 0.38);
-
 /// Whether the play button's glyph and tooltip read as "stop" rather than
 /// "go" — `_toggle` pauses from [PlaybackState.awaitingAdvance] as well as
 /// from [PlaybackState.playing], so both states show and name the button
@@ -2093,44 +2086,53 @@ class _Controls extends StatelessWidget {
                     onPressed: onBackParagraph,
                     iconSize: _secondaryIconSize,
                     color: ink,
-                    // `color` is the enabled colour only, and this row sets
-                    // it explicitly rather than taking a scheme role, so the
-                    // disabled one has to be set explicitly too or the glyph
-                    // falls back to the theme's `onSurface` over a
-                    // background the theme has never seen. The same ink,
-                    // dimmed: nothing else on this screen could carry
-                    // "unavailable", and ADR 0015's one ink is not broken by
-                    // an opacity.
-                    disabledColor: _dimmed(ink),
-                    icon: const Icon(AppIcons.backParagraph),
-                    tooltip: 'Back a paragraph',
+                    // ADR 0021 amendment, 2026-09-10: a jump that cannot
+                    // move is not drawn. The `IconButton` still reserves its
+                    // slot at the same size, so the row doesn't shift; the
+                    // icon itself is dropped in favour of a `Semantics`
+                    // label naming the unavailable move (#434). This only
+                    // happens at the start or end of the text, where the
+                    // reason is self-evident, so no visible text is added —
+                    // ADR 0037 keeps this row label-free.
+                    icon: onBackParagraph == null
+                        ? const Icon(
+                            null,
+                            semanticLabel: 'No earlier paragraph',
+                          )
+                        : const Icon(AppIcons.backParagraph),
+                    tooltip: onBackParagraph == null
+                        ? null
+                        : 'Back a paragraph',
                   ),
                   IconButton(
                     key: readerBackSentenceButtonKey,
                     onPressed: onBackSentence,
                     iconSize: _secondaryIconSize,
                     color: ink,
-                    disabledColor: _dimmed(ink),
-                    icon: const Icon(AppIcons.backSentence),
-                    tooltip: 'Back a sentence',
+                    icon: onBackSentence == null
+                        ? const Icon(null, semanticLabel: 'No earlier sentence')
+                        : const Icon(AppIcons.backSentence),
+                    tooltip: onBackSentence == null ? null : 'Back a sentence',
                   ),
                   IconButton(
                     key: readerSentenceButtonKey,
                     onPressed: onSentence,
                     iconSize: _secondaryIconSize,
                     color: ink,
-                    disabledColor: _dimmed(ink),
-                    icon: const Icon(AppIcons.skipSentence),
-                    tooltip: 'Forward a sentence',
+                    icon: onSentence == null
+                        ? const Icon(null, semanticLabel: 'No later sentence')
+                        : const Icon(AppIcons.skipSentence),
+                    tooltip: onSentence == null ? null : 'Forward a sentence',
                   ),
                   IconButton(
                     key: readerParagraphButtonKey,
                     onPressed: onParagraph,
                     iconSize: _secondaryIconSize,
                     color: ink,
-                    disabledColor: _dimmed(ink),
-                    icon: const Icon(AppIcons.skipParagraph),
-                    tooltip: 'Forward a paragraph',
+                    icon: onParagraph == null
+                        ? const Icon(null, semanticLabel: 'No later paragraph')
+                        : const Icon(AppIcons.skipParagraph),
+                    tooltip: onParagraph == null ? null : 'Forward a paragraph',
                   ),
                 ],
               ),
