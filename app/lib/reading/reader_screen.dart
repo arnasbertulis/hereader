@@ -1433,10 +1433,21 @@ class _ReaderScreenState extends State<ReaderScreen>
                           // hole that had the contrast readout measuring a
                           // pair the app never painted.
                           child: ExcludeSemantics(
-                            child: ReadingSurface(
-                              updates: _current,
-                              presentation: presentation,
-                              layout: _clock.layout,
+                            // Reports this box's width to the clock every
+                            // layout pass, so the measured window always
+                            // spans the viewport a sliding profile paints
+                            // into — see `ScrollClock.setViewportWidth`.
+                            // Harmless for a fixed-anchor profile: the clock
+                            // ignores it while not scrolling.
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                _clock.setViewportWidth(constraints.maxWidth);
+                                return ReadingSurface(
+                                  updates: _current,
+                                  presentation: presentation,
+                                  layout: _clock.layout,
+                                );
+                              },
                             ),
                           ),
                         ),
