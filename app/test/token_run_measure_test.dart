@@ -30,6 +30,8 @@ ScrollLayout _measure(
   Set<int> chapterStarts = const {},
   TextStyle style = _style,
   ScrollStyleKey styleKey = _key,
+  double aheadPx = 1000,
+  double behindPx = 200,
 }) => measureRun(
   tokens: text.tokens,
   index: index,
@@ -37,6 +39,8 @@ ScrollLayout _measure(
   styleKey: styleKey,
   chapterStarts: chapterStarts,
   isParagraphEnd: text.isParagraphEndAt,
+  aheadPx: aheadPx,
+  behindPx: behindPx,
 );
 
 void main() {
@@ -86,6 +90,8 @@ void main() {
         styleKey: _key,
         chapterStarts: chapterStarts,
         isParagraphEnd: (i) => paragraph && i == 5,
+        aheadPx: 1000,
+        behindPx: 200,
       );
 
       final plain = at().run.advanceAt(5);
@@ -144,11 +150,18 @@ void main() {
   });
 
   group('the window', () {
-    test('is asymmetric: more ahead than behind', () {
-      final layout = _measure(_longText(), index: 100);
+    test('a wider ahead target measures further ahead than behind', () {
+      final layout = _measure(
+        _longText(),
+        index: 100,
+        aheadPx: 3000,
+        behindPx: 200,
+      );
 
-      expect(layout.run.firstIndex, 100 - scrollWindowBefore);
-      expect(layout.run.lastIndex, 100 + scrollWindowAfter);
+      expect(
+        layout.run.lastIndex - 100,
+        greaterThan(100 - layout.run.firstIndex),
+      );
     });
 
     test('clamps at both ends of the text', () {
@@ -159,16 +172,25 @@ void main() {
       expect(end.run.lastIndex, 199);
     });
 
-    test('is reused while the anchor stays clear of its edges', () {
-      final layout = _measure(_longText(), index: 100);
+    test('is usable while the measured edges still cover the targets', () {
+      const aheadPx = 500.0;
+      const behindPx = 200.0;
+      final layout = _measure(
+        _longText(),
+        index: 100,
+        aheadPx: aheadPx,
+        behindPx: behindPx,
+      );
 
-      for (final index in [100, 101, 120, 140]) {
+      for (final index in [100, 101, 105]) {
         expect(
           scrollLayoutIsUsable(
             layout,
             index: index,
             tokenCount: 200,
             styleKey: _key,
+            aheadPx: aheadPx,
+            behindPx: behindPx,
           ),
           isTrue,
           reason: 'still covered at $index',
@@ -176,30 +198,60 @@ void main() {
       }
     });
 
-    test('is rebuilt when the anchor nears an edge', () {
-      final layout = _measure(_longText(), index: 100);
+    test('is rebuilt once a measured edge is closer than the target', () {
+      const aheadPx = 500.0;
+      const behindPx = 200.0;
+      final layout = _measure(
+        _longText(),
+        index: 100,
+        aheadPx: aheadPx,
+        behindPx: behindPx,
+      );
 
-      for (final index in [86, 143, 40, 180]) {
-        expect(
-          scrollLayoutIsUsable(
-            layout,
-            index: index,
-            tokenCount: 200,
-            styleKey: _key,
-          ),
-          isFalse,
-          reason: 'too close to an edge at $index',
-        );
-      }
+      // At the layout's own last index, ahead coverage is zero — always
+      // short of a positive target.
+      expect(
+        scrollLayoutIsUsable(
+          layout,
+          index: layout.lastIndex,
+          tokenCount: 200,
+          styleKey: _key,
+          aheadPx: aheadPx,
+          behindPx: behindPx,
+        ),
+        isFalse,
+        reason: 'no pixels left ahead of the window edge',
+      );
+
+      // Symmetrically at the first index, behind coverage is zero.
+      expect(
+        scrollLayoutIsUsable(
+          layout,
+          index: layout.firstIndex,
+          tokenCount: 200,
+          styleKey: _key,
+          aheadPx: aheadPx,
+          behindPx: behindPx,
+        ),
+        isFalse,
+        reason: 'no pixels left behind the window edge',
+      );
     });
 
     test('the ends of the text are not edges to run from', () {
-      // The window already reaches token 0, so being three tokens from its
-      // start is not a reason to measure again — there is nothing there.
-      final layout = _measure(_longText());
+      // The window already reaches token 0, so having no pixels measured
+      // behind it is not a reason to measure again — there is nothing there.
+      final layout = _measure(_longText(), aheadPx: 500, behindPx: 200);
 
       expect(
-        scrollLayoutIsUsable(layout, index: 2, tokenCount: 200, styleKey: _key),
+        scrollLayoutIsUsable(
+          layout,
+          index: 2,
+          tokenCount: 200,
+          styleKey: _key,
+          aheadPx: 500,
+          behindPx: 200,
+        ),
         isTrue,
       );
     });
@@ -213,6 +265,8 @@ void main() {
           index: 100,
           tokenCount: 200,
           styleKey: ('test', 40.0, 0.0),
+          aheadPx: 1000,
+          behindPx: 200,
         ),
         isFalse,
       );
@@ -220,7 +274,14 @@ void main() {
 
     test('null is never usable', () {
       expect(
-        scrollLayoutIsUsable(null, index: 0, tokenCount: 200, styleKey: _key),
+        scrollLayoutIsUsable(
+          null,
+          index: 0,
+          tokenCount: 200,
+          styleKey: _key,
+          aheadPx: 1000,
+          behindPx: 200,
+        ),
         isFalse,
       );
     });
@@ -245,9 +306,89 @@ void main() {
       styleKey: _key,
       chapterStarts: const {},
       isParagraphEnd: (_) => false,
+      aheadPx: 1000,
+      behindPx: 200,
     );
 
     expect(layout.isEmpty, isTrue);
     expect(layout.run.meanAdvance, greaterThan(0));
+  });
+
+  group('pixel coverage', () {
+    // The bug this guards against: a fixed token-count window covers only a
+    // few hundred pixels at a wide viewport or a large type size, so text
+    // near the far edge of the screen has nothing measured to paint. For
+    // every width, type size and anchor position below, whenever the window
+    // is usable it must actually reach the required pixels on both sides —
+    // "whenever" means at every step of a walk through a long synthetic
+    // book, remeasuring only when the previous window stopped being usable,
+    // the way `ScrollClock` does.
+    test('holds across viewport widths, type sizes and anchor positions', () {
+      final text = TokenizedText.from([
+        (id: 'one', text: List.generate(3000, (i) => 'word$i').join(' ')),
+      ], parserVersion: 1);
+      final tokenCount = text.tokens.length;
+
+      for (final width in [360.0, 1280.0, 2756.0, 5120.0]) {
+        for (final fontSize in [13.0, 44.0, 96.0]) {
+          for (final anchorX in [0.2, 0.5, 0.8]) {
+            final style = TextStyle(fontSize: fontSize, height: 1.2);
+            final styleKey = ('prop', fontSize, 0.0);
+            final aheadPx = (1 - anchorX) * width;
+            final behindPx = anchorX * width;
+            final where = 'width=$width fontSize=$fontSize anchorX=$anchorX';
+
+            ScrollLayout? layout;
+            double? previousMean;
+
+            try {
+              for (var index = 0; index < tokenCount; index += 37) {
+                if (!scrollLayoutIsUsable(
+                  layout,
+                  index: index,
+                  tokenCount: tokenCount,
+                  styleKey: styleKey,
+                  aheadPx: aheadPx,
+                  behindPx: behindPx,
+                )) {
+                  layout?.dispose();
+                  layout = measureRun(
+                    tokens: text.tokens,
+                    index: index,
+                    style: style,
+                    styleKey: styleKey,
+                    chapterStarts: const {},
+                    isParagraphEnd: (_) => false,
+                    aheadPx: aheadPx,
+                    behindPx: behindPx,
+                    previousMeanAdvance: previousMean,
+                  );
+                  previousMean = layout.run.meanAdvance;
+                }
+
+                final current = layout!;
+                final atStart = current.firstIndex == 0;
+                final atEnd = current.lastIndex == tokenCount - 1;
+                final behindCovered = current.xOf(index);
+                final aheadCovered = current.rightEdge - current.xOf(index);
+
+                expect(
+                  atStart || behindCovered >= behindPx - 0.5,
+                  isTrue,
+                  reason: '$where index=$index: behind short of target',
+                );
+                expect(
+                  atEnd || aheadCovered >= aheadPx - 0.5,
+                  isTrue,
+                  reason: '$where index=$index: ahead short of target',
+                );
+              }
+            } finally {
+              layout?.dispose();
+            }
+          }
+        }
+      }
+    });
   });
 }

@@ -95,11 +95,20 @@ suppression, so ADR 0022's guarantee reaches a drag as well as a jump.
 `pause()` deliberately keeps the offset too, because the finger landing
 pauses before it drags.
 
-**9. The window is never the book.** About sixty tokens are measured around
-the anchor, asymmetric — more ahead than behind, because text enters from
-the right — and re-measured only when the anchor nears an edge. Laying out a
-whole book would cost a pass proportional to its length on the one platform
-where `compute()` does not offload.
+**9. The window is never the book, and it is sized in pixels, not tokens.**
+`measureRun` is handed the pixel extents the surface needs covered ahead of
+and behind the anchor — `(1 - anchorX) * width` and `anchorX * width` — and
+measures tokens until each is met, with slack so an ordinary read crosses
+many pixels per rebuild. A fixed token count (the original design: about
+sixty tokens, asymmetric because text enters from the right) covers a fixed
+number of pixels only at the type size and width it was tuned against; at a
+wide viewport or a small type size the far side of the screen runs out of
+measured text and blanks until the anchor catches up to it. `ScrollClock`
+gets the width from a `LayoutBuilder` around the sliding surface — the
+reader screen's and the settings preview's alike — and falls back to the old
+token counts, converted through a type-size guess, before the first layout
+pass reports one. Laying out a whole book would cost a pass proportional to
+its length on the one platform where `compute()` does not offload.
 
 **10. One measurement, used twice.** `measureRun` returns a `ScrollLayout`
 holding both the `TokenRun` the session walks and the `TextPainter`s the
@@ -383,6 +392,23 @@ and never joins the arena, so it takes nothing from the detector beneath it.
 **A fling.** `onHorizontalDragEnd` ignores `primaryVelocity` entirely. The
 reader stops where they let go; momentum would carry them past the word they
 were aiming at.
+
+**Raising the fixed token counts (48 → 200) instead of measuring to a pixel
+target.** Rejected: still breaks at some wider width or smaller type size
+than whatever it was tuned against, and wastes layout on a phone, where the
+old counts already covered the screen.
+
+**Deriving a token count from width ÷ type size.** Rejected: guesses an
+average word width. A run of long words or a paragraph gap breaks the guess
+in the direction that reproduces the blank-text bug; `measureRun`'s own
+widen-and-remeasure loop exists because a guess this shape is only ever a
+starting point.
+
+**Incrementally extending the window — append tokens ahead, drop tokens
+behind, never a full rebuild.** Deferred rather than rejected: worth
+building only if measurement shows the bigger, occasional rebuild this
+change does instead drops frames, and `HEREADER_FRAME_STATS` (see
+Verification below) has never been run to check.
 
 ## Verification
 

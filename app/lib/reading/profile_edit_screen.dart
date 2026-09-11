@@ -1034,10 +1034,20 @@ class _PreviewState extends State<_Preview>
                     // The real surface, chosen the one way it is chosen —
                     // so a scrolling profile previews as a marquee and the
                     // contrast readout below still measures what is drawn.
-                    child: ReadingSurface(
-                      updates: _update,
-                      presentation: presentation,
-                      layout: _clock.layout,
+                    //
+                    // A `LayoutBuilder` here, same as the reader's, so the
+                    // preview's own (narrower) box gets the same pixel
+                    // coverage rather than reusing whatever the reader
+                    // screen last reported.
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        _clock.setViewportWidth(constraints.maxWidth);
+                        return ReadingSurface(
+                          updates: _update,
+                          presentation: presentation,
+                          layout: _clock.layout,
+                        );
+                      },
                     ),
                   ),
                 ),

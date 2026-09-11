@@ -21,18 +21,31 @@ const double scrollParagraphGapEm = 2.0;
 /// either becoming a wait.
 const double scrollChapterGapEm = 6.0;
 
-/// Tokens measured behind the anchor. Fewer than ahead, because text enters
+/// Tokens measured behind the anchor, used only as a fallback estimate
+/// before a viewport width is known. Fewer than ahead, because text enters
 /// from the right and leaves on the left: most of what has to be on screen is
 /// still coming.
-const int scrollWindowBefore = 16;
+const int scrollFallbackWindowBefore = 16;
 
-/// Tokens measured ahead of the anchor.
-const int scrollWindowAfter = 48;
+/// Tokens measured ahead of the anchor, used only as a fallback estimate
+/// before a viewport width is known.
+const int scrollFallbackWindowAfter = 48;
 
-/// How close the anchor may get to a measured edge before the window is
-/// rebuilt. Above zero so an ordinary read crosses many tokens per rebuild
-/// rather than re-measuring on each one.
-const int scrollWindowMargin = 6;
+/// Assumed pixels a token advances, as a multiple of the type size, before
+/// any layout has been measured. A deliberately rough starting point that
+/// [measureRun] corrects from its own measurement on its first widening
+/// pass — never a claim about any particular book.
+const double scrollAdvanceGuessEm = 3.0;
+
+/// How much wider than the required pixel extent [measureRun] targets, so an
+/// ordinary read crosses many pixels per rebuild rather than re-measuring on
+/// each one.
+const double scrollMeasureSlack = 1.5;
+
+/// Bound on how many times [measureRun] widens its guess and re-measures.
+/// Each attempt is one `TextPainter.layout` per segment, so this is a
+/// ceiling on that cost, not an expected count.
+const int scrollMeasureMaxAttempts = 6;
 
 /// Identity of the type style a layout was measured under.
 ///
@@ -91,6 +104,15 @@ class ScrollLayout {
   int get lastIndex => run.lastIndex;
   bool get isEmpty => segments.isEmpty;
 
+  /// Right edge of the last measured token, in this layout's coordinate
+  /// space. The first token's left edge is always 0 ([measureRun] starts its
+  /// cursor there), so this doubles as the layout's total measured extent.
+  double get rightEdge {
+    if (segments.isEmpty) return 0;
+    final last = segments.last;
+    return last.startX + last.painter.width;
+  }
+
   /// Left edge of [index] in this layout's coordinate space.
   ///
   /// Falls back to the mean beyond the window so a painter asked about a
@@ -111,31 +133,32 @@ class ScrollLayout {
   }
 }
 
-/// Whether [layout] still covers [index] with room to spare.
-///
-/// The margin is what keeps this off the per-token path: an ordinary read
-/// crosses [scrollWindowAfter] minus [scrollWindowMargin] tokens between
-/// rebuilds, and a rebuild is one `TextPainter.layout` per segment rather
-/// than per token.
+/// Whether [layout] still covers [index] by at least [aheadPx] ahead and
+/// [behindPx] behind, in painted pixels — the coverage a caller needs to
+/// fill its viewport on both sides of the anchor without a blank gap. A side
+/// is exempt only where the book itself ends on that side of the layout.
 bool scrollLayoutIsUsable(
   ScrollLayout? layout, {
   required int index,
   required int tokenCount,
   required ScrollStyleKey styleKey,
+  required double aheadPx,
+  required double behindPx,
 }) {
   if (layout == null || layout.isEmpty) return false;
   if (layout.styleKey != styleKey) return false;
+  if (index < layout.firstIndex || index > layout.lastIndex) return false;
 
-  final nearStart =
-      layout.firstIndex > 0 && index - layout.firstIndex < scrollWindowMargin;
-  final nearEnd =
-      layout.lastIndex < tokenCount - 1 &&
-      layout.lastIndex - index < scrollWindowMargin;
+  final atBookStart = layout.firstIndex == 0;
+  final atBookEnd = layout.lastIndex == tokenCount - 1;
 
-  return index >= layout.firstIndex &&
-      index <= layout.lastIndex &&
-      !nearStart &&
-      !nearEnd;
+  final behindCovered = layout.xOf(index);
+  if (!atBookStart && behindCovered < behindPx) return false;
+
+  final aheadCovered = layout.rightEdge - layout.xOf(index);
+  if (!atBookEnd && aheadCovered < aheadPx) return false;
+
+  return true;
 }
 
 /// Lay out the window of tokens around [index].
@@ -154,6 +177,13 @@ bool scrollLayoutIsUsable(
 /// ambient [Directionality]. An RTL ambient direction would mirror shaping
 /// *within* each token while the run itself still travelled right to left,
 /// which is worse than being consistently wrong; RTL is a stated limitation.
+///
+/// [aheadPx] and [behindPx] are the pixel extents the caller needs covered
+/// on each side of [index] — see [scrollLayoutIsUsable]. This measures a
+/// window sized to meet them: it picks a token count from [previousMeanAdvance]
+/// (or a type-size guess when there is none yet), measures, and widens and
+/// re-measures if the actual coverage came up short, up to
+/// [scrollMeasureMaxAttempts] times.
 ScrollLayout measureRun({
   required List<Token> tokens,
   required int index,
@@ -161,6 +191,9 @@ ScrollLayout measureRun({
   required ScrollStyleKey styleKey,
   required Set<int> chapterStarts,
   required bool Function(int) isParagraphEnd,
+  required double aheadPx,
+  required double behindPx,
+  double? previousMeanAdvance,
 }) {
   if (tokens.isEmpty) {
     return ScrollLayout(
@@ -171,9 +204,64 @@ ScrollLayout measureRun({
   }
 
   final fontSize = style.fontSize ?? 16;
-  final first = (index - scrollWindowBefore).clamp(0, tokens.length - 1);
-  final last = (index + scrollWindowAfter).clamp(0, tokens.length - 1);
+  var estimate = (previousMeanAdvance != null && previousMeanAdvance > 0)
+      ? previousMeanAdvance
+      : fontSize * scrollAdvanceGuessEm;
 
+  ScrollLayout? layout;
+
+  for (var attempt = 0; attempt < scrollMeasureMaxAttempts; attempt++) {
+    // +1 token ahead for `tokenOffset`: the anchor sits partway into the
+    // current token, so covering up to its left edge is not quite enough.
+    final aheadTokens = ((aheadPx * scrollMeasureSlack) / estimate).ceil() + 1;
+    final behindTokens = ((behindPx * scrollMeasureSlack) / estimate).ceil();
+
+    final first = (index - behindTokens).clamp(0, tokens.length - 1);
+    final last = (index + aheadTokens).clamp(0, tokens.length - 1);
+
+    layout?.dispose();
+    layout = _measureWindow(
+      tokens: tokens,
+      first: first,
+      last: last,
+      style: style,
+      styleKey: styleKey,
+      chapterStarts: chapterStarts,
+      isParagraphEnd: isParagraphEnd,
+      fontSize: fontSize,
+    );
+
+    final atBookStart = first == 0;
+    final atBookEnd = last == tokens.length - 1;
+    final behindOk = atBookStart || layout.xOf(index) >= behindPx;
+    final aheadOk =
+        atBookEnd || layout.rightEdge - layout.xOf(index) >= aheadPx;
+
+    if (behindOk && aheadOk) return layout;
+    if (atBookStart && atBookEnd) return layout;
+
+    // Re-estimate from what was actually measured; only force growth by
+    // brute multiplication if the measured mean did not move the estimate
+    // (e.g. a run of same-length tokens), so this cannot loop without
+    // widening the window.
+    estimate = layout.run.meanAdvance > estimate
+        ? layout.run.meanAdvance
+        : estimate * 1.5;
+  }
+
+  return layout!;
+}
+
+ScrollLayout _measureWindow({
+  required List<Token> tokens,
+  required int first,
+  required int last,
+  required TextStyle style,
+  required ScrollStyleKey styleKey,
+  required Set<int> chapterStarts,
+  required bool Function(int) isParagraphEnd,
+  required double fontSize,
+}) {
   final spaceWidth = _spaceWidth(style, fontSize);
 
   final segments = <ScrollSegment>[];

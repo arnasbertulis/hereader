@@ -390,6 +390,8 @@ void main() {
             styleKey: scrollStyleKeyFor(presentation),
             chapterStarts: const {},
             isParagraphEnd: text.isParagraphEndAt,
+            aheadPx: 500,
+            behindPx: 200,
           ),
         ),
         config: presentation,
@@ -461,6 +463,8 @@ void main() {
           styleKey: scrollStyleKeyFor(presentation.config),
           chapterStarts: const {3},
           isParagraphEnd: text.isParagraphEndAt,
+          aheadPx: 500,
+          behindPx: 200,
         ),
       );
 

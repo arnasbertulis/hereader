@@ -43,6 +43,13 @@ class ScrollClock {
   Duration _lastElapsed = Duration.zero;
   ResolvedPresentation? _presentation;
 
+  /// The reading surface's width, in logical pixels.
+  ///
+  /// Null before the first `LayoutBuilder` pass reports one — see
+  /// [setViewportWidth]. Only that setter ever writes this; two paths
+  /// reporting a width would let one win silently.
+  double? _viewportWidth;
+
   /// Longest gap a single tick will move the text by.
   ///
   /// A backgrounded tab, a garbage collection or a slow first frame can hand
@@ -72,6 +79,19 @@ class ScrollClock {
   /// dirty mid-build is not something to reason about per frame.
   void applyPresentation(ResolvedPresentation presentation) {
     _presentation = presentation;
+    sync();
+  }
+
+  /// Adopt the reading surface's width.
+  ///
+  /// Call from the `LayoutBuilder` around the sliding surface — the reader
+  /// screen's and the settings preview's alike, so both get the same
+  /// coverage. A width change needs no separate invalidation: it changes the
+  /// pixel targets [_remeasureIfNeeded] computes, and [scrollLayoutIsUsable]
+  /// already rejects a layout that falls short of the current targets.
+  void setViewportWidth(double width) {
+    if (_viewportWidth == width) return;
+    _viewportWidth = width;
     sync();
   }
 
@@ -127,12 +147,15 @@ class ScrollClock {
 
   void _remeasureIfNeeded(ResolvedPresentation presentation) {
     final styleKey = scrollStyleKeyFor(presentation.config);
+    final (aheadPx, behindPx) = _pixelTargets(presentation);
 
     if (scrollLayoutIsUsable(
       layout.value,
       index: session.index,
       tokenCount: tokens.length,
       styleKey: styleKey,
+      aheadPx: aheadPx,
+      behindPx: behindPx,
     )) {
       return;
     }
@@ -145,8 +168,33 @@ class ScrollClock {
         styleKey: styleKey,
         chapterStarts: chapterStarts,
         isParagraphEnd: isParagraphEnd,
+        aheadPx: aheadPx,
+        behindPx: behindPx,
+        previousMeanAdvance: layout.value?.run.meanAdvance,
       ),
     );
+  }
+
+  /// Pixels to measure ahead of and behind the anchor.
+  ///
+  /// Derived from the surface's own width and the profile's `anchorX`, so
+  /// the window always spans the viewport rather than a token count that a
+  /// wide screen or a large type size can outrun. Before a width is known —
+  /// the first frame, before any `LayoutBuilder` has reported one — this
+  /// falls back to the old fixed token counts, converted to pixels through a
+  /// type-size guess, and gets replaced the moment a real width arrives.
+  (double, double) _pixelTargets(ResolvedPresentation presentation) {
+    final width = _viewportWidth;
+    if (width == null) {
+      final guess = presentation.config.fontSizePt * scrollAdvanceGuessEm;
+      return (
+        scrollFallbackWindowAfter * guess,
+        scrollFallbackWindowBefore * guess,
+      );
+    }
+
+    final anchorX = presentation.config.anchorX;
+    return ((1 - anchorX) * width, anchorX * width);
   }
 
   void _replace(ScrollLayout? next) {
