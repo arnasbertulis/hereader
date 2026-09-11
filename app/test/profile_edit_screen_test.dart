@@ -25,7 +25,7 @@ void main() {
 
   tearDown(() => database.close());
 
-  testWidgets('a preset draws its name as text, not a TextField', (
+  testWidgets('a preset opens in an editable TextField already', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -39,8 +39,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byType(TextField), findsNothing);
-    expect(find.text('Standard'), findsOneWidget);
+    expect(find.byType(TextField), findsOneWidget);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller?.text,
+      'Standard',
+    );
   });
 
   testWidgets('a fork still draws its name in an editable TextField', (
@@ -67,5 +70,139 @@ void main() {
       tester.widget<TextField>(find.byType(TextField)).controller?.text,
       'My reading profile',
     );
+  });
+
+  testWidgets(
+    'the first change to a preset forks it, activates the fork, and offers '
+    'Undo',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProfileEditScreen(
+            profile: Presets.standard,
+            repository: repository,
+            issueStamp: issueStamp,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'My Standard');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Now reading with My Standard'), findsOneWidget);
+      expect(find.text('Undo'), findsOneWidget);
+
+      final mine = (await repository.allProfiles())
+          .where((p) => !p.isBuiltIn)
+          .toList();
+      expect(mine, hasLength(1));
+      expect(mine.single.name, 'My Standard');
+      expect((await repository.activeProfile()).id, mine.single.id);
+    },
+  );
+
+  testWidgets(
+    'a later change in the same session edits the fork rather than forking '
+    'again',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProfileEditScreen(
+            profile: Presets.standard,
+            repository: repository,
+            issueStamp: issueStamp,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'My Standard');
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'My Standard, tuned');
+      await tester.pumpAndSettle();
+
+      final mine = (await repository.allProfiles())
+          .where((p) => !p.isBuiltIn)
+          .toList();
+      expect(mine, hasLength(1));
+    },
+  );
+
+  testWidgets(
+    'returning to the preset in a fresh editor forks anew, never reusing '
+    'the earlier fork',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProfileEditScreen(
+            profile: Presets.standard,
+            repository: repository,
+            issueStamp: issueStamp,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'My Standard');
+      await tester.pumpAndSettle();
+
+      // Tear the first editor down so the second pump below creates a fresh
+      // State — a real second visit through Navigator would too — rather
+      // than Flutter's widget-tree diffing reusing the same State (and its
+      // already-forked `_draft`) because both pumps place a
+      // ProfileEditScreen at the same tree position.
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(milliseconds: 1));
+
+      // A second, independent visit to the same preset — not the fork just
+      // made.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProfileEditScreen(
+            profile: Presets.standard,
+            repository: repository,
+            issueStamp: issueStamp,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'My Standard, again');
+      await tester.pumpAndSettle();
+
+      final mine = (await repository.allProfiles())
+          .where((p) => !p.isBuiltIn)
+          .toList();
+      expect(mine, hasLength(2));
+    },
+  );
+
+  testWidgets('Undo deletes the fork and restores the preset as active', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProfileEditScreen(
+          profile: Presets.standard,
+          repository: repository,
+          issueStamp: issueStamp,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'My Standard');
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+
+    final mine = (await repository.allProfiles())
+        .where((p) => !p.isBuiltIn)
+        .toList();
+    expect(mine, isEmpty);
+    expect((await repository.activeProfile()).id, Presets.standard.id);
   });
 }

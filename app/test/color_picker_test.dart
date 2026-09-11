@@ -75,7 +75,9 @@ void main() {
     expect(stamps, 1);
   });
 
-  testWidgets('the background field honours enabled', (tester) async {
+  testWidgets('the background field is live from the moment a preset opens', (
+    tester,
+  ) async {
     final navigator = GlobalKey<NavigatorState>();
 
     await tester.pumpWidget(
@@ -85,8 +87,8 @@ void main() {
     navigator.currentState!.push(
       MaterialPageRoute<void>(
         builder: (context) => ProfileEditScreen(
-          // A preset: the editor disables every control, including the
-          // background field's sliders.
+          // A preset opens editable now (issue #433): the first change
+          // forks it, but nothing here gates the controls themselves.
           profile: Presets.standard,
           repository: repository,
           issueStamp: issueStamp,
@@ -109,7 +111,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(tester.widget<RgbSliders>(find.byType(RgbSliders)).enabled, isFalse);
+    expect(tester.widget<RgbSliders>(find.byType(RgbSliders)).enabled, isTrue);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 1));

@@ -17,8 +17,8 @@ import '../theme/content_width.dart';
 import 'about_screen.dart';
 import 'appearance_screen.dart';
 import 'control_row.dart';
+import 'profile_edit_screen.dart';
 import 'profile_presentation.dart';
-import 'profiles_screen.dart';
 import 'reading_display.dart';
 import 'reading_settings_screen.dart';
 
@@ -222,13 +222,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         title: 'Reading profiles',
                         supportingText: _profilesValue(profiles),
                         trailing: const Icon(AppIcons.openSection),
-                        onTap: () => _push(
-                          ProfilesScreen(
-                            repository: widget.repository,
-                            issueStamp: widget.issueStamp,
-                            auth: widget.api.auth,
-                          ),
-                        ),
+                        // Opens the active profile's own editor directly
+                        // (issue #433) rather than the full list first — the
+                        // reader most often wants to change what is already
+                        // playing, not choose a different one. The list is
+                        // still one tap away, from "All profiles" in the
+                        // editor's app bar. Null only until the first
+                        // `_loadValues` resolves, same window
+                        // `_profilesValue` covers with "Loading".
+                        onTap: _activeProfile == null
+                            ? null
+                            : () => _push(
+                                ProfileEditScreen(
+                                  profile: _activeProfile!,
+                                  repository: widget.repository,
+                                  issueStamp: widget.issueStamp,
+                                  auth: widget.api.auth,
+                                ),
+                              ),
                       ),
                       ControlRow(
                         icon: AppIcons.sectionAppearance,
