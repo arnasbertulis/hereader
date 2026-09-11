@@ -196,6 +196,88 @@ void main() {
     });
   });
 
+  group('the first-Play hint', () {
+    // ADR 0037 §4: the first Play on a device shows "Tap anywhere to
+    // pause", once, clear of the word.
+    testWidgets('shows once the first time playback starts', (tester) async {
+      final handle = tester.ensureSemantics();
+
+      await tester.pumpWidget(reader());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(readerPlayButtonKey));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byKey(readerFirstPlayHintKey), findsOneWidget);
+      expect(
+        tester.getSemantics(find.byKey(readerFirstPlayHintKey)).label,
+        'Tap anywhere to pause',
+      );
+
+      handle.dispose();
+      await disposeTree(tester);
+    });
+
+    // The way back exists already: the same tap anywhere pauses. The hint
+    // dismisses on exactly that tap.
+    testWidgets('dismisses on the tap it describes', (tester) async {
+      await tester.pumpWidget(reader());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(readerPlayButtonKey));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byKey(readerFirstPlayHintKey), findsOneWidget);
+
+      await tester.tap(find.byKey(readerTapCentreKey));
+      await tester.pump();
+
+      expect(find.byKey(readerFirstPlayHintKey), findsNothing);
+
+      await disposeTree(tester);
+    });
+
+    // Or it dismisses on its own, a few seconds later, without the reader
+    // touching anything.
+    testWidgets('dismisses on its own while playback continues', (
+      tester,
+    ) async {
+      await tester.pumpWidget(reader());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(readerPlayButtonKey));
+      await tester.pump(const Duration(seconds: 5));
+
+      expect(find.byKey(readerFirstPlayHintKey), findsNothing);
+
+      await disposeTree(tester);
+    });
+
+    // Shown once per device: a book opened again on the same database does
+    // not see it a second time.
+    testWidgets('does not show again on a later Play on the same device', (
+      tester,
+    ) async {
+      await tester.pumpWidget(reader());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(readerPlayButtonKey));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.tap(find.byKey(readerTapCentreKey));
+      await tester.pumpAndSettle();
+      await disposeTree(tester);
+
+      await tester.pumpWidget(reader());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(readerPlayButtonKey));
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(find.byKey(readerFirstPlayHintKey), findsNothing);
+
+      await disposeTree(tester);
+    });
+  });
+
   group('the progress bar', () {
     testWidgets('reports where the reader is', (tester) async {
       final handle = tester.ensureSemantics();
