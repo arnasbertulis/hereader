@@ -142,7 +142,7 @@ void main() {
       await tester.tap(find.byType(PopupMenuButton<String>).first);
       await tester.pumpAndSettle();
 
-      expect(find.text('View settings'), findsOneWidget);
+      expect(find.text('Edit'), findsOneWidget);
       expect(find.text('Make a copy'), findsOneWidget);
       expect(find.text('Delete'), findsNothing);
 

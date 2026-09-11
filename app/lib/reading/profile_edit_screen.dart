@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
+import '../sync/auth_store.dart';
 import '../theme/app_icons.dart';
 import '../theme/content_width.dart';
 import 'profile_presentation.dart';
+import 'profiles_screen.dart';
 import 'reading_surface.dart';
 import 'rgb_sliders.dart';
 import 'scroll_clock.dart';
@@ -24,10 +26,18 @@ const Key profileFollowAppKey = Key('profile-follow-app');
 
 /// Edits one reading profile.
 ///
-/// A preset opens read-only with a button to copy it. The alternative —
-/// letting the controls move and prompting on the first change — puts a
-/// dialog in front of a reader mid-drag on a slider, which is worse than one
-/// deliberate tap up front.
+/// A preset opens editable. The first change forks it — see
+/// `ReadingProfile.fork` and ADR 0038 — rather than a copy button gating the
+/// controls first: the reading speed slider is the app's most consequential
+/// setting (issue #433), and a dialog in front of it before a reader can
+/// touch it is one more thing between them and the change they came here to
+/// make. The fork is named, activated and announced the same way
+/// `ProfileActions.duplicate`'s explicit "Make a copy" is, with the same
+/// Undo — one mechanism, reached from two places, per ADR 0011.
+///
+/// Every fresh visit to a preset forks anew: this screen only ever forks
+/// `widget.profile` itself, never a fork already sitting in `_draft`, so an
+/// earlier fork of the same preset is never reused.
 ///
 /// Changes are saved when the screen closes rather than on every control
 /// movement. A save queues a sync event, and one per keystroke in the name
@@ -37,11 +47,17 @@ class ProfileEditScreen extends StatefulWidget {
   final LibraryRepository repository;
   final Future<String> Function() issueStamp;
 
+  /// Whether deleting a profile from the "All profiles" list this screen can
+  /// open reaches every device or only this one. Pass `syncEngine.auth`.
+  /// Optional and `null` in widget tests that never reach that list.
+  final AuthStore? auth;
+
   const ProfileEditScreen({
     super.key,
     required this.profile,
     required this.repository,
     required this.issueStamp,
+    this.auth,
   });
 
   @override
@@ -64,11 +80,15 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
   bool _dirty = false;
 
-  /// Set once a preset has been copied, so the screen pops with the copy and
-  /// the caller can move the reader's selection onto it.
+  /// Set once a preset has forked, so the screen pops with the fork and the
+  /// caller can move the reader's selection onto it.
   bool _forked = false;
 
-  bool get _editable => !_draft.isBuiltIn;
+  /// Always true: a preset's controls are live from the moment this screen
+  /// opens. `_update` is what still knows the difference — it forks
+  /// `_draft` before the first change lands, rather than gating the
+  /// controls themselves.
+  bool get _editable => true;
 
   @override
   void dispose() {
@@ -79,6 +99,10 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   // -- editing -------------------------------------------------------
 
   void _update(ReadingProfile Function(ReadingProfile) change) {
+    if (_draft.isBuiltIn) {
+      unawaited(_forkOnFirstChange(change));
+      return;
+    }
     setState(() {
       _draft = change(_draft);
       _dirty = true;
@@ -92,32 +116,76 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     PresentationConfig Function(PresentationConfig) change,
   ) => _update((p) => p.copyWith(presentation: change(p.presentation)));
 
-  Future<void> _makeCopy() async {
+  /// Forks the preset this screen opened on, applies [change] to the fork,
+  /// makes it active, and announces the switch with `ProfileActions
+  /// .duplicate`'s own wording and Undo — the reader who touched a slider
+  /// gets the same affordance as one who tapped "Make a copy" first.
+  ///
+  /// Forks `widget.profile`, never `_draft`: `_draft` is only ever the
+  /// preset itself before this runs, so there is nothing else to fork from.
+  Future<void> _forkOnFirstChange(
+    ReadingProfile Function(ReadingProfile) change,
+  ) async {
     final messenger = ScaffoldMessenger.of(context);
-    final copy = _draft.fork(id: ReadingProfile.newId());
+    final outgoingId = (await widget.repository.activeProfile()).id;
+    final forked = change(widget.profile.fork(id: ReadingProfile.newId()));
 
-    await widget.repository.saveProfile(copy, hlc: await widget.issueStamp());
+    await widget.repository.saveProfile(forked, hlc: await widget.issueStamp());
+    if (!mounted) return;
+
+    await widget.repository.setActiveProfile(
+      forked.id,
+      hlc: await widget.issueStamp(),
+    );
     if (!mounted) return;
 
     setState(() {
-      _draft = copy;
-      _name.text = copy.name;
+      _draft = forked;
       _forked = true;
       _dirty = false;
     });
 
     messenger.showSnackBar(
       SnackBar(
-        content: Text('Editing a copy. ${widget.profile.name} is unchanged.'),
+        content: Text('Now reading with ${forked.name}'),
+        duration: const Duration(seconds: 10),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () => unawaited(_undoFork(forked.id, outgoingId)),
+        ),
       ),
     );
+  }
+
+  /// Undoes an in-editor fork: deletes it and restores whichever profile was
+  /// active before the first change, the same as declining a copy made from
+  /// the profile list would.
+  Future<void> _undoFork(String forkId, String outgoingId) async {
+    await widget.repository.deleteProfile(
+      forkId,
+      hlc: await widget.issueStamp(),
+    );
+    if (!mounted) return;
+
+    await widget.repository.setActiveProfile(
+      outgoingId,
+      hlc: await widget.issueStamp(),
+    );
+    if (!mounted) return;
+
+    setState(() {
+      _draft = widget.profile;
+      _name.text = widget.profile.name;
+      _forked = false;
+      _dirty = false;
+    });
   }
 
   Future<void> _saveAndClose() async {
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
 
-    if (_dirty && _editable) {
+    if (_dirty) {
       try {
         await widget.repository.saveProfile(
           _draft,
@@ -179,15 +247,31 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(_editable ? _draft.name : '${_draft.name} (preset)'),
+          title: Text(_draft.name),
+          // The Settings index opens this screen directly on the active
+          // profile now (issue #433), so the full list — every preset, every
+          // profile of the reader's own — needs a way in from here rather
+          // than from the index. Tap-to-choose in that list is unchanged.
+          actions: [
+            IconButton(
+              icon: const Icon(AppIcons.seeAll),
+              tooltip: 'All profiles',
+              onPressed: () => Navigator.of(context).push<void>(
+                MaterialPageRoute(
+                  builder: (_) => ProfilesScreen(
+                    repository: widget.repository,
+                    issueStamp: widget.issueStamp,
+                    auth: widget.auth,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
         body: ContentWidth(
           child: ListView(
             children: [
               _Preview(profile: _draft, presentation: resolved),
-
-              if (!_editable)
-                _PresetBanner(onCopy: _makeCopy, name: _draft.name),
 
               const SectionHeader(
                 'Name',
@@ -751,42 +835,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 }
 
 // -- pieces -------------------------------------------------------------
-
-class _PresetBanner extends StatelessWidget {
-  final String name;
-  final VoidCallback onCopy;
-
-  const _PresetBanner({required this.name, required this.onCopy});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      color: Theme.of(context).colorScheme.secondaryContainer,
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '$name is a preset and cannot be changed.',
-            style: Theme.of(context).textTheme.titleSmall,
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Presets stay as they shipped so there is always a known starting '
-            'point to come back to.',
-          ),
-          const SizedBox(height: 12),
-          FilledButton.icon(
-            onPressed: onCopy,
-            icon: const Icon(AppIcons.forkProfile),
-            label: const Text('Make an editable copy'),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 /// A live sample of the profile, drawn by the reading surface itself.
 ///

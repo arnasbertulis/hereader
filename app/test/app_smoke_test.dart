@@ -373,36 +373,50 @@ void main() {
     await _disposeTree(tester);
   });
 
-  testWidgets('a preset opens read-only with a way to copy it', (tester) async {
-    final harness = _Harness.create();
-    addTearDown(harness.close);
+  testWidgets(
+    'opening a preset from the list is editable, and forks only once the '
+    'reader changes something',
+    (tester) async {
+      final harness = _Harness.create();
+      addTearDown(harness.close);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: ProfilesScreen(
-          repository: harness.repository,
-          issueStamp: _stamp,
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProfilesScreen(
+            repository: harness.repository,
+            issueStamp: _stamp,
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(PopupMenuButton<String>).first);
-    await tester.pumpAndSettle();
+      await tester.tap(find.byType(PopupMenuButton<String>).first);
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('View settings'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Edit'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Make an editable copy'), findsOneWidget);
+      // Nothing was stored by opening it.
+      expect(find.byType(TextField), findsOneWidget);
+      final beforeEdit = (await harness.repository.allProfiles())
+          .where((p) => !p.isBuiltIn)
+          .toList();
+      expect(beforeEdit, isEmpty);
 
-    // Nothing was stored by opening it.
-    final mine = (await harness.repository.allProfiles())
-        .where((p) => !p.isBuiltIn)
-        .toList();
-    expect(mine, isEmpty);
+      // The first change forks it, and the fork is what a reader now reads
+      // with — not left on the preset underneath.
+      await tester.enterText(find.byType(TextField), 'My Standard');
+      await tester.pumpAndSettle();
 
-    await _disposeTree(tester);
-  });
+      final mine = (await harness.repository.allProfiles())
+          .where((p) => !p.isBuiltIn)
+          .toList();
+      expect(mine, hasLength(1));
+      expect((await harness.repository.activeProfile()).id, mine.single.id);
+
+      await _disposeTree(tester);
+    },
+  );
 
   testWidgets('an appearance change rethemes and keeps the route', (
     tester,
@@ -608,26 +622,59 @@ void main() {
     await _disposeTree(tester);
   });
 
-  testWidgets('the profiles row pushes the list that used to be settings', (
-    tester,
-  ) async {
-    final harness = _Harness.create();
-    addTearDown(harness.close);
+  testWidgets(
+    'the profiles row opens the active profile editor directly, two taps '
+    'from Settings',
+    (tester) async {
+      final harness = _Harness.create();
+      addTearDown(harness.close);
 
-    await tester.pumpWidget(harness.app);
-    await tester.pumpAndSettle();
+      await tester.pumpWidget(harness.app);
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(AppIcons.tabSettings));
-    await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(AppIcons.tabSettings));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Reading profiles'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Reading profiles'));
+      await tester.pumpAndSettle();
 
-    expect(find.byType(ProfilesScreen), findsOneWidget);
-    expect(find.text('Standard'), findsOneWidget);
+      // Straight into the active profile's own editor — its speed slider is
+      // the second tap, not the fourth (issue #433).
+      expect(find.byType(ProfileEditScreen), findsOneWidget);
+      expect(find.byType(ProfilesScreen), findsNothing);
+      expect(find.widgetWithText(AppBar, 'Standard'), findsOneWidget);
+      // The editor is live from the moment it opens — no read-only banner
+      // or copy button between the reader and the name field.
+      expect(find.byType(TextField), findsOneWidget);
 
-    await _disposeTree(tester);
-  });
+      await _disposeTree(tester);
+    },
+  );
+
+  testWidgets(
+    'the full profiles list is still reachable, from the editor\'s app bar',
+    (tester) async {
+      final harness = _Harness.create();
+      addTearDown(harness.close);
+
+      await tester.pumpWidget(harness.app);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(AppIcons.tabSettings));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Reading profiles'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('All profiles'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ProfilesScreen), findsOneWidget);
+      expect(find.text('Standard'), findsOneWidget);
+
+      await _disposeTree(tester);
+    },
+  );
 
   test('the accent is named where the reader picked a named one', () {
     expect(

@@ -82,15 +82,16 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   }
 
   Future<void> _edit(ReadingProfile profile) async {
-    // Editing a preset forks it via ProfileEditScreen's own save path, which
-    // does not go through ProfileActions.duplicate and so does not activate
-    // the fork or announce anything.
+    // ProfileEditScreen forks a preset on its first change itself, activating
+    // the fork and announcing the switch with its own Undo — the same
+    // mechanism ProfileActions.duplicate uses for "Make a copy" above.
     await Navigator.of(context).push<ReadingProfile>(
       MaterialPageRoute(
         builder: (_) => ProfileEditScreen(
           profile: profile,
           repository: widget.repository,
           issueStamp: widget.issueStamp,
+          auth: widget.auth,
         ),
       ),
     );

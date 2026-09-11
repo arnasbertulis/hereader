@@ -49,10 +49,7 @@ class ProfileRow extends StatelessWidget {
           _ => null,
         },
         itemBuilder: (context) => [
-          PopupMenuItem(
-            value: 'edit',
-            child: Text(profile.isBuiltIn ? 'View settings' : 'Edit'),
-          ),
+          const PopupMenuItem(value: 'edit', child: Text('Edit')),
           const PopupMenuItem(value: 'duplicate', child: Text('Make a copy')),
           if (onDelete != null)
             PopupMenuItem(
