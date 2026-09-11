@@ -262,6 +262,115 @@ void main() {
     });
   });
 
+  // ADR 0021 amendment, 2026-09-10 (#434): a jump that cannot move is not
+  // drawn. Its slot keeps its size so the row doesn't shift, and its
+  // `Semantics` label names the unavailable move instead of only dimming
+  // the glyph.
+  group('a jump that cannot move', () {
+    testWidgets('is named by Semantics, not tooltip, at the start', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+
+      // No `position`, so the reader starts at the very beginning: both
+      // backward jumps are disabled, both forward jumps stay enabled.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReaderScreen(
+            book: LibraryBook(id: 'b', title: 'A Book', text: text),
+            repository: LibraryRepository(database),
+            issueStamp: _stamp,
+            onSave: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getSemantics(find.byKey(readerBackParagraphButtonKey)).tooltip,
+        isEmpty,
+      );
+      expect(
+        tester.getSemantics(find.byKey(readerBackParagraphButtonKey)).label,
+        'No earlier paragraph',
+      );
+      expect(
+        tester.getSemantics(find.byKey(readerBackSentenceButtonKey)).tooltip,
+        isEmpty,
+      );
+      expect(
+        tester.getSemantics(find.byKey(readerBackSentenceButtonKey)).label,
+        'No earlier sentence',
+      );
+
+      final disabled = tester.widget<IconButton>(
+        find.byKey(readerBackParagraphButtonKey),
+      );
+      final enabled = tester.widget<IconButton>(
+        find.byKey(readerParagraphButtonKey),
+      );
+      expect(
+        (disabled.icon as Icon).icon,
+        isNull,
+        reason: 'a jump that cannot move draws no glyph',
+      );
+      expect(
+        disabled.iconSize,
+        enabled.iconSize,
+        reason: "the disabled jump's slot keeps the row's icon size",
+      );
+
+      handle.dispose();
+      await disposeTree(tester);
+    });
+
+    testWidgets('is named by Semantics, not tooltip, at the end', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+
+      // `text` carries 16 tokens (two 8-token blocks); `locatorAt(15)` is
+      // its last one, so both forward jumps are disabled and both backward
+      // jumps stay enabled.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ReaderScreen(
+            book: LibraryBook(
+              id: 'b',
+              title: 'A Book',
+              text: text,
+              position: text.locatorAt(15),
+            ),
+            repository: LibraryRepository(database),
+            issueStamp: _stamp,
+            onSave: (_) async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.getSemantics(find.byKey(readerSentenceButtonKey)).tooltip,
+        isEmpty,
+      );
+      expect(
+        tester.getSemantics(find.byKey(readerSentenceButtonKey)).label,
+        'No later sentence',
+      );
+      expect(
+        tester.getSemantics(find.byKey(readerParagraphButtonKey)).tooltip,
+        isEmpty,
+      );
+      expect(
+        tester.getSemantics(find.byKey(readerParagraphButtonKey)).label,
+        'No later paragraph',
+      );
+
+      handle.dispose();
+      await disposeTree(tester);
+    });
+  });
+
   // The decision on #413: every control a screen reader can land on has to
   // say what it is, and say it only once. `label` carries that for the
   // hand-built tap zones (ADR 0020); `tooltip` carries it for every
