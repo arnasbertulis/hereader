@@ -44,6 +44,10 @@ const Key readerProfileButtonKey = Key('reader-profile-button');
 /// screen the way [appearanceInfoDotKey] does for Appearance's own.
 const Key readerLegendInfoDotKey = Key('reader-legend-info-dot');
 
+/// The first-Play hint line — see ADR 0037 §4. Keyed rather than found by
+/// its text, for the same reason [readerPlayButtonKey] is.
+const Key readerFirstPlayHintKey = Key('reader-first-play-hint');
+
 /// Keys for each legend entry in the transport legend — used to assert
 /// presence of controls in tests, and to find them without relying on
 /// text strings that might change. Keys for:
@@ -341,6 +345,27 @@ class _ReaderScreenState extends State<ReaderScreen>
 
   late final ProfileActions _profileActions;
 
+  /// The key under which "has the tap-to-pause hint been shown on this
+  /// device" is stored. Device-local by construction — `setPreference`'s
+  /// `sync` parameter defaults to false and this call leaves it that way —
+  /// per ADR 0037 §4: learning the gesture is a habit of the device, and a
+  /// hint shown twice costs little, unlike a synced pointer arriving on a
+  /// device that never asked for it.
+  static const _tapToPauseHintShownKey = 'ui.reader_tap_pause_hint_shown';
+
+  /// Null until the stored flag loads, so the first frame cannot show a
+  /// hint the reader has already dismissed on a slower read. See
+  /// [_restoreStep] for the same shape.
+  bool? _tapToPauseHintShown;
+
+  /// Whether the first-Play hint line is on screen right now. Distinct from
+  /// [_tapToPauseHintShown]: the flag survives across sessions, this is
+  /// this session's transient "still drawn" state, cleared by the timer or
+  /// by the tap it describes.
+  bool _showTapToPauseHint = false;
+
+  Timer? _tapToPauseHintTimer;
+
   @override
   void initState() {
     super.initState();
@@ -463,6 +488,7 @@ class _ReaderScreenState extends State<ReaderScreen>
     });
 
     _restoreStep();
+    _restoreTapToPauseHintShown();
   }
 
   /// The profile's presentation with its polarity decided.
@@ -499,6 +525,52 @@ class _ReaderScreenState extends State<ReaderScreen>
     // Through setState because the zones announce the number to a screen
     // reader, so it is drawn as well as acted on.
     setState(() => _stepWords = step);
+  }
+
+  Future<void> _restoreTapToPauseHintShown() async {
+    final stored = await widget.repository.preference(_tapToPauseHintShownKey);
+    if (!mounted) return;
+    setState(() => _tapToPauseHintShown = stored == 'true');
+  }
+
+  /// Shows the first-Play hint, once per device, and starts the timer that
+  /// dismisses it on its own — ADR 0037 §4.
+  ///
+  /// Guarded on `_tapToPauseHintShown == false` rather than `!= true`: while
+  /// the stored flag is still loading it is null, and a reader who presses
+  /// Play in that window sees no hint rather than a risk of two. The flag
+  /// flips to true immediately, optimistically, so a second Play before the
+  /// write below finishes cannot show it twice either.
+  void _maybeShowTapToPauseHint() {
+    if (_tapToPauseHintShown != false) return;
+
+    setState(() {
+      _showTapToPauseHint = true;
+      _tapToPauseHintShown = true;
+    });
+
+    unawaited(
+      widget.issueStamp().then(
+        (hlc) => widget.repository.setPreference(
+          _tapToPauseHintShownKey,
+          'true',
+          hlc: hlc,
+        ),
+      ),
+    );
+
+    _tapToPauseHintTimer?.cancel();
+    _tapToPauseHintTimer = Timer(const Duration(seconds: 4), () {
+      if (!mounted) return;
+      setState(() => _showTapToPauseHint = false);
+    });
+  }
+
+  /// Dismisses the hint on the tap it describes — the same tap that pauses.
+  void _dismissTapToPauseHint() {
+    if (!_showTapToPauseHint) return;
+    _tapToPauseHintTimer?.cancel();
+    setState(() => _showTapToPauseHint = false);
   }
 
   /// Back and forward by [_stepWords], stopping where they land.
@@ -543,6 +615,7 @@ class _ReaderScreenState extends State<ReaderScreen>
   @override
   void dispose() {
     _saveTimer?.cancel();
+    _tapToPauseHintTimer?.cancel();
     _lifecycle?.dispose();
     _sub?.cancel();
     // Cancelled before the session and the clock it feeds are torn down, so
@@ -615,8 +688,10 @@ class _ReaderScreenState extends State<ReaderScreen>
     if (_session.state == PlaybackState.playing ||
         _session.state == PlaybackState.awaitingAdvance) {
       _session.pause();
+      _dismissTapToPauseHint();
     } else {
       _session.play();
+      _maybeShowTapToPauseHint();
     }
   }
 
@@ -1446,6 +1521,34 @@ class _ReaderScreenState extends State<ReaderScreen>
                             child: Text(
                               'End of book',
                               style: TextStyle(color: ink),
+                            ),
+                          ),
+                        // ADR 0037 §3-4: the one thing drawn while playing,
+                        // besides the word, and only once per device.
+                        // `IgnorePointer` so it never steals the tap it is
+                        // teaching — the zones beneath keep it.
+                        if (_showTapToPauseHint &&
+                            state == PlaybackState.playing)
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: AppSpacing.xl,
+                            child: IgnorePointer(
+                              child: SafeArea(
+                                child: Center(
+                                  child: Semantics(
+                                    key: readerFirstPlayHintKey,
+                                    liveRegion: true,
+                                    label: 'Tap anywhere to pause',
+                                    child: ExcludeSemantics(
+                                      child: Text(
+                                        'Tap anywhere to pause',
+                                        style: TextStyle(color: ink),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
                         if (showControls && _chapters.isNotEmpty)
