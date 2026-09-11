@@ -200,9 +200,8 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     builder: (context) => AlertDialog(
       title: const Text('Reset your progress?'),
       content: const Text(
-        'Changing the text means your saved place in this note may no '
-        'longer line up with it. Saving will start it over from the '
-        'beginning.',
+        'Because the text changed, saving starts your progress over from '
+        'the beginning.',
       ),
       actions: [
         TextButton(

@@ -15,6 +15,7 @@ import 'add_menu_dispatcher.dart';
 import 'book_cover.dart';
 import 'book_opener.dart';
 import 'book_progress.dart';
+import 'info_dot.dart';
 import 'library_book.dart';
 import 'profile_presentation.dart';
 import 'reading_display.dart';
@@ -705,23 +706,22 @@ class _NothingOpenYet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: AppSpacing.xxl),
-        Text(
-          'Nothing open yet',
-          textAlign: TextAlign.center,
-          style: theme.textTheme.headlineSmall,
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Text(
-          'Add an EPUB or write a note to begin, or paste text to try it '
-          'out. Books and notes stay on this device.',
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodyMedium,
+        Center(
+          child: SectionHeader(
+            'Nothing open yet',
+            padding: EdgeInsets.zero,
+            supportingText:
+                'Add an EPUB or write a note to begin, or paste text to try '
+                'it out.',
+            info: const InfoDot(
+              semanticLabel: 'About your books and notes',
+              explanation: 'Books and notes stay on this device.',
+            ),
+          ),
         ),
         const SizedBox(height: AppSpacing.xl),
         Center(

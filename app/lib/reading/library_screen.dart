@@ -17,10 +17,12 @@ import 'add_menu_dispatcher.dart';
 import 'book_cover.dart';
 import 'book_opener.dart';
 import 'book_progress.dart';
+import 'info_dot.dart';
 import 'library_book.dart';
 import 'note_editor_screen.dart';
 import 'profile_presentation.dart';
 import 'reading_display.dart';
+import 'section_header.dart';
 
 /// Identifies the add button, for a test that would otherwise match its
 /// tooltip. Same argument as `readerPlayButtonKey`: the tooltip is copy, and
@@ -390,7 +392,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         title: Text('Remove ${summary.title}?'),
         content: Text(
           isNote
-              ? 'It is deleted from this device. This cannot be undone.'
+              ? 'It is permanently deleted from this device.'
               : 'The file and your place in it are deleted from this '
                     'device.',
         ),
@@ -1179,16 +1181,16 @@ class _EmptyLibrary extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
+            SectionHeader(
               'Nothing here yet',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              'Add an EPUB or write a note to start reading, or paste text '
-              'to try it out. Books and notes stay on this device.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium,
+              padding: EdgeInsets.zero,
+              supportingText:
+                  'Add an EPUB or write a note to start reading, or paste '
+                  'text to try it out.',
+              info: const InfoDot(
+                semanticLabel: 'About your books and notes',
+                explanation: 'Books and notes stay on this device.',
+              ),
             ),
             const SizedBox(height: AppSpacing.xl),
             FilledButton.icon(
