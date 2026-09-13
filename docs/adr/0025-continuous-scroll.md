@@ -77,9 +77,14 @@ and stall", reintroduced through the back door. The cursor steps over each
 token's real advance while it is inside the measured window.
 
 **6. Velocity is `(baseWpm / 60) × meanAdvance`.** No new profile field and
-nothing new on the wire. `meanAdvance` is measured from the laid-out window
-and is honest on average, the same caveat ADR 0003 already records for
-`referenceLetterCount`.
+nothing new on the wire. `meanAdvance` is measured from the first strip laid
+out under a type style and then held fixed while the strip grows and sheds
+chunks, and across seeks; only a style change or a newly arrived font takes a
+new one. It is honest on average, the same caveat ADR 0003 already records
+for `referenceLetterCount`. Re-deriving it from each measured window, as the
+first version did, stepped the speed every time the window moved — every
+couple of words once the window was sized in pixels — and read as the line
+shuddering.
 
 **7. The sub-token offset is never persisted.** Locators are token-granular
 (ADR 0002). A save writes the token index and discards the offset, so a
@@ -95,22 +100,47 @@ suppression, so ADR 0022's guarantee reaches a drag as well as a jump.
 `pause()` deliberately keeps the offset too, because the finger landing
 pauses before it drags.
 
-**9. The window is never the book, and it is sized in pixels, not tokens.**
-`measureRun` is handed the pixel extents the surface needs covered ahead of
-and behind the anchor — `(1 - anchorX) * width` and `anchorX * width` — and
-measures tokens until each is met, with slack so an ordinary read crosses
-many pixels per rebuild. A fixed token count (the original design: about
-sixty tokens, asymmetric because text enters from the right) covers a fixed
-number of pixels only at the type size and width it was tuned against; at a
-wide viewport or a small type size the far side of the screen runs out of
-measured text and blanks until the anchor catches up to it. `ScrollClock`
-gets the width from a `LayoutBuilder` around the sliding surface — the
-reader screen's and the settings preview's alike — and falls back to the old
-token counts, converted through a type-size guess, before the first layout
-pass reports one. Laying out a whole book would cost a pass proportional to
-its length on the one platform where `compute()` does not offload.
+**9. The measured text is a strip of chunks, sized in pixels, and a chunk is
+measured once.** A chunk is the tokens up to a paragraph or chapter end,
+capped at `scrollChunkMaxTokens` and cut at a space where the cap falls. Each
+is laid out once, when the strip first reaches it, placed where the previous
+one ends, and drawn from that one layout until it is shed. `coverRun` grows
+the strip a chunk at a time until it covers the pixel extents the surface
+needs — `(1 - anchorX) * width` ahead of the current token's *far* edge and
+`anchorX * width` behind its left edge, each plus an em for glyph ink that
+crosses the viewport edge and a further viewport of lead — and sheds a chunk
+from either end only when what is left still covers that side by a viewport
+more. The lead means a chunk is measured a screen before any of it can show,
+which is also the time a web fallback font has to arrive. Only a seek outside
+the strip, a style change or an arrived font (`PaintingBinding.systemFonts`)
+starts it over.
 
-**10. One measurement, used twice.** `measureRun` returns a `ScrollLayout`
+A chunk joins on a frame the text is moving in, so what joining costs is what
+that frame costs, and at a 165 Hz display that budget is about 6 ms. The cap
+is small for that reason, and the width of a space is measured once per style
+and carried on the strip with the mean advance rather than by each join: an
+eleven-token join that re-measured the space cost 2.6 ms on a debug web build,
+and a join now costs about 1 ms there, with no join landing on a late frame
+in either a debug or a profile build. A frame on which the strip needs
+nothing returns it untouched before allocating anything.
+
+Two earlier shapes were wrong on screen. A fixed token count (the original
+design: about sixty tokens, asymmetric because text enters from the right)
+covers a fixed number of pixels only at the type size and width it was tuned
+against, so at a wide viewport or a small type size the far side of the
+screen ran out and blanked. Its successor, one window re-measured whole
+whenever its pixel coverage ran short, measured coverage from the current
+token's left edge, so for the last stretch of every token the viewport ran
+past what was measured and the next window drew the missing words already in
+view; it also re-laid out the text on screen every few words, and fed the
+speed a new mean each time (decision 6). `ScrollClock` gets the width from a
+`LayoutBuilder` around the sliding surface — the reader screen's and the
+settings preview's alike — and falls back to fixed token counts, converted
+through a type-size guess, before the first layout pass reports one. Laying
+out a whole book would cost a pass proportional to its length on the one
+platform where `compute()` does not offload.
+
+**10. One measurement, used twice.** `coverRun` returns a `ScrollLayout`
 holding both the `TokenRun` the session walks and the `TextPainter`s the
 widget draws. The widget is *told* which token is current and draws it at
 `anchor − offset`; **anything that hit-tests a laid-out box against the
@@ -284,8 +314,8 @@ has tested the case and accepts it: a 60Hz panel does not judder, and a 120Hz
 Android panel drops to 60 after a few seconds without input, which aligns
 with what `requestAnimationFrame` delivers. The mitigations are structural —
 a `RepaintBoundary`, a painter driven by `CustomPainter(repaint:)` so no
-widget rebuilds per frame, and advances measured about once every forty
-tokens rather than per frame.
+widget rebuilds per frame, and each token laid out once, in a chunk of at
+most `scrollChunkMaxTokens`, rather than per frame.
 
 **A resume can shift the reader by up to one word**, per decision 7. Stated
 here so it is not rediscovered as a bug.

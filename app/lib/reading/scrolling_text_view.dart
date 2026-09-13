@@ -22,12 +22,12 @@ class ScrollingTextView extends StatelessWidget {
   final ValueListenable<PlaybackUpdate?> updates;
   final ResolvedPresentation presentation;
 
-  /// The measured window, carrying null before the first measurement.
+  /// The measured strip, carrying null before the first measurement.
   ///
-  /// A listenable for the same reason [updates] is: the window moves about
-  /// once every forty tokens, and rebuilding this subtree for it would put
-  /// an element rebuild on the reading path for a change of geometry. The
-  /// painter listens to both.
+  /// A listenable for the same reason [updates] is: the strip gains or sheds
+  /// a chunk every few dozen tokens, and rebuilding this subtree for it would
+  /// put an element rebuild on the reading path for a change of geometry.
+  /// The painter listens to both.
   ///
   /// Measured by the caller rather than here, because the same measurement
   /// is what the session walks: `PlaybackSession.run` and this painter read
