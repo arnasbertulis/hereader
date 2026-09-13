@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
@@ -30,10 +31,10 @@ class ScrollClock {
   /// table of contents, which then gets paragraph gaps and no invented ones.
   final Set<int> chapterStarts;
 
-  /// The measured window, for the painter.
+  /// The measured strip, for the painter.
   ///
-  /// A notifier rather than a field on the reader's `State`: a rebuild moves
-  /// the window about every forty tokens, and routing it through `setState`
+  /// A notifier rather than a field on the reader's `State`: the strip gains
+  /// or sheds a chunk every few tokens, and routing that through `setState`
   /// would rebuild the Scaffold, the controls and the chapter panel to shift
   /// some text sideways. The painter listens to this and to the update
   /// stream, and nothing between them is an element.
@@ -67,6 +68,7 @@ class ScrollClock {
     required this.chapterStarts,
   }) {
     _ticker = vsync.createTicker(_onTick);
+    PaintingBinding.instance.systemFonts.addListener(_onSystemFontsChanged);
   }
 
   @visibleForTesting
@@ -87,8 +89,8 @@ class ScrollClock {
   /// Call from the `LayoutBuilder` around the sliding surface — the reader
   /// screen's and the settings preview's alike, so both get the same
   /// coverage. A width change needs no separate invalidation: it changes the
-  /// pixel targets [_remeasureIfNeeded] computes, and [scrollLayoutIsUsable]
-  /// already rejects a layout that falls short of the current targets.
+  /// pixel targets [_cover] passes, and [coverRun] grows or sheds the strip
+  /// to meet them on the next call.
   void setViewportWidth(double width) {
     if (_viewportWidth == width) return;
     _viewportWidth = width;
@@ -123,6 +125,7 @@ class ScrollClock {
   }
 
   void dispose() {
+    PaintingBinding.instance.systemFonts.removeListener(_onSystemFontsChanged);
     _ticker.dispose();
     layout.value?.dispose();
     layout.dispose();
@@ -145,56 +148,82 @@ class ScrollClock {
     if (presentation != null) _remeasureIfNeeded(presentation);
   }
 
-  void _remeasureIfNeeded(ResolvedPresentation presentation) {
-    final styleKey = scrollStyleKeyFor(presentation.config);
-    final (aheadPx, behindPx) = _pixelTargets(presentation);
+  void _remeasureIfNeeded(ResolvedPresentation presentation) =>
+      _replace(_cover(presentation));
 
-    if (scrollLayoutIsUsable(
-      layout.value,
+  /// Measure again against fonts that arrived after the strip was measured.
+  ///
+  /// A cached [TextPainter] keeps the layout it was given. On web the
+  /// reading faces are not bundled, and a fallback face for a character the
+  /// first choice lacks is fetched on demand: text measured before it landed
+  /// draws that character as nothing, and would go on doing so for as long
+  /// as its chunk is held. `RenderParagraph` re-lays itself out on this same
+  /// notification for the same reason.
+  void _onSystemFontsChanged() {
+    final presentation = _presentation;
+    if (presentation == null || !session.scrolling) return;
+    _replace(_cover(presentation, relayout: true));
+  }
+
+  ScrollLayout _cover(
+    ResolvedPresentation presentation, {
+    bool relayout = false,
+  }) {
+    final targets = _pixelTargets(presentation);
+
+    return coverRun(
+      current: layout.value,
+      tokens: tokens,
       index: session.index,
-      tokenCount: tokens.length,
-      styleKey: styleKey,
-      aheadPx: aheadPx,
-      behindPx: behindPx,
-    )) {
-      return;
-    }
-
-    _replace(
-      measureRun(
-        tokens: tokens,
-        index: session.index,
-        style: readingTextStyle(presentation),
-        styleKey: styleKey,
-        chapterStarts: chapterStarts,
-        isParagraphEnd: isParagraphEnd,
-        aheadPx: aheadPx,
-        behindPx: behindPx,
-        previousMeanAdvance: layout.value?.run.meanAdvance,
-      ),
+      style: readingTextStyle(presentation),
+      styleKey: scrollStyleKeyFor(presentation.config),
+      chapterStarts: chapterStarts,
+      isParagraphEnd: isParagraphEnd,
+      aheadPx: targets.ahead,
+      behindPx: targets.behind,
+      slackPx: targets.slack,
+      relayout: relayout,
     );
   }
 
-  /// Pixels to measure ahead of and behind the anchor.
+  /// Pixels to hold measured ahead of and behind the anchor, and how much
+  /// more than that a chunk must clear before it is shed.
   ///
-  /// Derived from the surface's own width and the profile's `anchorX`, so
-  /// the window always spans the viewport rather than a token count that a
-  /// wide screen or a large type size can outrun. Before a width is known —
-  /// the first frame, before any `LayoutBuilder` has reported one — this
-  /// falls back to the old fixed token counts, converted to pixels through a
-  /// type-size guess, and gets replaced the moment a real width arrives.
-  (double, double) _pixelTargets(ResolvedPresentation presentation) {
+  /// Each side is the viewport's share of the surface, plus
+  /// [scrollInkMarginEm] for ink that crosses the edge from beyond it, plus
+  /// one more viewport of lead. The lead is what makes a chunk's measurement
+  /// happen a screen before any of it can show, which is also the time a web
+  /// fallback face has to arrive — and the re-measure its arrival triggers
+  /// — before the text that needed it is in view.
+  ///
+  /// Before a width is known — the first frame, before any `LayoutBuilder`
+  /// has reported one — this falls back to fixed token counts converted to
+  /// pixels through a type-size guess, and the strip simply grows when a real
+  /// width arrives.
+  ({double ahead, double behind, double slack}) _pixelTargets(
+    ResolvedPresentation presentation,
+  ) {
+    final config = presentation.config;
+    final margin = config.fontSizePt * scrollInkMarginEm;
+
     final width = _viewportWidth;
     if (width == null) {
-      final guess = presentation.config.fontSizePt * scrollAdvanceGuessEm;
+      final guess = config.fontSizePt * scrollAdvanceGuessEm;
+      final ahead = scrollFallbackWindowAfter * guess;
+      final behind = scrollFallbackWindowBefore * guess;
       return (
-        scrollFallbackWindowAfter * guess,
-        scrollFallbackWindowBefore * guess,
+        ahead: ahead + margin,
+        behind: behind + margin,
+        slack: ahead + behind,
       );
     }
 
-    final anchorX = presentation.config.anchorX;
-    return ((1 - anchorX) * width, anchorX * width);
+    final anchorX = config.anchorX;
+    return (
+      ahead: (1 - anchorX) * width + margin + width,
+      behind: anchorX * width + margin + width,
+      slack: width,
+    );
   }
 
   void _replace(ScrollLayout? next) {
@@ -205,14 +234,29 @@ class ScrollClock {
     // before the painter is told, so no frame can be painted against a run
     // the session has not adopted. `PlaybackSession.run` rescales the
     // sub-token offset, which is what keeps the anchor on the same part of
-    // the same word when the type size changes.
+    // the same word when the type size changes; when the strip only grew or
+    // shed a chunk, the current token's advance is the same number and the
+    // offset does not move.
     if (next != null) session.run = next.run;
     layout.value = next;
 
     if (previous == null) return;
 
-    // A frame already in flight may still hold the old painters, and a
-    // disposed `TextPainter` throws when painted. One frame is enough.
-    SchedulerBinding.instance.addPostFrameCallback((_) => previous.dispose());
+    // Successive strips share the chunks they both hold, so only the ones the
+    // new strip dropped are finished with. A frame already in flight may
+    // still hold them, and a disposed `TextPainter` throws when painted. One
+    // frame is enough.
+    final kept = Set<ScrollSegment>.identity()..addAll(next?.segments ?? []);
+    final dropped = [
+      for (final segment in previous.segments)
+        if (!kept.contains(segment)) segment,
+    ];
+    if (dropped.isEmpty) return;
+
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      for (final segment in dropped) {
+        segment.painter.dispose();
+      }
+    });
   }
 }

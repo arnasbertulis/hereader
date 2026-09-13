@@ -383,7 +383,8 @@ void main() {
           ),
         ),
         layout: ValueNotifier<ScrollLayout?>(
-          measureRun(
+          coverRun(
+            current: null,
             tokens: text.tokens,
             index: 2,
             style: readingTextStyle(resolved),
@@ -392,6 +393,7 @@ void main() {
             isParagraphEnd: text.isParagraphEndAt,
             aheadPx: 500,
             behindPx: 200,
+            slackPx: 500,
           ),
         ),
         config: presentation,
@@ -456,7 +458,8 @@ void main() {
 
       final presentation = _resolved();
       final layout = ValueNotifier<ScrollLayout?>(
-        measureRun(
+        coverRun(
+          current: null,
           tokens: text.tokens,
           index: 2,
           style: readingTextStyle(presentation),
@@ -465,6 +468,7 @@ void main() {
           isParagraphEnd: text.isParagraphEndAt,
           aheadPx: 500,
           behindPx: 200,
+          slackPx: 500,
         ),
       );
 

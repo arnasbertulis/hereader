@@ -22,12 +22,12 @@ class ScrollingTextView extends StatelessWidget {
   final ValueListenable<PlaybackUpdate?> updates;
   final ResolvedPresentation presentation;
 
-  /// The measured window, carrying null before the first measurement.
+  /// The measured strip, carrying null before the first measurement.
   ///
-  /// A listenable for the same reason [updates] is: the window moves about
-  /// once every forty tokens, and rebuilding this subtree for it would put
-  /// an element rebuild on the reading path for a change of geometry. The
-  /// painter listens to both.
+  /// A listenable for the same reason [updates] is: the strip gains or sheds
+  /// a chunk every few dozen tokens, and rebuilding this subtree for it would
+  /// put an element rebuild on the reading path for a change of geometry.
+  /// The painter listens to both.
   ///
   /// Measured by the caller rather than here, because the same measurement
   /// is what the session walks: `PlaybackSession.run` and this painter read
@@ -138,9 +138,16 @@ class MarqueePainter extends CustomPainter {
     // hit-tests a box against the anchor to ask which token is current.
     final origin = anchorX - current.xOf(update.index) - update.tokenOffset;
 
+    // Culled an em clear of each edge rather than at it, so a segment whose
+    // ink reaches across the edge from beyond it is drawn from the first frame
+    // it shows — see [scrollInkMarginEm]. The clip trims the rest.
+    final margin = config.fontSizePt * scrollInkMarginEm;
+
     for (final segment in current.segments) {
       final x = origin + segment.startX;
-      if (x > size.width || x + segment.painter.width < 0) continue;
+      if (x > size.width + margin || x + segment.painter.width < -margin) {
+        continue;
+      }
       segment.painter.paint(
         canvas,
         Offset(x, anchorY - segment.painter.height / 2),
