@@ -85,6 +85,20 @@ too wide for the measure is scaled down to fit rather than broken across lines.
 This is the scale-to-fit counterpart to d11e9da's scale-to-fill, in the same
 `LayoutBuilder`.
 
+**Amendment, 2026-09-13 (#467): stacks with the platform's text scaler.**
+Scale-to-fit measures `fitFontSizePt`'s token at whatever ambient
+`MediaQuery.textScalerOf(context)` is in effect, not at
+`TextScaler.noScaling` — so the width it fits to matches what the `Text`/
+`Text.rich` painting the word already applies that scaler to. This is the
+opposite of `ui.chrome_text_scale`'s stance (ADR 0031): that lever explicitly
+does not reach the reading surface, because the reader chose it for chrome
+alone. The platform's own text-size accessibility setting is different — ADR
+0012 already treats it as the one most readers configure — and RSVP is the
+app's core surface, so it stays reachable by that setting rather than being
+pinned away from it. The two levers point the same word at two different
+inputs on purpose: one is the reader's explicit choice for chrome, the other
+is the platform's ambient setting for content.
+
 ### 5. Playback starts only from a deliberate act on the reading surface
 
 Dismissing a sheet is not such an act. This ADR states the rule and not the
