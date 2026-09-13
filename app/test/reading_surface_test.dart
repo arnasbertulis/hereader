@@ -220,6 +220,48 @@ void main() {
         expect(word.maxLines, 1);
       },
     );
+
+    // #467. fitFontSizePt's TextPainter measured at TextScaler.noScaling
+    // while Text/Text.rich painted at the ambient scaler, so an ordinary
+    // word — not an outlier like the ones above — could be fit to a width
+    // narrower than what it was actually painted at and run past the
+    // surface. ADR 0035 §4's amendment: the two must agree.
+    testWidgets(
+      'shrinks an ordinary word to fit under a non-1.0 ambient text scale',
+      (tester) async {
+        addTearDown(tester.view.reset);
+        tester.view.physicalSize = const Size(320, 600);
+        tester.view.devicePixelRatio = 1.0;
+        tester.platformDispatcher.textScaleFactorTestValue = 1.5;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+        const word = 'extraordinary';
+        const presentation = PresentationConfig(fontSizePt: 44);
+        final resolved = resolvePresentation(presentation, Brightness.light);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: RsvpView(update: _showing(word), presentation: resolved),
+          ),
+        );
+
+        final rendered = tester.widget<Text>(find.text(word));
+        expect(rendered.style?.fontSize, lessThan(presentation.fontSizePt));
+
+        // The width actually painted — at the ambient scaler Text inherits —
+        // must fit inside the surface's available width (viewport minus the
+        // 16px horizontal padding on each side), not merely the width
+        // fitFontSizePt measured at some other scaler.
+        final paragraph = tester.renderObject<RenderParagraph>(
+          find.descendant(
+            of: find.byType(RsvpView),
+            matching: find.byType(RichText),
+          ),
+        );
+        expect(paragraph.didExceedMaxLines, false);
+        expect(paragraph.size.width, lessThanOrEqualTo(320 - 32));
+      },
+    );
   });
 
   group('the reader screen', () {

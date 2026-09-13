@@ -53,6 +53,13 @@ class RsvpView extends StatelessWidget {
     final token = update?.token;
     final transition = reduceMotion ? 0 : config.transitionMs;
 
+    // Read once, off the same context the Text/Text.rich below paints
+    // ambiently with, and passed to fitFontSizePt so the width it fits to
+    // matches what actually gets painted: the reading surface stacks with
+    // the platform's own text scaler rather than pinning away from it, the
+    // opposite of chromeTextScale's stance (#467, ADR 0035 §4 amendment).
+    final textScaler = MediaQuery.textScalerOf(context);
+
     // Measured in a LayoutBuilder rather than off MediaQuery's full window
     // size, so the word grows to fill *this widget's* box -- the reader
     // surface or the settings preview, whichever is drawing it -- instead of
@@ -84,6 +91,7 @@ class RsvpView extends StatelessWidget {
                 presentation,
                 basePt: filledFontSizePt,
                 availableWidth: availableTextWidth,
+                textScaler: textScaler,
               );
         final style = readingTextStyle(presentation, fontSizePt: fontSizePt);
 

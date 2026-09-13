@@ -485,11 +485,19 @@ double scaledFontSizePt(double basePt, double availableWidth) {
 /// uses the exact style — font family, letter spacing — the word will
 /// actually be painted in; a narrower stand-in style would fit a token this
 /// function then renders too wide.
+///
+/// Takes [textScaler] so the measurement matches what the `Text`/`Text.rich`
+/// this fits for is actually painted at: the reading surface stacks with the
+/// platform's ambient scaler rather than pinning to it away, the opposite of
+/// `chromeTextScale`'s stance (#467) — so the width fit here must scale by
+/// the same factor the paint call will apply, or an ordinary word can run
+/// past the surface it was measured to fit inside.
 double fitFontSizePt(
   String text,
   ResolvedPresentation presentation, {
   required double basePt,
   required double availableWidth,
+  required TextScaler textScaler,
 }) {
   if (text.isEmpty || availableWidth <= 0) return basePt;
   final painter = TextPainter(
@@ -498,6 +506,7 @@ double fitFontSizePt(
       style: readingTextStyle(presentation, fontSizePt: basePt),
     ),
     textDirection: TextDirection.ltr,
+    textScaler: textScaler,
     maxLines: 1,
   )..layout();
   if (painter.width <= availableWidth) return basePt;
