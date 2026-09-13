@@ -42,6 +42,17 @@ const double scrollAdvanceGuessEm = 3.0;
 /// each one.
 const double scrollMeasureSlack = 1.5;
 
+/// Coverage kept past each edge of the viewport, as a multiple of the type
+/// size.
+///
+/// A glyph's ink is not confined to its advance: an italic, a `j`, an `f` or
+/// a stacked diacritic reaches into the space beside it. A token measured
+/// only up to the viewport edge could still put ink across it that nothing
+/// had drawn, and it would appear in place when the next window arrived. An
+/// em is wider than any such overhang a reading face draws, and costs one
+/// extra word of layout per side.
+const double scrollInkMarginEm = 1.0;
+
 /// Bound on how many times [measureRun] widens its guess and re-measures.
 /// Each attempt is one `TextPainter.layout` per segment, so this is a
 /// ceiling on that cost, not an expected count.
@@ -152,10 +163,21 @@ bool scrollLayoutIsUsable(
   final atBookStart = layout.firstIndex == 0;
   final atBookEnd = layout.lastIndex == tokenCount - 1;
 
+  // The anchor only ever moves forward through a token from its left edge,
+  // so the viewport's left edge never sits further back than it does at
+  // `tokenOffset` zero, and the left edge of [index] is the right place to
+  // measure from.
   final behindCovered = layout.xOf(index);
   if (!atBookStart && behindCovered < behindPx) return false;
 
-  final aheadCovered = layout.rightEdge - layout.xOf(index);
+  // From the current token's far edge, not its left one. The anchor travels
+  // up to a whole advance into the token before the index moves — a word, or
+  // a word plus a chapter gap — and the viewport's right edge travels with
+  // it. Measured from the left edge, the window ran out on screen for the
+  // last stretch of a token, and the remeasure the next token triggered drew
+  // the missing text already in view.
+  final aheadCovered =
+      layout.rightEdge - (layout.xOf(index) + layout.run.advanceAt(index));
   if (!atBookEnd && aheadCovered < aheadPx) return false;
 
   return true;
@@ -211,8 +233,8 @@ ScrollLayout measureRun({
   ScrollLayout? layout;
 
   for (var attempt = 0; attempt < scrollMeasureMaxAttempts; attempt++) {
-    // +1 token ahead for `tokenOffset`: the anchor sits partway into the
-    // current token, so covering up to its left edge is not quite enough.
+    // +1 token ahead for the current token itself: coverage is counted from
+    // its far edge, see [scrollLayoutIsUsable].
     final aheadTokens = ((aheadPx * scrollMeasureSlack) / estimate).ceil() + 1;
     final behindTokens = ((behindPx * scrollMeasureSlack) / estimate).ceil();
 
@@ -231,14 +253,20 @@ ScrollLayout measureRun({
       fontSize: fontSize,
     );
 
-    final atBookStart = first == 0;
-    final atBookEnd = last == tokens.length - 1;
-    final behindOk = atBookStart || layout.xOf(index) >= behindPx;
-    final aheadOk =
-        atBookEnd || layout.rightEdge - layout.xOf(index) >= aheadPx;
-
-    if (behindOk && aheadOk) return layout;
-    if (atBookStart && atBookEnd) return layout;
+    // The same test the caller will apply on its next tick. A second copy of
+    // the coverage rule here could accept a window the caller then rejects,
+    // and it would re-measure on every frame. Covers the whole-book case too:
+    // with both ends exempt there is nothing wider to measure.
+    if (scrollLayoutIsUsable(
+      layout,
+      index: index,
+      tokenCount: tokens.length,
+      styleKey: styleKey,
+      aheadPx: aheadPx,
+      behindPx: behindPx,
+    )) {
+      return layout;
+    }
 
     // Re-estimate from what was actually measured; only force growth by
     // brute multiplication if the measured mean did not move the estimate

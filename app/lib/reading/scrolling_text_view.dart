@@ -138,9 +138,16 @@ class MarqueePainter extends CustomPainter {
     // hit-tests a box against the anchor to ask which token is current.
     final origin = anchorX - current.xOf(update.index) - update.tokenOffset;
 
+    // Culled an em clear of each edge rather than at it, so a segment whose
+    // ink reaches across the edge from beyond it is drawn from the first frame
+    // it shows — see [scrollInkMarginEm]. The clip trims the rest.
+    final margin = config.fontSizePt * scrollInkMarginEm;
+
     for (final segment in current.segments) {
       final x = origin + segment.startX;
-      if (x > size.width || x + segment.painter.width < 0) continue;
+      if (x > size.width + margin || x + segment.painter.width < -margin) {
+        continue;
+      }
       segment.painter.paint(
         canvas,
         Offset(x, anchorY - segment.painter.height / 2),

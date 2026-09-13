@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
@@ -67,6 +68,7 @@ class ScrollClock {
     required this.chapterStarts,
   }) {
     _ticker = vsync.createTicker(_onTick);
+    PaintingBinding.instance.systemFonts.addListener(_onSystemFontsChanged);
   }
 
   @visibleForTesting
@@ -123,6 +125,7 @@ class ScrollClock {
   }
 
   void dispose() {
+    PaintingBinding.instance.systemFonts.removeListener(_onSystemFontsChanged);
     _ticker.dispose();
     layout.value?.dispose();
     layout.dispose();
@@ -146,32 +149,49 @@ class ScrollClock {
   }
 
   void _remeasureIfNeeded(ResolvedPresentation presentation) {
-    final styleKey = scrollStyleKeyFor(presentation.config);
     final (aheadPx, behindPx) = _pixelTargets(presentation);
 
     if (scrollLayoutIsUsable(
       layout.value,
       index: session.index,
       tokenCount: tokens.length,
-      styleKey: styleKey,
+      styleKey: scrollStyleKeyFor(presentation.config),
       aheadPx: aheadPx,
       behindPx: behindPx,
     )) {
       return;
     }
 
-    _replace(
-      measureRun(
-        tokens: tokens,
-        index: session.index,
-        style: readingTextStyle(presentation),
-        styleKey: styleKey,
-        chapterStarts: chapterStarts,
-        isParagraphEnd: isParagraphEnd,
-        aheadPx: aheadPx,
-        behindPx: behindPx,
-        previousMeanAdvance: layout.value?.run.meanAdvance,
-      ),
+    _replace(_measure(presentation));
+  }
+
+  /// Re-measure against fonts that arrived after the window was measured.
+  ///
+  /// A cached [TextPainter] keeps the layout it was given. On web the
+  /// reading faces are not bundled, and a fallback face for a character the
+  /// first choice lacks is fetched on demand: text measured before it landed
+  /// draws that character as nothing, and would go on doing so until the next
+  /// window — then appear in place, mid-screen. `RenderParagraph` re-lays
+  /// itself out on this same notification for the same reason.
+  void _onSystemFontsChanged() {
+    final presentation = _presentation;
+    if (presentation == null || !session.scrolling) return;
+    _replace(_measure(presentation));
+  }
+
+  ScrollLayout _measure(ResolvedPresentation presentation) {
+    final (aheadPx, behindPx) = _pixelTargets(presentation);
+
+    return measureRun(
+      tokens: tokens,
+      index: session.index,
+      style: readingTextStyle(presentation),
+      styleKey: scrollStyleKeyFor(presentation.config),
+      chapterStarts: chapterStarts,
+      isParagraphEnd: isParagraphEnd,
+      aheadPx: aheadPx,
+      behindPx: behindPx,
+      previousMeanAdvance: layout.value?.run.meanAdvance,
     );
   }
 
@@ -179,22 +199,27 @@ class ScrollClock {
   ///
   /// Derived from the surface's own width and the profile's `anchorX`, so
   /// the window always spans the viewport rather than a token count that a
-  /// wide screen or a large type size can outrun. Before a width is known —
-  /// the first frame, before any `LayoutBuilder` has reported one — this
-  /// falls back to the old fixed token counts, converted to pixels through a
-  /// type-size guess, and gets replaced the moment a real width arrives.
+  /// wide screen or a large type size can outrun, plus [scrollInkMarginEm]
+  /// on each side for ink that crosses the edge from beyond it. Before a
+  /// width is known — the first frame, before any `LayoutBuilder` has
+  /// reported one — this falls back to the old fixed token counts, converted
+  /// to pixels through a type-size guess, and gets replaced the moment a real
+  /// width arrives.
   (double, double) _pixelTargets(ResolvedPresentation presentation) {
+    final config = presentation.config;
+    final margin = config.fontSizePt * scrollInkMarginEm;
+
     final width = _viewportWidth;
     if (width == null) {
-      final guess = presentation.config.fontSizePt * scrollAdvanceGuessEm;
+      final guess = config.fontSizePt * scrollAdvanceGuessEm;
       return (
-        scrollFallbackWindowAfter * guess,
-        scrollFallbackWindowBefore * guess,
+        scrollFallbackWindowAfter * guess + margin,
+        scrollFallbackWindowBefore * guess + margin,
       );
     }
 
-    final anchorX = presentation.config.anchorX;
-    return ((1 - anchorX) * width, anchorX * width);
+    final anchorX = config.anchorX;
+    return ((1 - anchorX) * width + margin, anchorX * width + margin);
   }
 
   void _replace(ScrollLayout? next) {
