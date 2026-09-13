@@ -68,11 +68,37 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
 
       - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           channel: stable
           cache: true
+
+      - name: Validate tag matches pubspec.yaml and export version info
+        run: |
+          if [ "${{ github.ref_type }}" != "tag" ]; then
+            echo "::error::Deploy requires a tag push (git push origin vX.Y.Z). workflow_dispatch on a non-tag ref is not supported."
+            exit 1
+          fi
+
+          TAG_VERSION="${{ github.ref_name }}"
+          TAG_VERSION="${TAG_VERSION#v}"
+
+          PUBSPEC_VERSION=$(sed 's/\r$//' app/pubspec.yaml | grep '^version:' | sed 's/version: //' | sed 's/+.*//')
+
+          if [ "$TAG_VERSION" != "$PUBSPEC_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) does not match app/pubspec.yaml version ($PUBSPEC_VERSION). Ensure the tag vX.Y.Z matches the pubspec version X.Y.Z before deploying."
+            exit 1
+          fi
+
+          BUILD_NUMBER=$(git tag -l 'v*' --merged "${{ github.ref_name }}" | wc -l)
+
+          echo "TAG_VERSION=$TAG_VERSION" >> $GITHUB_ENV
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
+
+          echo "Deploying version $TAG_VERSION (build $BUILD_NUMBER)"
 
       - name: Install dependencies
         run: flutter pub get
@@ -86,8 +112,12 @@ jobs:
       # this build already writes to build/web/canvaskit/, instead of
       # resolving flutter_bootstrap.js's buildConfig to Google's CDN at
       # runtime (docs/adr/0028-content-security-policy.md, #160).
+      #
+      # --build-name and --build-number are derived from the git tag and exported
+      # by the validation step, so the About screen (via PackageInfo.fromPlatform())
+      # reports the correct release version instead of the pubspec default.
       - name: Build web
-        run: flutter build web --no-web-resources-cdn --dart-define=HEREADER_API=$HEREADER_API
+        run: flutter build web --no-web-resources-cdn --dart-define=HEREADER_API=$HEREADER_API --build-name=$TAG_VERSION --build-number=$BUILD_NUMBER
         working-directory: app
 
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
