@@ -23,6 +23,7 @@ import 'note_editor_screen.dart';
 import 'profile_presentation.dart';
 import 'reading_display.dart';
 import 'section_header.dart';
+import 'visible_stream_builder.dart';
 
 /// Identifies the add button, for a test that would otherwise match its
 /// tooltip. Same argument as `readerPlayButtonKey`: the tooltip is copy, and
@@ -422,7 +423,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
     // Wraps the whole Scaffold, not just the shelf: the FAB is a sibling of
     // the body in the widget this returns, so it needs the same snapshot the
     // body already keys its empty state off of, not a copy of its own.
-    return StreamBuilder<List<BookSummary>>(
+    return VisibleStreamBuilder<List<BookSummary>>(
       stream: _repo.watchLibrary(sort: _sort, reversed: _reversed),
       builder: (context, snapshot) {
         final books = snapshot.data;

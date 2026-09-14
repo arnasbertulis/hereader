@@ -20,6 +20,7 @@ import 'library_book.dart';
 import 'profile_presentation.dart';
 import 'reading_display.dart';
 import 'section_header.dart';
+import 'visible_stream_builder.dart';
 
 /// How many books the recent row shows, beyond the one in the continue card.
 const int _recentCount = 4;
@@ -196,7 +197,7 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           children: [
             Expanded(
-              child: StreamBuilder<List<BookSummary>>(
+              child: VisibleStreamBuilder<List<BookSummary>>(
                 stream: _repo.watchLibrary(),
                 builder: (context, snapshot) {
                   final books = snapshot.data;
