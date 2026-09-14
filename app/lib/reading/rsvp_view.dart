@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import 'profile_presentation.dart';
@@ -135,14 +136,33 @@ class RsvpView extends StatelessWidget {
           );
         }
 
+        // Every word, fitting or overflowing, gets the same fixed-width clip
+        // box so horizontal placement has one writer. Aligning the word
+        // inside it at anchorX reproduces the fixation-point formula an
+        // intrinsic-width word gets from the outer Align below; when the
+        // word is wider than the box, that same formula clips the excess
+        // from both ends in proportion to anchorX instead of always losing
+        // the end away from the reader's anchor (#468, ADR 0035 §4
+        // amendment).
+        word = SizedBox(
+          width: availableTextWidth,
+          child: ClipRect(
+            child: OverflowBox(
+              maxWidth: double.infinity,
+              fit: OverflowBoxFit.deferToChild,
+              alignment: Alignment(config.anchorX * 2 - 1, 0),
+              child: word,
+            ),
+          ),
+        );
+
         return ColoredBox(
           color: colorOf(surfaceArgbFor(presentation)),
           child: Align(
-            // Anchor fractions map onto Alignment's -1..1 range.
-            alignment: Alignment(
-              config.anchorX * 2 - 1,
-              config.anchorY * 2 - 1,
-            ),
+            // Anchor fractions map onto Alignment's -1..1 range. Vertical
+            // only: the clip box above always fills the width, so anchorX is
+            // written there and nowhere else.
+            alignment: Alignment(0, config.anchorY * 2 - 1),
             child: Padding(
               padding: _horizontalPadding,
               child: transition == 0
