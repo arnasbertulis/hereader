@@ -99,6 +99,45 @@ pinned away from it. The two levers point the same word at two different
 inputs on purpose: one is the reader's explicit choice for chrome, the other
 is the platform's ambient setting for content.
 
+**Amendment, 2026-09-14 (#468): a floor-overflowing word is clipped visibly,
+holding the fixation point.** `fitFontSizePt` is floored at
+`PresentationConfig.minFontSizePt` and, rarer still, a token can stay wider
+than the surface even at that floor. `Text`/`Text.rich` already carried
+`overflow: TextOverflow.clip`, but sat inside an unconstrained `Padding`, so
+the clip had no box to act against — the trailing glyphs painted straight
+past the edge of the reading surface instead. That silently resurrected
+"let an over-wide word overflow the viewport", the alternative this section
+already rejected for the whole-word case, because it holds the fixation
+point but loses the ends of the word.
+
+The fixation point — the point `anchorX` of the way along the word, the
+thing this surface exists to hold still — is held for an overflowing word
+just as it is for an ordinary one. `RsvpView` gives **every** word, fitting
+or overflowing, one fixed-width `SizedBox(width: availableTextWidth)` /
+`ClipRect` / `OverflowBox` box, aligning the word inside it at `anchorX`.
+That single box is now the one place horizontal placement is written,
+instead of `Align` positioning an intrinsic-width box for an ordinary word
+and a separate clip box replacing it for an overflowing one: two paths
+writing the same fact, kept in sync only because their formulas happened to
+match. When the word is wider than the box, the same `anchorX` alignment
+that places an ordinary word clips the excess from both ends in proportion
+to `anchorX` — at 0.3, 30% of the excess is lost off the start and 70% off
+the end — rather than clipping one side only.
+
+A three-way `textAlign` snap (`start`/`center`/`end` by which side of 0.5
+`anchorX` fell on) was tried and rejected. A full-width box collapses the
+offset a continuous `anchorX` would produce, so a snap could at best hold
+the fixation point at `anchorX` 0, ½ and 1. In practice it held it only at
+0: Flutter lays out a single line wider than its box from its left edge
+whatever `textAlign` says, so `center` and `end` never moved the glyphs.
+
+The clip follows `anchorX` rather than always keeping the head of the word
+because `anchorX` exists so a reader with a scotoma to one side can read
+from the opposite side of the surface
+(`packages/rsvp_engine/lib/src/profile/profile.dart:85-88`); a clip that
+always kept the head of the word would put the visible remainder on the
+side closest to that reader's blind spot.
+
 ### 5. Playback starts only from a deliberate act on the reading surface
 
 Dismissing a sheet is not such an act. This ADR states the rule and not the

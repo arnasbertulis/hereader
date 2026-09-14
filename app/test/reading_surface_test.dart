@@ -21,6 +21,16 @@ PlaybackUpdate _showing(String word) => PlaybackUpdate(
   token: Token(text: word, charOffset: 0),
 );
 
+/// Global x of the point [anchorX] of the way along the glyph run the
+/// paragraph painted, wherever its box and textAlign put that run.
+double _paintedFixationX(RenderParagraph paragraph, double anchorX) {
+  final start = paragraph
+      .getOffsetForCaret(const TextPosition(offset: 0), Rect.zero)
+      .dx;
+  final width = paragraph.getMaxIntrinsicWidth(double.infinity);
+  return paragraph.localToGlobal(Offset(start + anchorX * width, 0)).dx;
+}
+
 ReadingProfile _profile({
   PresentationConfig presentation = const PresentationConfig(),
   PacingConfig pacing = const PacingConfig(),
@@ -221,6 +231,104 @@ void main() {
       },
     );
 
+    // #468. A word still wider than availableTextWidth at minFontSizePt used
+    // to paint straight past the reading surface: the Text/Text.rich sat in
+    // an unconstrained Padding, so overflow: TextOverflow.clip never had a
+    // box to clip against. Every word, fitting or overflowing, is now placed
+    // in one fixed-width clip box aligned at anchorX, so the fixation point
+    // -- the point anchorX of the way along the word -- stays put even when
+    // the excess is clipped from both ends (ADR 0035 §4, #468 amendment).
+    for (final anchorX in [0.0, 0.3, 0.5, 1.0]) {
+      testWidgets('holds the fixation point and clips a floor-overflowing word, '
+          'anchorX $anchorX', (tester) async {
+        addTearDown(tester.view.reset);
+        tester.view.physicalSize = const Size(150, 400);
+        tester.view.devicePixelRatio = 1.0;
+
+        const extremeWord =
+            'pneumonoultramicroscopicsilicovolcanoconiosisantidisestablishmentarianism';
+        final presentation = PresentationConfig(
+          fontSizePt: 44,
+          anchorX: anchorX,
+        );
+        final resolved = resolvePresentation(presentation, Brightness.light);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: RsvpView(
+              update: _showing(extremeWord),
+              presentation: resolved,
+            ),
+          ),
+        );
+
+        const availableTextWidth = 150.0 - 32.0;
+
+        final paragraph = tester.renderObject<RenderParagraph>(
+          find.descendant(
+            of: find.byType(RsvpView),
+            matching: find.byType(RichText),
+          ),
+        );
+        expect(
+          paragraph.getMaxIntrinsicWidth(double.infinity),
+          greaterThan(availableTextWidth),
+        );
+
+        expect(
+          _paintedFixationX(paragraph, anchorX),
+          closeTo(16 + anchorX * availableTextWidth, 1.0),
+        );
+
+        final clipRect = tester.getRect(
+          find
+              .ancestor(
+                of: find.byType(RichText),
+                matching: find.byType(ClipRect),
+              )
+              .first,
+        );
+        expect(clipRect.left, closeTo(16, 1.0));
+        expect(clipRect.right, closeTo(16 + availableTextWidth, 1.0));
+      });
+    }
+
+    testWidgets(
+      'holds the fixation point for a fitting, non-overflowing word too',
+      (tester) async {
+        addTearDown(tester.view.reset);
+        tester.view.physicalSize = const Size(150, 400);
+        tester.view.devicePixelRatio = 1.0;
+
+        const anchorX = 0.3;
+        final presentation = PresentationConfig(
+          fontSizePt: 44,
+          anchorX: anchorX,
+        );
+        final resolved = resolvePresentation(presentation, Brightness.light);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: RsvpView(update: _showing('cat'), presentation: resolved),
+          ),
+        );
+
+        const availableTextWidth = 150.0 - 32.0;
+
+        final paragraph = tester.renderObject<RenderParagraph>(
+          find.descendant(
+            of: find.byType(RsvpView),
+            matching: find.byType(RichText),
+          ),
+        );
+
+        expect(
+          _paintedFixationX(paragraph, anchorX),
+          closeTo(16 + anchorX * availableTextWidth, 1.0),
+        );
+      },
+    );
+
     // #467. fitFontSizePt's TextPainter measured at TextScaler.noScaling
     // while Text/Text.rich painted at the ambient scaler, so an ordinary
     // word — not an outlier like the ones above — could be fit to a width
@@ -251,7 +359,9 @@ void main() {
         // The width actually painted — at the ambient scaler Text inherits —
         // must fit inside the surface's available width (viewport minus the
         // 16px horizontal padding on each side), not merely the width
-        // fitFontSizePt measured at some other scaler.
+        // fitFontSizePt measured at some other scaler. fitFontSizePt scales
+        // the size linearly and glyph shaping doesn't quite follow, so "fits"
+        // holds to half a physical pixel; the clip box absorbs the remainder.
         final paragraph = tester.renderObject<RenderParagraph>(
           find.descendant(
             of: find.byType(RsvpView),
@@ -259,7 +369,10 @@ void main() {
           ),
         );
         expect(paragraph.didExceedMaxLines, false);
-        expect(paragraph.size.width, lessThanOrEqualTo(320 - 32));
+        expect(
+          paragraph.getMaxIntrinsicWidth(double.infinity),
+          lessThanOrEqualTo(320 - 32 + 0.5 / tester.view.devicePixelRatio),
+        );
       },
     );
   });
