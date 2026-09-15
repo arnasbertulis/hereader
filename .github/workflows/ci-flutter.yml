@@ -142,7 +142,7 @@ jobs:
       # this builds what a deploy builds rather than a localhost variant of
       # it. Without it the check would pass on a bundle nobody ever ships.
       - name: Build web
-        run: flutter build web --no-web-resources-cdn --dart-define=HEREADER_API=https://204-168-240-12.sslip.io/api
+        run: flutter build web --no-web-resources-cdn --dart-define=HEREADER_API=https://hereader.arnasbertulis.com/api
 
   # The required context on the main ruleset is "app", not any of the three
   # jobs above, so a documentation-only pull request — where changes.outputs.dart
