@@ -1,4 +1,24 @@
 hereader.arnasbertulis.com {
+    # Cloudflare proxies this hostname (docs/adr/0039-cloudflare-authenticated-origin-pulls.md).
+    # The origin IP is public — it's in this repo's own git history — so a
+    # request reaching this site block proves nothing about having gone
+    # through Cloudflare unless something checks. client_auth does that:
+    # Cloudflare presents a client certificate signed by its own Origin Pull
+    # CA on every proxied request, and require_and_verify rejects anything
+    # that doesn't carry one. Toggled on in the Cloudflare dashboard under
+    # SSL/TLS → Origin Server → Authenticated Origin Pulls; the CA cert
+    # itself is public (not a secret) and shared across all Cloudflare
+    # accounts, downloaded from
+    # https://developers.cloudflare.com/ssl/static/authenticated_origin_pull_ca.pem.
+    tls {
+        client_auth {
+            mode require_and_verify
+            trust_pool file {
+                pem_file /etc/caddy/cloudflare-origin-pull-ca.pem
+            }
+        }
+    }
+
     header {
         Cross-Origin-Opener-Policy same-origin
         Cross-Origin-Embedder-Policy require-corp
@@ -25,7 +45,22 @@ hereader.arnasbertulis.com {
         request_body {
             max_size 16MB
         }
-        reverse_proxy app:8080
+        reverse_proxy app:8080 {
+            # RateLimitFilter (server/src/main/java/lt/hereader/server/config/
+            # RateLimitFilter.java) keys off request.getRemoteAddr(), which
+            # Spring's forward-headers-strategy=framework resolves from
+            # X-Forwarded-For. Caddy's default behaviour is to append the
+            # connecting IP to whatever X-Forwarded-For a client already
+            # sent, and Spring trusts the leftmost entry — so a client could
+            # forge its own rate-limit identity by sending its own
+            # X-Forwarded-For. Overwrite it instead with CF-Connecting-IP,
+            # which Cloudflare sets from its own edge connection and strips
+            # from the inbound request before doing so; trustworthy here
+            # specifically because client_auth above has already confirmed
+            # this request came from Cloudflare and not straight to the
+            # origin IP.
+            header_up X-Forwarded-For {http.request.header.CF-Connecting-IP}
+        }
     }
 
     handle {

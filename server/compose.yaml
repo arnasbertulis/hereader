@@ -115,6 +115,8 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Cloudflare's Origin Pull CA — public, not a secret (ADR 0039).
+      - ./cloudflare-origin-pull-ca.pem:/etc/caddy/cloudflare-origin-pull-ca.pem:ro
       - caddy-data:/data
       - caddy-config:/config
 
