@@ -4,6 +4,18 @@ import 'package:rsvp_engine/rsvp_engine.dart';
 
 import 'profile_presentation.dart';
 
+/// A code-unit `[start, end)` span over a word's grapheme clusters, wide
+/// enough to hold a whole letter as the reader sees it — a combining mark or
+/// an emoji included — never part of one. Both the ORP rule and the
+/// fixation-point rule below return one of these, so the same split paints
+/// either (#475, ADR 0035 §4 amendment).
+class _HighlightRange {
+  const _HighlightRange(this.start, this.end);
+
+  final int start;
+  final int end;
+}
+
 /// Draws a single token at the profile's anchor point.
 ///
 /// Owns no timing and no state. Give it the latest [PlaybackUpdate] and it
@@ -33,13 +45,61 @@ class RsvpView extends StatelessWidget {
   /// calculation and the Padding it fits inside can't drift apart.
   static const _horizontalPadding = EdgeInsets.symmetric(horizontal: 16);
 
-  /// Index of the letter to highlight. Preference only: no study behind it.
-  int _orpIndex(String word) {
-    final n = word.length;
-    if (n <= 1) return 0;
-    if (n <= 5) return 1;
-    if (n <= 9) return 2;
-    return 3;
+  /// The letter to highlight for a word that fits. Preference only: no study
+  /// behind it. Counts grapheme clusters, not UTF-16 code units, so a
+  /// combining mark or an emoji is never split.
+  _HighlightRange _orpRange(String word) {
+    final clusters = word.characters.toList();
+    if (clusters.isEmpty) return const _HighlightRange(0, 0);
+    final n = clusters.length;
+    final target = n <= 1
+        ? 0
+        : n <= 5
+        ? 1
+        : n <= 9
+        ? 2
+        : 3;
+    var start = 0;
+    for (var i = 0; i < target; i++) {
+      start += clusters[i].length;
+    }
+    return _HighlightRange(start, start + clusters[target].length);
+  }
+
+  /// The letter to highlight for a word still visibly wider than the surface
+  /// at the floor font size: the grapheme cluster whose painted box contains
+  /// the fixation point, since the ORP rule's letter may already be clipped
+  /// off (#475, ADR 0035 §4 amendment). `style` and `textScaler` must match
+  /// what the word is actually painted with, so this measurement agrees with
+  /// the paint.
+  _HighlightRange _fixationRange(
+    String word,
+    TextStyle style,
+    TextScaler textScaler,
+    double anchorX,
+  ) {
+    final clusters = word.characters.toList();
+    if (clusters.isEmpty) return const _HighlightRange(0, 0);
+    final painter = TextPainter(
+      text: TextSpan(text: word, style: style),
+      textDirection: TextDirection.ltr,
+      textScaler: textScaler,
+      maxLines: 1,
+    )..layout();
+    final targetX = (anchorX * painter.width).clamp(0.0, painter.width);
+    var start = 0;
+    for (final cluster in clusters) {
+      final end = start + cluster.length;
+      final endX = end >= word.length
+          ? painter.width
+          : painter.getOffsetForCaret(TextPosition(offset: end), Rect.zero).dx;
+      if (targetX < endX || end >= word.length) {
+        return _HighlightRange(start, end);
+      }
+      start = end;
+    }
+    final last = clusters.last;
+    return _HighlightRange(word.length - last.length, word.length);
   }
 
   @override
@@ -60,6 +120,11 @@ class RsvpView extends StatelessWidget {
     // the platform's own text scaler rather than pinning away from it, the
     // opposite of chromeTextScale's stance (#467, ADR 0035 §4 amendment).
     final textScaler = MediaQuery.textScalerOf(context);
+
+    // Read alongside the text scaler, for the same reason: fitFontSizePt
+    // decides overflow-at-the-floor to the same physical-pixel tolerance the
+    // paint is judged by (#475, ADR 0035 §4 amendment).
+    final devicePixelRatio = MediaQuery.devicePixelRatioOf(context);
 
     // Measured in a LayoutBuilder rather than off MediaQuery's full window
     // size, so the word grows to fill *this widget's* box -- the reader
@@ -85,15 +150,17 @@ class RsvpView extends StatelessWidget {
         // Grow-to-fill decides the size a short word gets; scale-to-fit only
         // ever shrinks *this* word further, never past what the profile
         // already allows the reader to choose (ADR 0035 §4).
-        final fontSizePt = token == null
-            ? filledFontSizePt
+        final fit = token == null
+            ? null
             : fitFontSizePt(
                 token.text,
                 presentation,
                 basePt: filledFontSizePt,
                 availableWidth: availableTextWidth,
                 textScaler: textScaler,
+                devicePixelRatio: devicePixelRatio,
               );
+        final fontSizePt = fit?.fontSizePt ?? filledFontSizePt;
         final style = readingTextStyle(presentation, fontSizePt: fontSizePt);
 
         Widget word;
@@ -105,16 +172,18 @@ class RsvpView extends StatelessWidget {
             height: fontSizePt * 1.2,
           );
         } else if (config.orpHighlight) {
-          final i = _orpIndex(token.text);
+          final range = (fit?.overflowsAtFloor ?? false)
+              ? _fixationRange(token.text, style, textScaler, config.anchorX)
+              : _orpRange(token.text);
           word = Text.rich(
             TextSpan(
               children: [
-                TextSpan(text: token.text.substring(0, i)),
+                TextSpan(text: token.text.substring(0, range.start)),
                 TextSpan(
-                  text: token.text[i],
+                  text: token.text.substring(range.start, range.end),
                   style: TextStyle(color: colorOf(orpArgb)),
                 ),
-                TextSpan(text: token.text.substring(i + 1)),
+                TextSpan(text: token.text.substring(range.end)),
               ],
             ),
             key: ValueKey('${update!.index}'),
