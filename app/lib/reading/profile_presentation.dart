@@ -492,14 +492,33 @@ double scaledFontSizePt(double basePt, double availableWidth) {
 /// `chromeTextScale`'s stance (#467) — so the width fit here must scale by
 /// the same factor the paint call will apply, or an ordinary word can run
 /// past the surface it was measured to fit inside.
-double fitFontSizePt(
+/// The result of fitting a word to the reading surface: the font size to
+/// paint it at, and whether it is still visibly wider than the surface at
+/// that size. The floor, [PresentationConfig.minFontSizePt], is the only
+/// size this can happen at (ADR 0035 §4, #468 amendment).
+///
+/// "Visibly" means by more than half a physical pixel — the same tolerance
+/// `reading_surface_test.dart` already uses for "fits", since scaling the
+/// measured width linearly doesn't quite track glyph shaping and the clip
+/// box absorbs the sub-pixel remainder either way.
+class FitResult {
+  const FitResult({required this.fontSizePt, required this.overflowsAtFloor});
+
+  final double fontSizePt;
+  final bool overflowsAtFloor;
+}
+
+FitResult fitFontSizePt(
   String text,
   ResolvedPresentation presentation, {
   required double basePt,
   required double availableWidth,
   required TextScaler textScaler,
+  required double devicePixelRatio,
 }) {
-  if (text.isEmpty || availableWidth <= 0) return basePt;
+  if (text.isEmpty || availableWidth <= 0) {
+    return FitResult(fontSizePt: basePt, overflowsAtFloor: false);
+  }
   final painter = TextPainter(
     text: TextSpan(
       text: text,
@@ -509,11 +528,32 @@ double fitFontSizePt(
     textScaler: textScaler,
     maxLines: 1,
   )..layout();
-  if (painter.width <= availableWidth) return basePt;
+  if (painter.width <= availableWidth) {
+    return FitResult(fontSizePt: basePt, overflowsAtFloor: false);
+  }
   final fitted = basePt * (availableWidth / painter.width);
-  return fitted < PresentationConfig.minFontSizePt
-      ? PresentationConfig.minFontSizePt
-      : fitted;
+  if (fitted >= PresentationConfig.minFontSizePt) {
+    return FitResult(fontSizePt: fitted, overflowsAtFloor: false);
+  }
+  // Floored, and possibly still wider than the surface: lay the word out
+  // again at the floor, the only size that second measurement is needed at.
+  final floorPainter = TextPainter(
+    text: TextSpan(
+      text: text,
+      style: readingTextStyle(
+        presentation,
+        fontSizePt: PresentationConfig.minFontSizePt,
+      ),
+    ),
+    textDirection: TextDirection.ltr,
+    textScaler: textScaler,
+    maxLines: 1,
+  )..layout();
+  final tolerance = 0.5 / devicePixelRatio;
+  return FitResult(
+    fontSizePt: PresentationConfig.minFontSizePt,
+    overflowsAtFloor: floorPainter.width > availableWidth + tolerance,
+  );
 }
 
 // -- descriptions -------------------------------------------------------

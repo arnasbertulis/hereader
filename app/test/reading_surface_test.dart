@@ -31,6 +31,26 @@ double _paintedFixationX(RenderParagraph paragraph, double anchorX) {
   return paragraph.localToGlobal(Offset(start + anchorX * width, 0)).dx;
 }
 
+/// The `[start, end)` code-unit offsets RsvpView marked as the ORP highlight,
+/// read off the painted RichText's own span tree rather than recomputed —
+/// the highlighted child is the only one carrying a style override.
+({int start, int end}) _highlightOffsets(RenderParagraph paragraph) {
+  // Text.rich wraps the TextSpan it is given in one more TextSpan carrying
+  // the effective style, so RsvpView's own three-child span sits one level
+  // down from what RenderParagraph.text exposes.
+  final root = paragraph.text as TextSpan;
+  final wrapped = root.children!.single as TextSpan;
+  var offset = 0;
+  for (final span in wrapped.children!.cast<TextSpan>()) {
+    final text = span.text!;
+    if (span.style != null) {
+      return (start: offset, end: offset + text.length);
+    }
+    offset += text.length;
+  }
+  throw StateError('no highlighted span found in $root');
+}
+
 ReadingProfile _profile({
   PresentationConfig presentation = const PresentationConfig(),
   PacingConfig pacing = const PacingConfig(),
@@ -328,6 +348,266 @@ void main() {
         );
       },
     );
+
+    // #475. The ORP highlight always marked letter 0-3 from the start of the
+    // word, counted in UTF-16 code units. Once a word is clipped at the
+    // floor (#468), that letter can be off screen or can split a combining
+    // mark's code units apart, so the highlight moves to the whole grapheme
+    // cluster under the fixation point instead (ADR 0035 §4, #475
+    // amendment).
+    group('#475. ORP highlight follows the fixation point when floored', () {
+      const extremeWord =
+          'pneumonoultramicroscopicsilicovolcanoconiosisantidisestablishmentarianism';
+
+      for (final anchorX in [0.0, 0.3, 0.5, 1.0]) {
+        testWidgets('highlights the letter under the fixation point for a '
+            'floor-overflowing word, anchorX $anchorX', (tester) async {
+          addTearDown(tester.view.reset);
+          tester.view.physicalSize = const Size(150, 400);
+          tester.view.devicePixelRatio = 1.0;
+
+          final presentation = PresentationConfig(
+            fontSizePt: 44,
+            anchorX: anchorX,
+            orpHighlight: true,
+          );
+          final resolved = resolvePresentation(presentation, Brightness.light);
+
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Material(
+                child: RsvpView(
+                  update: _showing(extremeWord),
+                  presentation: resolved,
+                ),
+              ),
+            ),
+          );
+
+          const availableTextWidth = 150.0 - 32.0;
+
+          final paragraph = tester.renderObject<RenderParagraph>(
+            find.descendant(
+              of: find.byType(RsvpView),
+              matching: find.byType(RichText),
+            ),
+          );
+          expect(
+            paragraph.getMaxIntrinsicWidth(double.infinity),
+            greaterThan(availableTextWidth),
+          );
+
+          final offsets = _highlightOffsets(paragraph);
+          final boxes = paragraph.getBoxesForSelection(
+            TextSelection(baseOffset: offsets.start, extentOffset: offsets.end),
+          );
+          expect(boxes, isNotEmpty);
+          final globalLeft = paragraph
+              .localToGlobal(Offset(boxes.first.left, 0))
+              .dx;
+          final globalRight = paragraph
+              .localToGlobal(Offset(boxes.last.right, 0))
+              .dx;
+
+          final fixationX = 16 + anchorX * availableTextWidth;
+          expect(fixationX, greaterThanOrEqualTo(globalLeft - 1.0));
+          expect(fixationX, lessThanOrEqualTo(globalRight + 1.0));
+
+          final clipRect = tester.getRect(
+            find
+                .ancestor(
+                  of: find.byType(RichText),
+                  matching: find.byType(ClipRect),
+                )
+                .first,
+          );
+          expect(globalLeft, greaterThanOrEqualTo(clipRect.left - 1.0));
+          expect(globalRight, lessThanOrEqualTo(clipRect.right + 1.0));
+        });
+      }
+
+      testWidgets('keeps the ORP rule\'s letter for a fitting word', (
+        tester,
+      ) async {
+        addTearDown(tester.view.reset);
+        tester.view.physicalSize = const Size(150, 400);
+        tester.view.devicePixelRatio = 1.0;
+
+        final presentation = PresentationConfig(
+          fontSizePt: 44,
+          anchorX: 0.3,
+          orpHighlight: true,
+        );
+        final resolved = resolvePresentation(presentation, Brightness.light);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Material(
+              child: RsvpView(update: _showing('cat'), presentation: resolved),
+            ),
+          ),
+        );
+
+        final paragraph = tester.renderObject<RenderParagraph>(
+          find.descendant(
+            of: find.byType(RsvpView),
+            matching: find.byType(RichText),
+          ),
+        );
+
+        // 'cat' has 3 clusters; the ORP rule (unchanged from before #475)
+        // marks index 1, the letter 'a'.
+        final offsets = _highlightOffsets(paragraph);
+        expect(offsets.start, 1);
+        expect(offsets.end, 2);
+      });
+
+      testWidgets(
+        'highlights a whole grapheme cluster, never half of one, for a '
+        'fitting word made of one combining-mark letter',
+        (tester) async {
+          addTearDown(tester.view.reset);
+          tester.view.physicalSize = const Size(150, 400);
+          tester.view.devicePixelRatio = 1.0;
+
+          // 'e' + combining acute accent (U+0301): one grapheme cluster,
+          // "é", spanning two UTF-16 code units.
+          const word = 'é';
+          final presentation = PresentationConfig(
+            fontSizePt: 44,
+            orpHighlight: true,
+          );
+          final resolved = resolvePresentation(presentation, Brightness.light);
+
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Material(
+                child: RsvpView(update: _showing(word), presentation: resolved),
+              ),
+            ),
+          );
+
+          final paragraph = tester.renderObject<RenderParagraph>(
+            find.descendant(
+              of: find.byType(RsvpView),
+              matching: find.byType(RichText),
+            ),
+          );
+
+          final offsets = _highlightOffsets(paragraph);
+          expect(offsets.start, 0);
+          expect(offsets.end, word.length);
+        },
+      );
+
+      testWidgets(
+        'highlights a whole grapheme cluster, never half of one, for a '
+        'floor-overflowing word made of combining-mark letters',
+        (tester) async {
+          addTearDown(tester.view.reset);
+          tester.view.physicalSize = const Size(150, 400);
+          tester.view.devicePixelRatio = 1.0;
+
+          // 40 repeats of 'z' + combining acute accent: a floor-overflowing
+          // word where every grapheme cluster is two UTF-16 code units, so a
+          // highlight that split a cluster would show up as an odd-length or
+          // misaligned range.
+          final word = 'ź' * 40;
+          const anchorX = 0.6;
+          final presentation = PresentationConfig(
+            fontSizePt: 44,
+            anchorX: anchorX,
+            orpHighlight: true,
+          );
+          final resolved = resolvePresentation(presentation, Brightness.light);
+
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Material(
+                child: RsvpView(update: _showing(word), presentation: resolved),
+              ),
+            ),
+          );
+
+          const availableTextWidth = 150.0 - 32.0;
+          final paragraph = tester.renderObject<RenderParagraph>(
+            find.descendant(
+              of: find.byType(RsvpView),
+              matching: find.byType(RichText),
+            ),
+          );
+          expect(
+            paragraph.getMaxIntrinsicWidth(double.infinity),
+            greaterThan(availableTextWidth),
+          );
+
+          final offsets = _highlightOffsets(paragraph);
+          expect(offsets.end - offsets.start, 2);
+          expect(word.substring(offsets.start, offsets.end), 'ź');
+        },
+      );
+
+      testWidgets(
+        "keeps the ORP rule's letter when the floor overflow is within the "
+        'half-pixel tolerance',
+        (tester) async {
+          addTearDown(tester.view.reset);
+          tester.view.devicePixelRatio = 1.0;
+
+          const word = 'antidisestablishmentarianism';
+          final presentation = PresentationConfig(
+            fontSizePt: 44,
+            orpHighlight: true,
+          );
+          final resolved = resolvePresentation(presentation, Brightness.light);
+
+          // Independent measurement -- Flutter's own TextPainter, not
+          // fitFontSizePt -- of the word's width at the floor size, to build
+          // a viewport that overflows by less than the 0.5-physical-pixel
+          // tolerance FitResult.overflowsAtFloor applies (ADR 0035 §4, #475
+          // amendment).
+          final floorPainter = TextPainter(
+            text: TextSpan(
+              text: word,
+              style: readingTextStyle(
+                resolved,
+                fontSizePt: PresentationConfig.minFontSizePt,
+              ),
+            ),
+            textDirection: TextDirection.ltr,
+            maxLines: 1,
+          )..layout();
+
+          final availableTextWidth = floorPainter.width - 0.3;
+          tester.view.physicalSize = Size(availableTextWidth + 32.0, 400);
+
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Material(
+                child: RsvpView(update: _showing(word), presentation: resolved),
+              ),
+            ),
+          );
+
+          final paragraph = tester.renderObject<RenderParagraph>(
+            find.descendant(
+              of: find.byType(RsvpView),
+              matching: find.byType(RichText),
+            ),
+          );
+
+          final clusters = word.characters.toList();
+          var expectedStart = 0;
+          for (var i = 0; i < 3; i++) {
+            expectedStart += clusters[i].length;
+          }
+
+          final offsets = _highlightOffsets(paragraph);
+          expect(offsets.start, expectedStart);
+          expect(offsets.end, expectedStart + clusters[3].length);
+        },
+      );
+    });
 
     // #467. fitFontSizePt's TextPainter measured at TextScaler.noScaling
     // while Text/Text.rich painted at the ambient scaler, so an ordinary
