@@ -108,7 +108,7 @@ resets.
 The app-and-Postgres pairing was verified fully locally first — fresh
 volume, Flyway migrations applying cleanly, `/health` responding —
 before any of this was provisioned. Caddy's config was not, and cannot
-be, verified locally the same way: the `sslip.io` hostname resolves to
+be, verified locally the same way: the deployed hostname resolves to
 the real server's IP, not to a developer's machine, so a local Caddy
 container would simply fail its ACME challenge. This was accepted as a
 real gap in local coverage rather than worked around, since faking it
@@ -141,6 +141,19 @@ new server, or Hetzner ever changing the assigned address, means the
 public URL changes too. A real domain, if one is bought later, removes
 this coupling — noted as the natural next step if this ever needs to be
 a stable, memorable link rather than a working one.
+
+*Amendment (2026-09).* A domain was bought and the deployment now serves
+from `hereader.arnasbertulis.com`, a subdomain of a personal domain reserved
+for a separate portfolio site. The hostname is now a DNS A record pointing
+at the server's IP rather than the IP encoded in the hostname itself, which
+removes the coupling described above: moving to a new server means
+repointing DNS, not changing the hostname everywhere it appears (Caddyfile,
+CORS origins, `HEREADER_API` in the CI/CD workflows, the README). The API
+was kept as a path (`/api`) on the same hostname rather than split to its
+own subdomain — the web client and API are one Caddy instance in front of
+one container on one VPS, with no independent-scaling reason to split them,
+and same-origin avoids turning the app's own sync traffic into a
+cross-origin request.
 
 Everything currently runs as root inside its containers at the OS level
 of the host is avoided (non-root `deploy` user, non-root user inside the

@@ -68,8 +68,9 @@ host machine can reach.
 Caddy is named out of the command above rather than brought up. It runs
 `ghcr.io/arnasbertulis/hereader-web`, an image CI builds by copying the
 compiled Flutter bundle into `caddy:2`, and its certificate is issued against
-an sslip.io hostname that resolves to the server's IP — so a local one has
-nothing to serve and would fail its ACME challenge anyway. `app`'s image tag
+`hereader.arnasbertulis.com`, a hostname whose DNS A record resolves to the
+server's IP — so a local one has nothing to serve and would fail its ACME
+challenge anyway. `app`'s image tag
 comes from `HEREADER_TAG` in `.env`, defaulting to `local`, which is what
 `--build` produces here and what `server/deploy.sh` overwrites with a commit
 sha on the server. See [ADR 0023](../docs/adr/0023-continuous-deployment.md).

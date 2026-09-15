@@ -17,10 +17,12 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # The deployed hostname is the server's IP with its dots swapped for
-  # hyphens (ADR 0006). Moving the server changes this string here and in
-  # ci-flutter.yml, and nothing in the app's own source.
-  HEREADER_API: https://204-168-240-12.sslip.io/api
+  # The deployed hostname is a real domain (ADR 0006 amendment) that points
+  # at the server via a DNS A record, not derived from its IP. Moving the
+  # server means repointing DNS, not editing this string; changing the
+  # hostname itself still means updating here and in ci-flutter.yml, and
+  # nothing in the app's own source.
+  HEREADER_API: https://hereader.arnasbertulis.com/api
   SERVER_IMAGE: ghcr.io/${{ github.repository_owner }}/hereader-server
   WEB_IMAGE: ghcr.io/${{ github.repository_owner }}/hereader-web
 
