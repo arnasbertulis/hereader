@@ -264,9 +264,18 @@ makes them stale, not batched into a separate cleanup pass later. If a PR
 changes what a README claims about the project, the README changes in the
 same PR.
 
-"Not built yet" / "Known limitations" sections are treated as load-bearing,
-not decorative — an interviewer reading the README should get an accurate
-picture of the project's actual state, including its gaps.
+The root `README.md` is a short entry point — what the project is, what
+works today, and where to go next. The detail it used to carry inline now
+lives in `docs/status.md`, `docs/known-limitations.md` and
+`docs/architecture.md`, alongside the ADRs in `docs/adr/`. Those pages carry
+the same rule: a PR that changes what one of them claims updates it in the
+same PR.
+
+`docs/known-limitations.md` is treated as load-bearing, not decorative — an
+interviewer reading the docs should get an accurate picture of the
+project's actual state, including its gaps. A trade taken deliberately goes
+there; a bug or deferred cleanup gets a GitHub issue instead (see *Issues*
+above).
 
 ## Windows / PowerShell
 
