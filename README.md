@@ -80,7 +80,9 @@ Each directory carries its own README with the detail this one leaves out:
 [`app`](app/README.md), [`server`](server/README.md),
 [`rsvp_engine`](packages/rsvp_engine/README.md),
 [`epub_reader`](packages/epub_reader/README.md).
-[`CONTRIBUTING.md`](CONTRIBUTING.md) covers the process this repo follows.
+[`CONTRIBUTING.md`](CONTRIBUTING.md) covers the process this repo follows,
+[`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) how people in it treat each other,
+and [`CHANGELOG.md`](CHANGELOG.md) what each release shipped.
 
 ## Running it
 

@@ -2,8 +2,9 @@
 
 ## Supported versions
 
-Solo project, no numbered releases — only the current `main` branch is
-supported.
+Solo project — only the latest [release](https://github.com/arnasbertulis/hereader/releases),
+the one deployed at hereader.arnasbertulis.com, is supported. Fixes land on
+`main` and ship in the next release.
 
 ## Reporting a vulnerability
 
