@@ -14,6 +14,8 @@ reader between devices. Live at
 it directly in a browser, or see [`docs/status.md`](docs/status.md) for what
 works today.
 
+https://github.com/user-attachments/assets/9c2b9218-ec69-4ccc-b512-7cb934ae6a5b
+
 ## Why this exists
 
 **Central field loss**, a blind spot in the middle of the visual field, makes
