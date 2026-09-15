@@ -29,7 +29,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 /// `server.forward-headers-strategy=framework` (`application.properties`)
 /// makes Spring translate `X-Forwarded-For` before this filter runs; without
 /// it every caller behind Caddy shares the Docker bridge address and would be
-/// throttled as one client.
+/// throttled as one client. That header is only trustworthy because Caddy
+/// overwrites it with Cloudflare's `CF-Connecting-IP`, itself only
+/// trustworthy because Caddy's client_auth rejects anything not proven to
+/// have come through Cloudflare first (`server/Caddyfile`,
+/// docs/adr/0039-cloudflare-authenticated-origin-pulls.md) — a caller
+/// talking to this app directly, bypassing Caddy, could set
+/// `X-Forwarded-For` to whatever it likes.
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
 

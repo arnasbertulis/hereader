@@ -45,3 +45,4 @@ walks through the ones that shape the most code.
 | [0036](0036-chrome-prose-is-budgeted-in-blocks.md) | Chrome prose is budgeted in blocks: one sentence per control, one per section, checked by a test |
 | [0037](0037-transport-controls-are-named-in-a-legend.md) | Transport controls are named in a legend behind one (i), and the first Play teaches the tap that pauses |
 | [0038](0038-changing-a-preset-forks-it.md) | Changing a Preset forks it, and the Settings row opens the active profile's editor |
+| [0039](0039-cloudflare-authenticated-origin-pulls.md) | Cloudflare's proxy is verified at the origin with Authenticated Origin Pulls, so the origin can't be reached around it and the rate limiter can trust its visitor-IP header |
