@@ -24,10 +24,10 @@ import java.util.List;
 class SecurityConfig {
 
     // Comma-separated. Defaults cover local Flutter web dev (random port
-    // per run, hence the wildcard) and the live sslip.io deployment.
-    // Overridable via env var so a future real domain doesn't need a
-    // code change, just a new value in .env.
-    @Value("${hereader.cors.allowed-origins:http://localhost:*,https://204-168-240-12.sslip.io}")
+    // per run, hence the wildcard) and the live hereader.arnasbertulis.com
+    // deployment. Overridable via env var so a future hostname change
+    // doesn't need a code change, just a new value in .env.
+    @Value("${hereader.cors.allowed-origins:http://localhost:*,https://hereader.arnasbertulis.com}")
     private String allowedOrigins;
 
     @Bean

@@ -92,7 +92,7 @@ services:
       DATABASE_USER: ${DATABASE_USER}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD}
       JWT_SECRET: ${JWT_SECRET}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://204-168-240-12.sslip.io}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://hereader.arnasbertulis.com}
       CATALOGUE_COVER_CACHE_DIR: /var/lib/hereader/catalogue-covers
     volumes:
       - catalogue-covers:/var/lib/hereader/catalogue-covers
@@ -100,8 +100,9 @@ services:
   # Caddy plus the compiled web bundle, built by CI from app/web.Dockerfile.
   # It has no `build` stanza because building it needs a `flutter build web`
   # to have run first, and because ADR 0006 already establishes that this
-  # layer cannot be exercised locally at all: the sslip.io hostname resolves
-  # to the server's IP, so a local Caddy fails its ACME challenge. Local
+  # layer cannot be exercised locally at all: the hereader.arnasbertulis.com
+  # hostname resolves to the server's IP, so a local Caddy fails its ACME
+  # challenge. Local
   # work runs `docker compose up db app` and talks to the service directly.
   caddy:
     image: ghcr.io/arnasbertulis/hereader-web:${HEREADER_TAG:-local}
