@@ -10,9 +10,9 @@ eyes — the technique is Rapid Serial Visual Presentation (RSVP).
 be written and read alongside them, reading settings can be adjusted and
 saved, and both a reading position and the settings themselves follow the
 reader between devices. Live at
-**[https://204-168-240-12.sslip.io](https://204-168-240-12.sslip.io)** — open
-it directly in a browser, or see [`docs/status.md`](docs/status.md) for what
-works today.
+**[https://hereader.arnasbertulis.com](https://hereader.arnasbertulis.com)**
+— open it directly in a browser, or see [`docs/status.md`](docs/status.md)
+for what works today.
 
 https://github.com/user-attachments/assets/9c2b9218-ec69-4ccc-b512-7cb934ae6a5b
 
