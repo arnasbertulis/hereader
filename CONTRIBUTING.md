@@ -181,6 +181,20 @@ changed on the server. The subject line does **not** repeat the version, since
 `git tag -n` prints the tag name beside it and `v0.2.0 v0.2.0 ...` is what
 repeating it looks like.
 
+That prose is written once, as the release's entry in `CHANGELOG.md`, in the
+same pull request as the version bump: `## [Unreleased]` becomes
+`## [0.2.0] — <date>`, a fresh empty one goes above it, and the version's link
+goes at the foot of the file. The tag message is that entry's body, and once
+the tag is pushed the GitHub release is made from the tag rather than written a
+third time:
+
+```powershell
+gh release create v0.2.0 --verify-tag --notes-from-tag
+```
+
+Not `--generate-notes`: that produces the list of pull requests this section
+already rules out.
+
 After the push, watch the deploy — `gh run watch <id> --exit-status` — and then
 check the deployment yourself rather than reading the workflow's own result.
 The pipeline polls `/health` and reports what it saw at that moment; a request
