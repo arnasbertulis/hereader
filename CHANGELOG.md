@@ -8,6 +8,12 @@ same tag.
 
 ## [Unreleased]
 
+## [0.5.3] — 2026-09-15
+
+Sharing a link to hereader now shows a preview card — the app's name, what it
+is for, and an image — instead of a bare address. The repository also gains
+this changelog, a code of conduct, and a published release for every version.
+
 ## [0.5.2] — 2026-09-15
 
 hereader moves to its own address, hereader.arnasbertulis.com; the old sslip.io
@@ -114,7 +120,8 @@ Covers everything through the deployment change: the service and the web
 bundle built into container images by CI and pulled by the server, over a key
 restricted to the deploy script.
 
-[Unreleased]: https://github.com/arnasbertulis/hereader/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/arnasbertulis/hereader/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/arnasbertulis/hereader/releases/tag/v0.5.3
 [0.5.2]: https://github.com/arnasbertulis/hereader/releases/tag/v0.5.2
 [0.5.1]: https://github.com/arnasbertulis/hereader/releases/tag/v0.5.1
 [0.5.0]: https://github.com/arnasbertulis/hereader/releases/tag/v0.5.0
