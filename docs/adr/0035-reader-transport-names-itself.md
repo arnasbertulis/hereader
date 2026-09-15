@@ -138,6 +138,47 @@ from the opposite side of the surface
 always kept the head of the word would put the visible remainder on the
 side closest to that reader's blind spot.
 
+**Amendment, 2026-09-15 (#475): the ORP highlight marks the letter to
+fixate on, not always the ORP rule's letter.** The ORP highlight always
+marked letter 0-3 from the start of the word, counted from the start
+regardless of what #468's clip removed. Once the clipped head grew past
+that letter — which happens sooner the larger `anchorX` is — the reader
+saw the word with no highlight at all, on the one surface this app exists
+to keep legible for a reader who turned the highlight on.
+
+The highlight marks the letter to fixate on. For a word that fits, that is
+the letter the ORP rule picks. For a word still too wide at
+`PresentationConfig.minFontSizePt`, and so visibly cut off by #468's clip,
+it is the letter under the fixation point instead, since the ORP rule's
+letter may already be gone. One meaning, two rules, and only the word being
+visibly cut off — by more than half a physical pixel, the same tolerance
+`reading_surface_test.dart` already used for "fits" — picks between them.
+The trigger is a boundary the reader can see, not whether the ORP letter in
+particular survived: a clipped word at `anchorX` 0.0 switches rules too,
+even though its ORP letter would have stayed on screen.
+
+`fitFontSizePt` (`app/lib/reading/profile_presentation.dart`) now returns a
+small `FitResult`, carrying the font size and whether the word overflows at
+it, and lays the word out a second time only in that floored branch —
+`RsvpView` never measures fit twice. The letter under the fixation point is
+the grapheme cluster whose painted box contains the point `anchorX` of the
+way along the word, found from a `TextPainter` built with the same style
+and text scaler the word is actually painted with. `_orpIndex` moved to
+grapheme clusters too, since it and the fixation-point rule count letters
+the same way now: `token.text[i]` and `substring` counted UTF-16 code
+units, which could split a combining mark or an emoji in half. Both rules
+return the same `[start, end)` range type, so one split around that range
+paints either.
+
+Rejected: accepting the missing highlight and documenting it — the reader
+who turned the highlight on is a low-vision reader, and this is the outlier
+case they turned it on for. Clamping to the first visible letter, or
+recomputing the ORP rule on the visible span, both put the highlight at the
+surface edge, the worst place for a reader with a scotoma there. Switching
+only when the ORP letter itself goes off screen was rejected because that
+threshold depends on `anchorX`, glyph widths and font size at once, so the
+reader has no way to predict when the highlight will move.
+
 ### 5. Playback starts only from a deliberate act on the reading surface
 
 Dismissing a sheet is not such an act. This ADR states the rule and not the
