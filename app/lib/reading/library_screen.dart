@@ -23,6 +23,7 @@ import 'note_editor_screen.dart';
 import 'profile_presentation.dart';
 import 'reading_display.dart';
 import 'section_header.dart';
+import 'shelf_layout.dart';
 import 'visible_stream_builder.dart';
 
 /// Identifies the add button, for a test that would otherwise match its
@@ -92,54 +93,38 @@ const String _worstCaseTitle =
 /// ("45%") never approaches this width, so it is not measured here.
 const List<String> _worstCaseProgressLabels = ['Not started', 'In progress'];
 
-/// Height of everything under a cover — two lines of title, an author/date
-/// line, the place line and the progress line, plus the gaps between them —
-/// measured with a [TextPainter] at the shelf's current text scaler and tile
-/// width rather than a constant sized once for a smaller case. A line added
-/// to [_BookTile] without a matching measurement added here is a line the
-/// grid clips instead of a number going stale.
-double _measuredTextBlockHeight(
-  BuildContext context,
-  TextScaler scaler,
-  double tileWidth,
-) {
-  final theme = Theme.of(context);
-
-  final title = TextPainter(
-    text: TextSpan(text: _worstCaseTitle, style: theme.textTheme.bodyMedium),
-    textScaler: scaler,
-    textDirection: TextDirection.ltr,
+/// Every line under a cover — two lines of title, an author/date line, the
+/// place line and the progress line, each with the gap above it that
+/// [measuredShelfTextBlockHeight] scales along with the text. A line added
+/// to [_BookTile] without a matching entry added here is a line the grid
+/// clips instead of a number going stale.
+List<ShelfTextLine> _textBlockLines(ThemeData theme) => [
+  ShelfTextLine(
+    sampleTexts: const [_worstCaseTitle],
+    style: theme.textTheme.bodyMedium,
     maxLines: 2,
-  )..layout(maxWidth: tileWidth);
-
-  // Author/date and place are each capped to one line, so their height
-  // never depends on the tile's width — only on the style and scale.
-  final line = TextPainter(
-    text: TextSpan(text: 'Ag', style: theme.textTheme.labelSmall),
-    textScaler: scaler,
-    textDirection: TextDirection.ltr,
-  )..layout();
-
-  // Progress is not capped to one line, so it is measured at the tile's
-  // width like the title, over both words it can actually show.
-  var progress = 0.0;
-  for (final label in _worstCaseProgressLabels) {
-    final painter = TextPainter(
-      text: TextSpan(text: label, style: theme.textTheme.labelSmall),
-      textScaler: scaler,
-      textDirection: TextDirection.ltr,
-    )..layout(maxWidth: tileWidth);
-    if (painter.height > progress) progress = painter.height;
-  }
-
-  return scaler.scale(AppSpacing.sm) +
-      title.height +
-      line.height + // author or date
-      scaler.scale(AppSpacing.xs) +
-      line.height + // place line
-      scaler.scale(AppSpacing.xs) +
-      progress;
-}
+    gapBefore: AppSpacing.sm,
+  ),
+  ShelfTextLine(
+    sampleTexts: const ['Ag'], // author or date
+    style: theme.textTheme.labelSmall,
+    maxLines: 1,
+  ),
+  ShelfTextLine(
+    sampleTexts: const ['Ag'], // place line
+    style: theme.textTheme.labelSmall,
+    maxLines: 1,
+    gapBefore: AppSpacing.xs,
+  ),
+  ShelfTextLine(
+    // Not capped to one line: at a narrow tile and large text scale it can
+    // wrap onto a second, unlike every other row here — see
+    // _worstCaseProgressLabels.
+    sampleTexts: _worstCaseProgressLabels,
+    style: theme.textTheme.labelSmall,
+    gapBefore: AppSpacing.xs,
+  ),
+];
 
 /// Room under the last row for the add button to float over nothing.
 ///
@@ -846,7 +831,7 @@ class _BookShelf extends StatelessWidget {
         // column comes off before anything has to ellipsize. The threshold is
         // in scaled pixels rather than in a scale factor, because that is
         // what actually decides whether a title fits.
-        if (scaler.scale(14) > 18) columns -= 1;
+        if (shelfShouldDropColumn(context)) columns -= 1;
         columns = columns.clamp(1, 4);
 
         if (columns == 1) {
@@ -901,7 +886,11 @@ class _BookShelf extends StatelessWidget {
             // their text size loses the author line to a clip.
             mainAxisExtent:
                 tileWidth * kCoverAspect +
-                _measuredTextBlockHeight(context, scaler, tileWidth),
+                measuredShelfTextBlockHeight(
+                  scaler,
+                  tileWidth,
+                  _textBlockLines(Theme.of(context)),
+                ),
           ),
           itemCount: books.length,
           itemBuilder: (context, i) => _BookTile(

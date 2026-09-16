@@ -15,6 +15,7 @@ import 'book_cover.dart';
 import 'book_importer.dart';
 import 'book_opener.dart';
 import 'library_book.dart';
+import 'shelf_layout.dart';
 
 /// Identifies the search field for tests, which have no button label to
 /// match against — the field carries no text of its own until the reader
@@ -58,11 +59,40 @@ Key freeBooksTileKey(int gutenbergId) => Key('free-books-tile-$gutenbergId');
 /// asked for, in logical pixels.
 const double _loadMoreThreshold = 300;
 
-/// Height of a tile's text block: two lines of title, one of author, one of
-/// status. Shorter than the Library shelf's own text block, because a
-/// Catalogue tile carries no place or progress line — there is nothing to
-/// resume in a book not yet on this device.
-const double _textBlockHeight = 96;
+/// Stands in for a title long enough to wrap onto two full lines at any tile
+/// width the shelf produces. Only its wrapped line count matters — the
+/// glyphs themselves never reach the screen.
+const String _worstCaseTitle =
+    'A very long book title that always wraps onto two full lines for '
+    'measurement purposes only';
+
+/// The status line's possible words, including the empty string a tile shows
+/// with neither an import running nor the book already in the Library — the
+/// tallest of the three wins the measurement.
+const List<String> _worstCaseStatuses = ['Importing…', 'In your library', ''];
+
+/// A tile's text block: two lines of title, one of author, one of status.
+/// Shorter than the Library shelf's own text block, because a Catalogue tile
+/// carries no place or progress line — there is nothing to resume in a book
+/// not yet on this device.
+List<ShelfTextLine> _textBlockLines(ThemeData theme) => [
+  ShelfTextLine(
+    sampleTexts: const [_worstCaseTitle],
+    style: theme.textTheme.bodyMedium,
+    maxLines: 2,
+    gapBefore: AppSpacing.sm,
+  ),
+  ShelfTextLine(
+    sampleTexts: const ['Ag'],
+    style: theme.textTheme.labelSmall,
+    maxLines: 1,
+  ),
+  ShelfTextLine(
+    sampleTexts: _worstCaseStatuses,
+    style: theme.textTheme.labelSmall,
+    maxLines: 1,
+  ),
+];
 
 /// The sort control's own words, rather than [CatalogueSort]'s wire names.
 extension on CatalogueSort {
@@ -687,7 +717,7 @@ class _EntryGrid extends StatelessWidget {
                     (AppShelf.tileWidth + AppSpacing.md))
                 .floor();
 
-        if (scaler.scale(14) > 18) columns -= 1;
+        if (shelfShouldDropColumn(context)) columns -= 1;
         columns = columns.clamp(1, 4);
 
         final tileWidth =
@@ -707,7 +737,12 @@ class _EntryGrid extends StatelessWidget {
             crossAxisSpacing: AppSpacing.md,
             mainAxisSpacing: AppSpacing.lg,
             mainAxisExtent:
-                tileWidth * kCoverAspect + scaler.scale(_textBlockHeight),
+                tileWidth * kCoverAspect +
+                measuredShelfTextBlockHeight(
+                  scaler,
+                  tileWidth,
+                  _textBlockLines(Theme.of(context)),
+                ),
           ),
           itemCount: entries.length,
           itemBuilder: (context, i) {
