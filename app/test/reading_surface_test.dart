@@ -804,6 +804,10 @@ void main() {
       await tester.pumpAndSettle();
 
       final switchFinder = find.byKey(profileFollowAppKey);
+      final switchValueFinder = find.descendant(
+        of: switchFinder,
+        matching: find.byType(Switch),
+      );
       final polarityFinder = find.byType(SegmentedButton<Polarity>);
       final scrollable = find.byType(Scrollable).first;
 
@@ -844,7 +848,7 @@ void main() {
       }
 
       await showSwitch();
-      expect(tester.widget<SwitchListTile>(switchFinder).value, isTrue);
+      expect(tester.widget<Switch>(switchValueFinder).value, isTrue);
 
       SegmentedButton<Polarity> polarityControl() =>
           tester.widget<SegmentedButton<Polarity>>(polarityFinder);
@@ -859,7 +863,7 @@ void main() {
       await tester.tap(switchFinder);
       await tester.pumpAndSettle();
 
-      expect(tester.widget<SwitchListTile>(switchFinder).value, isFalse);
+      expect(tester.widget<Switch>(switchValueFinder).value, isFalse);
 
       await showPolarity();
       expect(polarityControl().selected, {Polarity.lightOnDark});
