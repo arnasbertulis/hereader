@@ -7,6 +7,8 @@ import '../data/library_repository.dart';
 import '../sync/auth_store.dart';
 import '../theme/app_icons.dart';
 import '../theme/content_width.dart';
+import 'control_row.dart';
+import 'info_dot.dart';
 import 'profile_presentation.dart';
 import 'profiles_screen.dart';
 import 'reading_surface.dart';
@@ -17,8 +19,8 @@ import 'setting_slider.dart';
 
 /// Identifies the switch that puts a profile back to following the app theme.
 ///
-/// Three `SwitchListTile`s sit on this screen, so a finder by type alone
-/// cannot say which. The alternative is the switch's own title, which would
+/// Two `Switch`es sit on this screen, so a finder by type alone cannot say
+/// which. The alternative is the switch's own title, which would
 /// tie `reading_surface_test.dart` to a line of copy that has nothing to do
 /// with what the test is checking. Same argument as
 /// [readerPlayButtonKey] in `reader_screen.dart`.
@@ -788,18 +790,36 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 ),
 
               if (!scrolling)
-                SwitchListTile(
-                  title: const Text('Highlight a fixation letter'),
-                  subtitle: const Text(
-                    'Marks one letter in each word as a place to look, to '
-                    'help your eye land in the same spot every time.',
-                  ),
-                  value: presentation.orpHighlight,
-                  onChanged: _editable
-                      ? (v) => _updatePresentation(
-                          (p) => p.copyWith(orpHighlight: v),
+                ControlRow(
+                  onTap: _editable
+                      ? () => _updatePresentation(
+                          (p) => p.copyWith(
+                            orpHighlight: !presentation.orpHighlight,
+                          ),
                         )
                       : null,
+                  title: 'Highlight a fixation letter',
+                  supportingText: 'Marks one letter in each word.',
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      InfoDot(
+                        semanticLabel: 'About fixation highlighting',
+                        explanation:
+                            'Marks one letter in each word as a place to '
+                            'look, to help your eye land in the same spot '
+                            'every time.',
+                      ),
+                      Switch(
+                        value: presentation.orpHighlight,
+                        onChanged: _editable
+                            ? (v) => _updatePresentation(
+                                (p) => p.copyWith(orpHighlight: v),
+                              )
+                            : null,
+                      ),
+                    ],
+                  ),
                 ),
 
               // -- colour ------------------------------------------------
@@ -808,27 +828,47 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 padding: EdgeInsets.fromLTRB(16, 28, 16, 12),
               ),
 
-              SwitchListTile(
+              ControlRow(
                 key: profileFollowAppKey,
-                title: const Text('Follow the app’s theme'),
-                subtitle: const Text(
-                  'The page turns light or dark along with the rest of the '
-                  'app. Theme mode is set per device, so this profile can '
-                  'read light on a phone and dark on a desktop.',
-                ),
-                value: presentation.polarity == null,
-                onChanged: _editable
-                    ? (following) => _updatePresentation(
+                onTap: _editable
+                    ? () => _updatePresentation(
                         // Switching off pins the polarity the app was already
                         // supplying, rather than the class default. The reader
                         // is looking at a surface when they reach for this, and
                         // pinning any other one would change the page they just
                         // decided to keep.
                         (p) => p.withPolarity(
-                          following ? null : resolved.polarity,
+                          presentation.polarity == null
+                              ? resolved.polarity
+                              : null,
                         ),
                       )
                     : null,
+                title: 'Follow the app’s theme',
+                supportingText: 'Theme mode is set per device.',
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InfoDot(
+                      semanticLabel: 'About following the app’s theme',
+                      explanation:
+                          'The page turns light or dark along with the '
+                          'rest of the app. Theme mode is set per device, '
+                          'so this profile can read light on a phone and '
+                          'dark on a desktop.',
+                    ),
+                    Switch(
+                      value: presentation.polarity == null,
+                      onChanged: _editable
+                          ? (following) => _updatePresentation(
+                              (p) => p.withPolarity(
+                                following ? null : resolved.polarity,
+                              ),
+                            )
+                          : null,
+                    ),
+                  ],
+                ),
               ),
 
               Padding(
