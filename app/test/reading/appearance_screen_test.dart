@@ -67,5 +67,48 @@ void main() {
         reason: 'The Contrast section header should carry no InfoDot',
       );
     });
+
+    testWidgets(
+      'dragging the chrome text size slider does not persist until the '
+      'drag ends',
+      (WidgetTester tester) async {
+        await tester.pumpWidget(
+          MaterialApp(home: AppearanceScreen(controller: appearance)),
+        );
+        await tester.pumpAndSettle();
+
+        final initial = appearance.settings.textSize;
+
+        // The slider sits at the bottom of the screen, beyond the
+        // ListView's default cache extent until scrolled into view.
+        await tester.scrollUntilVisible(
+          find.byType(Slider),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+        // `scrollUntilVisible` stops as soon as the slider is built, which
+        // can leave it short of fully on screen; `ensureVisible` re-centres
+        // it so `getCenter` below lands on it.
+        await tester.ensureVisible(find.byType(Slider));
+        await tester.pumpAndSettle();
+
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byType(Slider)),
+        );
+        await gesture.moveBy(const Offset(40, 0));
+        await tester.pump();
+        await gesture.moveBy(const Offset(40, 0));
+        await tester.pump();
+
+        // Mid-drag: the thumb has moved but nothing has been written or
+        // notified yet — see #490.
+        expect(appearance.settings.textSize, initial);
+
+        await gesture.up();
+        await tester.pumpAndSettle();
+
+        expect(appearance.settings.textSize, isNot(initial));
+      },
+    );
   });
 }
