@@ -143,7 +143,7 @@ ThemeData appTheme({
       // title that does not fit wraps and grows the app bar rather than
       // being ellipsised — truncating a screen name withholds it from
       // exactly the reader least able to guess the rest.
-      titleTextStyle: appTextTheme(scheme).headlineSmall,
+      titleTextStyle: appTextTheme(scheme, scale: textScale).headlineSmall,
       shape: Border(
         bottom: BorderSide(color: scheme.outlineVariant, width: hairlineWidth),
       ),
