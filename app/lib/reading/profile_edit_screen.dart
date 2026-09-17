@@ -329,9 +329,13 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               ),
 
               // -- pacing ------------------------------------------------
-              const SectionHeader(
+              SectionHeader(
                 'How the text advances',
-                padding: EdgeInsets.fromLTRB(16, 28, 16, 12),
+                padding: const EdgeInsets.fromLTRB(16, 28, 16, 12),
+                info: InfoDot(
+                  semanticLabel: 'About pacing',
+                  explanation: describePacingKind(pacing.kind),
+                ),
               ),
 
               // The whole pacing model is inert under sliding text: velocity
@@ -365,13 +369,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                             (p) => p.copyWith(kind: selected.first),
                           )
                         : null,
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  child: Text(
-                    describePacingKind(pacing.kind),
-                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
               ],
@@ -511,9 +508,13 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
               ),
 
               // -- text --------------------------------------------------
-              const SectionHeader(
+              SectionHeader(
                 'Text',
-                padding: EdgeInsets.fromLTRB(16, 28, 16, 12),
+                padding: const EdgeInsets.fromLTRB(16, 28, 16, 12),
+                info: InfoDot(
+                  semanticLabel: 'About presentation mode',
+                  explanation: describePresentationMode(presentation.mode),
+                ),
               ),
 
               Padding(
@@ -543,13 +544,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                           (p) => p.copyWith(mode: selected.first),
                         )
                       : null,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: Text(
-                  describePresentationMode(presentation.mode),
-                  style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
               if (reduceMotion != null)
@@ -823,9 +817,14 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 ),
 
               // -- colour ------------------------------------------------
-              const SectionHeader(
+              SectionHeader(
                 'Colour',
-                padding: EdgeInsets.fromLTRB(16, 28, 16, 12),
+                padding: const EdgeInsets.fromLTRB(16, 28, 16, 12),
+                info: InfoDot(
+                  semanticLabel: 'About colour settings',
+                  explanation:
+                      'This sets the text colour. The background can be tinted below.',
+                ),
               ),
 
               ControlRow(
@@ -897,13 +896,6 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                           (p) => p.withPolarity(selected.first),
                         )
                       : null,
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: Text(
-                  'This sets the text colour. The background can be tinted '
-                  'below.',
                 ),
               ),
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_icons.dart';
+import 'info_dot.dart';
 
 /// A labelled slider with its current value spelled out beside it.
 ///
@@ -26,8 +27,8 @@ class SettingSlider extends StatelessWidget {
   final bool enabled;
   final String? help;
 
-  /// Shown below [help], in the error colour. For a value that is legal and
-  /// saveable but produces something the reader probably did not intend.
+  /// Shown below the slider, in the error colour. For a value that is legal
+  /// and saveable but produces something the reader probably did not intend.
   final String? warning;
   final ValueChanged<double> onChanged;
   final ValueChanged<double>? onChangeEnd;
@@ -52,12 +53,28 @@ class SettingSlider extends StatelessWidget {
     final theme = Theme.of(context);
     final dim = theme.disabledColor;
 
+    final labelWidget = help == null
+        ? Text(label, style: enabled ? null : TextStyle(color: dim))
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Text(
+                  label,
+                  style: enabled ? null : TextStyle(color: dim),
+                ),
+              ),
+              InfoDot(semanticLabel: 'About $label', explanation: help!),
+            ],
+          );
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: enabled ? null : TextStyle(color: dim)),
+          labelWidget,
           Text(
             valueLabel,
             style: theme.textTheme.bodyMedium?.copyWith(
@@ -79,11 +96,6 @@ class SettingSlider extends StatelessWidget {
               label: valueLabel,
               onChanged: onChanged,
               onChangeEnd: onChangeEnd,
-            ),
-          if (help != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Text(help!, style: theme.textTheme.bodySmall),
             ),
           if (warning != null) SettingWarning(warning!),
         ],

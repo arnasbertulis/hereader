@@ -219,6 +219,8 @@ class _TextSizeSliderState extends State<_TextSizeSlider> {
       min: textSizeMin,
       max: textSizeMax,
       divisions: ((textSizeMax - textSizeMin) / 0.05).round(),
+      help:
+          'Changes the size of labels, controls and other interface text. Does not affect the size of the reading surface.',
       onChanged: (v) => setState(() => _liveValue = v),
       onChangeEnd: widget.onChangeEnd,
     );
