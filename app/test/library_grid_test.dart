@@ -94,7 +94,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: appTheme(brightness: Brightness.light, textScale: textSize),
+        theme: appTheme(brightness: Brightness.light, textSize: textSize),
         home: LibraryScreen(
           repository: repository,
           sync: sync,
