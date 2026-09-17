@@ -77,7 +77,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        final initial = appearance.settings.chromeTextScale;
+        final initial = appearance.settings.textSize;
 
         // The slider sits at the bottom of the screen, beyond the
         // ListView's default cache extent until scrolled into view.
@@ -102,12 +102,12 @@ void main() {
 
         // Mid-drag: the thumb has moved but nothing has been written or
         // notified yet — see #490.
-        expect(appearance.settings.chromeTextScale, initial);
+        expect(appearance.settings.textSize, initial);
 
         await gesture.up();
         await tester.pumpAndSettle();
 
-        expect(appearance.settings.chromeTextScale, isNot(initial));
+        expect(appearance.settings.textSize, isNot(initial));
       },
     );
   });

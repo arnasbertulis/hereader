@@ -164,9 +164,9 @@ class AppearanceScreen extends StatelessWidget {
                         'reading profile you chose.',
                   ),
                 ),
-                _ChromeTextScaleSlider(
-                  value: settings.chromeTextScale,
-                  onChangeEnd: controller.setChromeTextScale,
+                _TextSizeSlider(
+                  value: settings.textSize,
+                  onChangeEnd: controller.setTextSize,
                 ),
               ],
             ),
@@ -177,33 +177,33 @@ class AppearanceScreen extends StatelessWidget {
   }
 }
 
-/// The "Chrome text size" slider, wrapping [SettingSlider] with a local
+/// The "Text size" slider, wrapping [SettingSlider] with a local
 /// live value.
 ///
-/// [AppearanceController.setChromeTextScale] writes to storage and calls
+/// [AppearanceController.setTextSize] writes to storage and calls
 /// `notifyListeners()`, which rebuilds this whole screen through the
 /// [ListenableBuilder] in [AppearanceScreen.build] — cheap once, but not
 /// once per pixel of drag. Tracking the drag in `_liveValue` instead, and
 /// only calling [onChangeEnd] once the gesture ends, is what keeps the
 /// thumb 1:1 with the pointer — see #490.
-class _ChromeTextScaleSlider extends StatefulWidget {
+class _TextSizeSlider extends StatefulWidget {
   final double value;
   final ValueChanged<double> onChangeEnd;
 
-  const _ChromeTextScaleSlider({
+  const _TextSizeSlider({
     required this.value,
     required this.onChangeEnd,
   });
 
   @override
-  State<_ChromeTextScaleSlider> createState() => _ChromeTextScaleSliderState();
+  State<_TextSizeSlider> createState() => _TextSizeSliderState();
 }
 
-class _ChromeTextScaleSliderState extends State<_ChromeTextScaleSlider> {
+class _TextSizeSliderState extends State<_TextSizeSlider> {
   late double _liveValue = widget.value;
 
   @override
-  void didUpdateWidget(covariant _ChromeTextScaleSlider oldWidget) {
+  void didUpdateWidget(covariant _TextSizeSlider oldWidget) {
     super.didUpdateWidget(oldWidget);
     // A change from outside this slider — Reset, another device's sync —
     // overrides whatever the reader is mid-drag on; one only fires while
@@ -216,12 +216,12 @@ class _ChromeTextScaleSliderState extends State<_ChromeTextScaleSlider> {
   @override
   Widget build(BuildContext context) {
     return SettingSlider(
-      label: 'Chrome text size',
+      label: 'Text size',
       valueLabel: '${(_liveValue * 100).round()}%',
       value: _liveValue,
-      min: chromeTextScaleMin,
-      max: chromeTextScaleMax,
-      divisions: ((chromeTextScaleMax - chromeTextScaleMin) / 0.05).round(),
+      min: textSizeMin,
+      max: textSizeMax,
+      divisions: ((textSizeMax - textSizeMin) / 0.05).round(),
       onChanged: (v) => setState(() => _liveValue = v),
       onChangeEnd: widget.onChangeEnd,
     );

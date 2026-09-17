@@ -164,13 +164,13 @@ class _HereaderAppState extends State<HereaderApp> {
             brightness: Brightness.light,
             accent: appearance.accent,
             highContrast: appearance.highContrast,
-            textScale: appearance.chromeTextScale,
+            textScale: appearance.textSize,
           ),
           darkTheme: appTheme(
             brightness: Brightness.dark,
             accent: appearance.accent,
             highContrast: appearance.highContrast,
-            textScale: appearance.chromeTextScale,
+            textScale: appearance.textSize,
           ),
           // Used by the framework when the platform itself reports a
           // high-contrast preference, which is how a reader who set it at
@@ -181,13 +181,13 @@ class _HereaderAppState extends State<HereaderApp> {
             brightness: Brightness.light,
             accent: appearance.accent,
             highContrast: true,
-            textScale: appearance.chromeTextScale,
+            textScale: appearance.textSize,
           ),
           highContrastDarkTheme: appTheme(
             brightness: Brightness.dark,
             accent: appearance.accent,
             highContrast: true,
-            textScale: appearance.chromeTextScale,
+            textScale: appearance.textSize,
           ),
           themeMode: appearance.themeMode,
           navigatorKey: _navigatorKey,

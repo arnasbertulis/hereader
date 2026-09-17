@@ -581,7 +581,7 @@ void main() {
       // regression this guards is `_barHeight` measuring growth against the
       // already chrome-scaled label instead of the unscaled base, which
       // makes chrome-scale-only growth compute to zero.
-      await harness.appearance.setChromeTextScale(chromeTextScaleMax);
+      await harness.appearance.setTextSize(textSizeMax);
       await tester.pumpAndSettle();
 
       expect(
@@ -683,7 +683,7 @@ void main() {
           themeMode: ThemeMode.dark,
           accent: AppAccents.rust.color,
           highContrast: false,
-          chromeTextScale: 1.0,
+          textSize: 1.0,
         ),
       ),
       'Dark · Rust',
@@ -697,7 +697,7 @@ void main() {
           themeMode: ThemeMode.light,
           accent: const Color(0xFF123456),
           highContrast: true,
-          chromeTextScale: 1.0,
+          textSize: 1.0,
         ),
       ),
       'Light · Custom · High contrast',

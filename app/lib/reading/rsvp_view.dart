@@ -118,7 +118,7 @@ class RsvpView extends StatelessWidget {
     // ambiently with, and passed to fitFontSizePt so the width it fits to
     // matches what actually gets painted: the reading surface stacks with
     // the platform's own text scaler rather than pinning away from it, the
-    // opposite of chromeTextScale's stance (#467, ADR 0035 §4 amendment).
+    // opposite of textSize's stance (#467, ADR 0035 §4 amendment).
     final textScaler = MediaQuery.textScalerOf(context);
 
     // Read alongside the text scaler, for the same reason: fitFontSizePt
