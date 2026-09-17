@@ -1764,7 +1764,11 @@ class _ChapterPanelState extends State<_ChapterPanel> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(widget.bookTitle, style: theme.textTheme.titleMedium),
+                  Text(
+                    widget.bookTitle,
+                    style: theme.textTheme.titleMedium,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   const SizedBox(height: 4),
                   Text(
                     'From this book’s own table of contents',
@@ -1794,6 +1798,7 @@ class _ChapterPanelState extends State<_ChapterPanel> {
                       style: chapter.depth == 0
                           ? theme.textTheme.titleSmall
                           : theme.textTheme.bodyMedium,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     selected: i == widget.currentIndex,
                     onTap: () => widget.onSelected(chapter),
