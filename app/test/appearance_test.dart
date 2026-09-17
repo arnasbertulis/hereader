@@ -93,21 +93,21 @@ void main() {
     });
   });
 
-  group('chrome text scale', () {
+  group('text size', () {
     test('round-trips', () {
-      expect(decodeChromeTextScale(encodeChromeTextScale(1.25)), 1.25);
-      expect(decodeChromeTextScale(encodeChromeTextScale(0.85)), 0.85);
-      expect(decodeChromeTextScale(encodeChromeTextScale(1.5)), 1.5);
+      expect(decodeTextSize(encodeTextSize(1.25)), 1.25);
+      expect(decodeTextSize(encodeTextSize(0.85)), 0.85);
+      expect(decodeTextSize(encodeTextSize(1.5)), 1.5);
     });
 
     test(
       'falls back to the default on anything unparseable or out of range',
       () {
-        expect(decodeChromeTextScale(null), 1.0);
-        expect(decodeChromeTextScale(''), 1.0);
-        expect(decodeChromeTextScale('large'), 1.0);
-        expect(decodeChromeTextScale('0.5'), 1.0);
-        expect(decodeChromeTextScale('3.0'), 1.0);
+        expect(decodeTextSize(null), 1.0);
+        expect(decodeTextSize(''), 1.0);
+        expect(decodeTextSize('large'), 1.0);
+        expect(decodeTextSize('0.5'), 1.0);
+        expect(decodeTextSize('3.0'), 1.0);
       },
     );
   });
@@ -130,7 +130,7 @@ void main() {
       await first.setThemeMode(ThemeMode.dark);
       await first.setAccent(AppAccents.rust.color);
       await first.setHighContrast(true);
-      await first.setChromeTextScale(1.25);
+      await first.setTextSize(1.25);
 
       final second = controller();
       addTearDown(second.dispose);
@@ -139,7 +139,7 @@ void main() {
       expect(second.settings.themeMode, ThemeMode.dark);
       expect(second.settings.accent, AppAccents.rust.color);
       expect(second.settings.highContrast, isTrue);
-      expect(second.settings.chromeTextScale, 1.25);
+      expect(second.settings.textSize, 1.25);
     });
 
     test('writes hex a person can read', () async {
@@ -164,18 +164,18 @@ void main() {
       expect(appearance.settings.highContrast, isTrue);
     });
 
-    test('a chrome text scale choice notifies and persists', () async {
+    test('a text size choice notifies and persists', () async {
       final appearance = controller();
       addTearDown(appearance.dispose);
 
       var notifications = 0;
       appearance.addListener(() => notifications++);
 
-      await appearance.setChromeTextScale(1.15);
+      await appearance.setTextSize(1.15);
 
       expect(notifications, 1);
-      expect(appearance.settings.chromeTextScale, 1.15);
-      expect(await repo.preference(AppearanceKeys.chromeTextScale), '1.15');
+      expect(appearance.settings.textSize, 1.15);
+      expect(await repo.preference(AppearanceKeys.textSize), '1.15');
     });
 
     // Tapping the row that is already selected is the ordinary case, not an
@@ -206,7 +206,7 @@ void main() {
       await appearance.setThemeMode(ThemeMode.light);
       await appearance.setAccent(AppAccents.crimson.color);
       await appearance.setHighContrast(true);
-      await appearance.setChromeTextScale(1.3);
+      await appearance.setTextSize(1.3);
 
       expect(await repo.pendingEvents(), isEmpty);
     });

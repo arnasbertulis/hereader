@@ -489,7 +489,7 @@ double scaledFontSizePt(double basePt, double availableWidth) {
 /// Takes [textScaler] so the measurement matches what the `Text`/`Text.rich`
 /// this fits for is actually painted at: the reading surface stacks with the
 /// platform's ambient scaler rather than pinning to it away, the opposite of
-/// `chromeTextScale`'s stance (#467) — so the width fit here must scale by
+/// `textSize`'s stance (#467) — so the width fit here must scale by
 /// the same factor the paint call will apply, or an ordinary word can run
 /// past the surface it was measured to fit inside.
 /// The result of fitting a word to the reading surface: the font size to
