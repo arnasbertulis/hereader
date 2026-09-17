@@ -7,6 +7,8 @@ import '../data/library_repository.dart';
 import '../sync/auth_store.dart';
 import '../theme/app_icons.dart';
 import '../theme/content_width.dart';
+import 'control_row.dart';
+import 'info_dot.dart';
 import 'profile_presentation.dart';
 import 'profiles_screen.dart';
 import 'reading_surface.dart';
@@ -17,8 +19,8 @@ import 'setting_slider.dart';
 
 /// Identifies the switch that puts a profile back to following the app theme.
 ///
-/// Three `SwitchListTile`s sit on this screen, so a finder by type alone
-/// cannot say which. The alternative is the switch's own title, which would
+/// Two `Switch`es sit on this screen, so a finder by type alone cannot say
+/// which. The alternative is the switch's own title, which would
 /// tie `reading_surface_test.dart` to a line of copy that has nothing to do
 /// with what the test is checking. Same argument as
 /// [readerPlayButtonKey] in `reader_screen.dart`.
@@ -35,9 +37,10 @@ const Key profileFollowAppKey = Key('profile-follow-app');
 /// `ProfileActions.duplicate`'s explicit "Make a copy" is, with the same
 /// Undo — one mechanism, reached from two places, per ADR 0011.
 ///
-/// Every fresh visit to a preset forks anew: this screen only ever forks
-/// `widget.profile` itself, never a fork already sitting in `_draft`, so an
-/// earlier fork of the same preset is never reused.
+/// Every fresh visit to a preset forks anew: `_draft` starts as
+/// `widget.profile` and is only ever forked while still built-in, never a
+/// fork already sitting in `_draft`, so an earlier fork of the same preset
+/// is never reused.
 ///
 /// Changes are saved when the screen closes rather than on every control
 /// movement. A save queues a sync event, and one per keystroke in the name
@@ -98,37 +101,64 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
   // -- editing -------------------------------------------------------
 
-  void _update(ReadingProfile Function(ReadingProfile) change) {
-    if (_draft.isBuiltIn) {
-      unawaited(_forkOnFirstChange(change));
-      return;
-    }
+  /// Applies [change] to the draft.
+  ///
+  /// A discrete control — the name field, a switch, a segmented button —
+  /// fires once per edit, so the default here folds committing into the
+  /// same call: a still-built-in draft forks immediately. A slider instead
+  /// passes `commit: false` from `onChanged`, which fires once per pixel of
+  /// drag, and reaches [_commit] separately from `onChangeEnd` — once per
+  /// gesture rather than once per intermediate value (#490, #491).
+  void _update(
+    ReadingProfile Function(ReadingProfile) change, {
+    bool commit = true,
+  }) {
     setState(() {
       _draft = change(_draft);
       _dirty = true;
     });
+    if (commit) unawaited(_commit());
   }
 
-  void _updatePacing(PacingConfig Function(PacingConfig) change) =>
-      _update((p) => p.copyWith(pacing: change(p.pacing)));
+  void _updatePacing(
+    PacingConfig Function(PacingConfig) change, {
+    bool commit = true,
+  }) => _update((p) => p.copyWith(pacing: change(p.pacing)), commit: commit);
 
   void _updatePresentation(
-    PresentationConfig Function(PresentationConfig) change,
-  ) => _update((p) => p.copyWith(presentation: change(p.presentation)));
+    PresentationConfig Function(PresentationConfig) change, {
+    bool commit = true,
+  }) => _update(
+    (p) => p.copyWith(presentation: change(p.presentation)),
+    commit: commit,
+  );
 
-  /// Forks the preset this screen opened on, applies [change] to the fork,
-  /// makes it active, and announces the switch with `ProfileActions
-  /// .duplicate`'s own wording and Undo — the reader who touched a slider
-  /// gets the same affordance as one who tapped "Make a copy" first.
+  /// Forks the preset this screen opened on, makes the fork active, and
+  /// announces the switch with `ProfileActions.duplicate`'s own wording and
+  /// Undo — the reader who touched a slider gets the same affordance as one
+  /// who tapped "Make a copy" first.
   ///
-  /// Forks `widget.profile`, never `_draft`: `_draft` is only ever the
-  /// preset itself before this runs, so there is nothing else to fork from.
-  Future<void> _forkOnFirstChange(
-    ReadingProfile Function(ReadingProfile) change,
-  ) async {
+  /// A no-op once `_draft` is no longer built-in, so calling this once per
+  /// edit gesture (rather than once per intermediate value) is what keeps a
+  /// single drag across a locked preset's slider to exactly one fork.
+  ///
+  /// Forks `_draft`, which by this point already carries every change
+  /// [_update] applied during the gesture — never `widget.profile`, so
+  /// nothing dragged in before this ran is lost.
+  Future<void> _commit() async {
+    if (!_draft.isBuiltIn) return;
+
     final messenger = ScaffoldMessenger.of(context);
     final outgoingId = (await widget.repository.activeProfile()).id;
-    final forked = change(widget.profile.fork(id: ReadingProfile.newId()));
+    // A rename applied to `_draft` before this runs — typing in the name
+    // field forks on the same call — already holds the name the reader
+    // typed, and `fork`'s own "(copy)" default would double it to "…
+    // (copy)". Anything else (a slider, a switch) leaves `_draft.name`
+    // exactly as the preset's, so `fork` picks its default there instead.
+    final forked = _draft.fork(
+      id: ReadingProfile.newId(),
+      name: _draft.name != widget.profile.name ? _draft.name : null,
+    );
 
     await widget.repository.saveProfile(forked, hlc: await widget.issueStamp());
     if (!mounted) return;
@@ -358,7 +388,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                     'How fast words are shown. Match it to a pace you can '
                     'hold for a whole page, not the fastest you can follow '
                     'for a sentence.',
-                onChanged: (v) => _updatePacing((p) => p.copyWith(baseWpm: v)),
+                onChanged: (v) =>
+                    _updatePacing((p) => p.copyWith(baseWpm: v), commit: false),
+                onChangeEnd: (_) => unawaited(_commit()),
               ),
 
               if (!scrolling)
@@ -378,8 +410,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                   help:
                       'How much a long word is held beyond a short one. At zero '
                       'this reads the same as Steady.',
-                  onChanged: (v) =>
-                      _updatePacing((p) => p.copyWith(lengthScaleStrength: v)),
+                  onChanged: (v) => _updatePacing(
+                    (p) => p.copyWith(lengthScaleStrength: v),
+                    commit: false,
+                  ),
+                  onChangeEnd: (_) => unawaited(_commit()),
                 ),
 
               if (!scrolling) ...[
@@ -402,7 +437,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                     (p) => p.copyWith(
                       clausePause: Duration(milliseconds: v.round()),
                     ),
+                    commit: false,
                   ),
+                  onChangeEnd: (_) => unawaited(_commit()),
                 ),
 
                 SettingSlider(
@@ -423,7 +460,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                     (p) => p.copyWith(
                       sentencePause: Duration(milliseconds: v.round()),
                     ),
+                    commit: false,
                   ),
+                  onChangeEnd: (_) => unawaited(_commit()),
                 ),
 
                 SettingSlider(
@@ -444,7 +483,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                     (p) => p.copyWith(
                       paragraphPause: Duration(milliseconds: v.round()),
                     ),
+                    commit: false,
                   ),
+                  onChangeEnd: (_) => unawaited(_commit()),
                 ),
               ],
 
@@ -462,8 +503,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 help:
                     'How far back to step when you start again after a pause, '
                     'so you re-enter the sentence with some context.',
-                onChanged: (v) =>
-                    _update((p) => p.copyWith(rewindWords: v.round())),
+                onChanged: (v) => _update(
+                  (p) => p.copyWith(rewindWords: v.round()),
+                  commit: false,
+                ),
+                onChangeEnd: (_) => unawaited(_commit()),
               ),
 
               // -- text --------------------------------------------------
@@ -525,8 +569,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 help:
                     'How large each word is drawn. Larger holds up at a '
                     'distance or with limited acuity.',
-                onChanged: (v) =>
-                    _updatePresentation((p) => p.copyWith(fontSizePt: v)),
+                onChanged: (v) => _updatePresentation(
+                  (p) => p.copyWith(fontSizePt: v),
+                  commit: false,
+                ),
+                onChangeEnd: (_) => unawaited(_commit()),
               ),
 
               SettingSlider(
@@ -542,8 +589,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 help:
                     'Extra space between letters. Wider spacing can make '
                     'each word easier to pick apart.',
-                onChanged: (v) =>
-                    _updatePresentation((p) => p.copyWith(letterSpacingEm: v)),
+                onChanged: (v) => _updatePresentation(
+                  (p) => p.copyWith(letterSpacingEm: v),
+                  commit: false,
+                ),
+                onChangeEnd: (_) => unawaited(_commit()),
               ),
 
               SettingSlider(
@@ -557,8 +607,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 help:
                     'Where the word sits on screen. A blind spot to one side '
                     'is a reason to move it off centre.',
-                onChanged: (v) =>
-                    _updatePresentation((p) => p.copyWith(anchorX: v)),
+                onChanged: (v) => _updatePresentation(
+                  (p) => p.copyWith(anchorX: v),
+                  commit: false,
+                ),
+                onChangeEnd: (_) => unawaited(_commit()),
               ),
 
               SettingSlider(
@@ -572,8 +625,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 help:
                     'Where the word sits on screen, top to bottom. A blind '
                     'spot above or below centre is a reason to move it.',
-                onChanged: (v) =>
-                    _updatePresentation((p) => p.copyWith(anchorY: v)),
+                onChanged: (v) => _updatePresentation(
+                  (p) => p.copyWith(anchorY: v),
+                  commit: false,
+                ),
+                onChangeEnd: (_) => unawaited(_commit()),
               ),
 
               // The eye point, and only under sliding text: the fixed anchor
@@ -650,8 +706,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                       'How far the marker sits from the line, as a share of '
                       'the type size. Further out is easier to see past a '
                       'blind spot; closer in is easier to keep in one look.',
-                  onChanged: (v) =>
-                      _updatePresentation((p) => p.copyWith(caretGapEm: v)),
+                  onChanged: (v) => _updatePresentation(
+                    (p) => p.copyWith(caretGapEm: v),
+                    commit: false,
+                  ),
+                  onChangeEnd: (_) => unawaited(_commit()),
                 ),
                 SettingSlider(
                   label: 'Caret size',
@@ -666,8 +725,11 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                       'ordinary size. It scales with the type size either way, '
                       'so this is how big it is beside the words rather than '
                       'how big it is on screen.',
-                  onChanged: (v) =>
-                      _updatePresentation((p) => p.copyWith(caretScale: v)),
+                  onChanged: (v) => _updatePresentation(
+                    (p) => p.copyWith(caretScale: v),
+                    commit: false,
+                  ),
+                  onChangeEnd: (_) => unawaited(_commit()),
                 ),
                 // A solid wedge has no stroke to set, so the control is hidden
                 // rather than shown doing nothing — the same rule the pacing
@@ -690,7 +752,9 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                         'available.',
                     onChanged: (v) => _updatePresentation(
                       (p) => p.copyWith(caretThicknessEm: v),
+                      commit: false,
                     ),
+                    onChangeEnd: (_) => unawaited(_commit()),
                   ),
               ],
 
@@ -719,23 +783,43 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                       'disorienting.',
                   onChanged: (v) => _updatePresentation(
                     (p) => p.copyWith(transitionMs: v.round()),
+                    commit: false,
                   ),
+                  onChangeEnd: (_) => unawaited(_commit()),
                   warning: fadeWarning(_draft),
                 ),
 
               if (!scrolling)
-                SwitchListTile(
-                  title: const Text('Highlight a fixation letter'),
-                  subtitle: const Text(
-                    'Marks one letter in each word as a place to look, to '
-                    'help your eye land in the same spot every time.',
-                  ),
-                  value: presentation.orpHighlight,
-                  onChanged: _editable
-                      ? (v) => _updatePresentation(
-                          (p) => p.copyWith(orpHighlight: v),
+                ControlRow(
+                  onTap: _editable
+                      ? () => _updatePresentation(
+                          (p) => p.copyWith(
+                            orpHighlight: !presentation.orpHighlight,
+                          ),
                         )
                       : null,
+                  title: 'Highlight a fixation letter',
+                  supportingText: 'Marks one letter in each word.',
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      InfoDot(
+                        semanticLabel: 'About fixation highlighting',
+                        explanation:
+                            'Marks one letter in each word as a place to '
+                            'look, to help your eye land in the same spot '
+                            'every time.',
+                      ),
+                      Switch(
+                        value: presentation.orpHighlight,
+                        onChanged: _editable
+                            ? (v) => _updatePresentation(
+                                (p) => p.copyWith(orpHighlight: v),
+                              )
+                            : null,
+                      ),
+                    ],
+                  ),
                 ),
 
               // -- colour ------------------------------------------------
@@ -744,27 +828,47 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 padding: EdgeInsets.fromLTRB(16, 28, 16, 12),
               ),
 
-              SwitchListTile(
+              ControlRow(
                 key: profileFollowAppKey,
-                title: const Text('Follow the app’s theme'),
-                subtitle: const Text(
-                  'The page turns light or dark along with the rest of the '
-                  'app. Theme mode is set per device, so this profile can '
-                  'read light on a phone and dark on a desktop.',
-                ),
-                value: presentation.polarity == null,
-                onChanged: _editable
-                    ? (following) => _updatePresentation(
+                onTap: _editable
+                    ? () => _updatePresentation(
                         // Switching off pins the polarity the app was already
                         // supplying, rather than the class default. The reader
                         // is looking at a surface when they reach for this, and
                         // pinning any other one would change the page they just
                         // decided to keep.
                         (p) => p.withPolarity(
-                          following ? null : resolved.polarity,
+                          presentation.polarity == null
+                              ? resolved.polarity
+                              : null,
                         ),
                       )
                     : null,
+                title: 'Follow the app’s theme',
+                supportingText: 'Theme mode is set per device.',
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    InfoDot(
+                      semanticLabel: 'About following the app’s theme',
+                      explanation:
+                          'The page turns light or dark along with the '
+                          'rest of the app. Theme mode is set per device, '
+                          'so this profile can read light on a phone and '
+                          'dark on a desktop.',
+                    ),
+                    Switch(
+                      value: presentation.polarity == null,
+                      onChanged: _editable
+                          ? (following) => _updatePresentation(
+                              (p) => p.withPolarity(
+                                following ? null : resolved.polarity,
+                              ),
+                            )
+                          : null,
+                    ),
+                  ],
+                ),
               ),
 
               Padding(
@@ -815,7 +919,8 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 presentation: resolved,
                 enabled: _editable,
                 onChanged: (argb) =>
-                    _updatePresentation((p) => p.withTint(argb)),
+                    _updatePresentation((p) => p.withTint(argb), commit: false),
+                onSettled: (_) => unawaited(_commit()),
                 // `withTint` replaces the hand-written PresentationConfig this
                 // used to rebuild field by field. Both nullable fields on that
                 // class now have one setter each that can reach null, so
@@ -1144,12 +1249,14 @@ class _BackgroundField extends StatelessWidget {
   final ResolvedPresentation presentation;
   final bool enabled;
   final ValueChanged<int> onChanged;
+  final ValueChanged<int>? onSettled;
   final VoidCallback? onReset;
 
   const _BackgroundField({
     required this.presentation,
     required this.enabled,
     required this.onChanged,
+    this.onSettled,
     this.onReset,
   });
 
@@ -1189,7 +1296,12 @@ class _BackgroundField extends StatelessWidget {
             ],
           ),
         ),
-        RgbSliders(argb: argb, enabled: enabled, onChanged: onChanged),
+        RgbSliders(
+          argb: argb,
+          enabled: enabled,
+          onChanged: onChanged,
+          onSettled: onSettled,
+        ),
       ],
     );
   }

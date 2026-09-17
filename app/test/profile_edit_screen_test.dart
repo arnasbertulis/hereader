@@ -205,4 +205,63 @@ void main() {
     expect(mine, isEmpty);
     expect((await repository.activeProfile()).id, Presets.standard.id);
   });
+
+  testWidgets(
+    'dragging a slider on a locked preset forks exactly once per gesture',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProfileEditScreen(
+            profile: Presets.standard,
+            repository: repository,
+            issueStamp: issueStamp,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The reading speed slider — first `Slider` on the screen, and the
+      // one #491 was filed against. Named rather than left to the default:
+      // the name field builds an `EditableText` with a `Scrollable` of its
+      // own, so the default matches two. The list is the outer one, so it
+      // comes first.
+      // `find.byType(Slider)` rather than `.first`: `scrollUntilVisible`
+      // checks its finder for emptiness, and `.first` throws instead of
+      // reporting empty. The reading speed slider is the first one to enter
+      // the cache extent as the list scrolls down, so this still targets it.
+      await tester.scrollUntilVisible(
+        find.byType(Slider),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      // `scrollUntilVisible` stops as soon as the slider is built, which
+      // can leave it short of fully on screen; `ensureVisible` re-centres
+      // it so `getCenter` below lands on it.
+      await tester.ensureVisible(find.byType(Slider).first);
+      await tester.pumpAndSettle();
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(Slider).first),
+      );
+      await gesture.moveBy(const Offset(40, 0));
+      await tester.pump();
+      await gesture.moveBy(const Offset(40, 0));
+      await tester.pump();
+      await gesture.moveBy(const Offset(40, 0));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      final mine = (await repository.allProfiles())
+          .where((p) => !p.isBuiltIn)
+          .toList();
+      expect(
+        mine,
+        hasLength(1),
+        reason:
+            'One continuous drag should fork once, not once per '
+            'intermediate value dragged across',
+      );
+    },
+  );
 }

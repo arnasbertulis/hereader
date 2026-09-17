@@ -164,21 +164,63 @@ class AppearanceScreen extends StatelessWidget {
                         'reading profile you chose.',
                   ),
                 ),
-                SettingSlider(
-                  label: 'Chrome text size',
-                  valueLabel: '${(settings.chromeTextScale * 100).round()}%',
-                  value: settings.chromeTextScale,
-                  min: chromeTextScaleMin,
-                  max: chromeTextScaleMax,
-                  divisions: ((chromeTextScaleMax - chromeTextScaleMin) / 0.05)
-                      .round(),
-                  onChanged: controller.setChromeTextScale,
+                _TextSizeSlider(
+                  value: settings.textSize,
+                  onChangeEnd: controller.setTextSize,
                 ),
               ],
             ),
           );
         },
       ),
+    );
+  }
+}
+
+/// The "Text size" slider, wrapping [SettingSlider] with a local
+/// live value.
+///
+/// [AppearanceController.setTextSize] writes to storage and calls
+/// `notifyListeners()`, which rebuilds this whole screen through the
+/// [ListenableBuilder] in [AppearanceScreen.build] — cheap once, but not
+/// once per pixel of drag. Tracking the drag in `_liveValue` instead, and
+/// only calling [onChangeEnd] once the gesture ends, is what keeps the
+/// thumb 1:1 with the pointer — see #490.
+class _TextSizeSlider extends StatefulWidget {
+  final double value;
+  final ValueChanged<double> onChangeEnd;
+
+  const _TextSizeSlider({required this.value, required this.onChangeEnd});
+
+  @override
+  State<_TextSizeSlider> createState() => _TextSizeSliderState();
+}
+
+class _TextSizeSliderState extends State<_TextSizeSlider> {
+  late double _liveValue = widget.value;
+
+  @override
+  void didUpdateWidget(covariant _TextSizeSlider oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A change from outside this slider — Reset, another device's sync —
+    // overrides whatever the reader is mid-drag on; one only fires while
+    // the other is untouched.
+    if (widget.value != oldWidget.value) {
+      _liveValue = widget.value;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SettingSlider(
+      label: 'Text size',
+      valueLabel: '${(_liveValue * 100).round()}%',
+      value: _liveValue,
+      min: textSizeMin,
+      max: textSizeMax,
+      divisions: ((textSizeMax - textSizeMin) / 0.05).round(),
+      onChanged: (v) => setState(() => _liveValue = v),
+      onChangeEnd: widget.onChangeEnd,
     );
   }
 }
