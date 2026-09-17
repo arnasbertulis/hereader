@@ -10,6 +10,7 @@ import 'package:app/reading/reading_display.dart';
 import 'package:app/sync/api_client.dart';
 import 'package:app/sync/auth_store.dart';
 import 'package:app/sync/sync_engine.dart';
+import 'package:app/theme/app_theme.dart';
 import 'package:app/theme/app_tokens.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -82,13 +83,18 @@ void main() {
     tokenIndex: tokenIndex,
   );
 
-  Future<void> pump(WidgetTester tester, {double width = 900}) async {
+  Future<void> pump(
+    WidgetTester tester, {
+    double width = 900,
+    double textSize = 1.0,
+  }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = Size(width, 900);
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(
       MaterialApp(
+        theme: appTheme(brightness: Brightness.light, textScale: textSize),
         home: LibraryScreen(
           repository: repository,
           sync: sync,
@@ -524,6 +530,29 @@ void main() {
       await _disposeTree(tester);
     },
   );
+
+  testWidgets('the shelf drops a column at Text size 1.5 (today it does not)', (
+    tester,
+  ) async {
+    int columns() {
+      final delegate =
+          tester.widget<GridView>(find.byType(GridView)).gridDelegate
+              as SliverGridDelegateWithFixedCrossAxisCount;
+      return delegate.crossAxisCount;
+    }
+
+    await addBook('book-1', title: 'Romeo and Juliet', author: 'Shakespeare');
+
+    await pump(tester, width: 900);
+    final baseline = columns();
+
+    await pump(tester, width: 900, textSize: 1.5);
+    final scaled = columns();
+
+    expect(scaled, lessThan(baseline));
+
+    await _disposeTree(tester);
+  });
 
   testWidgets('removing a book is behind the menu', (tester) async {
     await addBook('book-1', title: 'Romeo and Juliet');

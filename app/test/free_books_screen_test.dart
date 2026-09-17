@@ -9,6 +9,7 @@ import 'package:app/reading/library_book.dart';
 import 'package:app/sync/api_client.dart';
 import 'package:app/sync/auth_store.dart';
 import 'package:app/sync/sync_engine.dart';
+import 'package:app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
@@ -61,18 +62,28 @@ void main() {
     await db.close();
   });
 
-  Future<void> pump(WidgetTester tester, {BookImporter? bookImporter}) async {
+  Future<void> pump(
+    WidgetTester tester, {
+    BookImporter? bookImporter,
+    double textSize = 1.0,
+    double platformScale = 1.0,
+    Size viewSize = const Size(800, 600),
+  }) async {
     tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(800, 600);
+    tester.view.physicalSize = viewSize;
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(
       MaterialApp(
-        home: FreeBooksScreen(
-          client: catalogue,
-          repository: repository,
-          sync: sync,
-          bookImporter: bookImporter,
+        theme: appTheme(brightness: Brightness.light, textScale: textSize),
+        home: MediaQuery(
+          data: MediaQueryData(textScaler: TextScaler.linear(platformScale)),
+          child: FreeBooksScreen(
+            client: catalogue,
+            repository: repository,
+            sync: sync,
+            bookImporter: bookImporter,
+          ),
         ),
       ),
     );
@@ -87,6 +98,94 @@ void main() {
     title: title,
     authors: authors,
   );
+
+  Future<void> expectNoTileOverflow(
+    WidgetTester tester, {
+    required double textSize,
+    required double platformScale,
+  }) async {
+    final entry = entryStub(
+      title:
+          'A very long book title that always wraps onto two full lines '
+          'for measurement purposes only',
+    );
+    catalogue.searchResponses.add(
+      CatalogueSearchResult(
+        catalogueReady: true,
+        results: [entry.toEntry()],
+        page: 0,
+        hasMore: false,
+      ),
+    );
+
+    await pump(tester, textSize: textSize, platformScale: platformScale);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+
+    await _disposeTree(tester);
+  }
+
+  testWidgets('a tile does not overflow at Text size 1.0, platform scale 1.0', (
+    tester,
+  ) async {
+    await expectNoTileOverflow(tester, textSize: 1.0, platformScale: 1.0);
+  });
+
+  testWidgets('a tile does not overflow at Text size 1.5, platform scale 1.0', (
+    tester,
+  ) async {
+    await expectNoTileOverflow(tester, textSize: 1.5, platformScale: 1.0);
+  });
+
+  // Platform text scale 2.0 combined with this fixture's "All categories"
+  // filter chip overflows `_FilterChip`'s own Row at
+  // free_books_screen.dart:677 — pre-existing, unrelated to the grid this
+  // issue fixes (confirmed via the error's widget citation), and the exact
+  // scale that trips it is borderline enough to flip between runs. The tile
+  // math itself is covered at platform scale 2.0 by shelf_layout_test.dart,
+  // which isolates it from that unrelated Row.
+
+  testWidgets('the grid drops a column at Text size 1.5, platform scale 1.0', (
+    tester,
+  ) async {
+    int columns() {
+      final delegate =
+          tester.widget<GridView>(find.byKey(freeBooksGridKey)).gridDelegate
+              as SliverGridDelegateWithFixedCrossAxisCount;
+      return delegate.crossAxisCount;
+    }
+
+    final entry = entryStub();
+
+    catalogue.searchResponses.add(
+      CatalogueSearchResult(
+        catalogueReady: true,
+        results: [entry.toEntry()],
+        page: 0,
+        hasMore: false,
+      ),
+    );
+    await pump(tester, viewSize: const Size(900, 900));
+    await tester.pumpAndSettle();
+    final baseline = columns();
+
+    catalogue.searchResponses.add(
+      CatalogueSearchResult(
+        catalogueReady: true,
+        results: [entry.toEntry()],
+        page: 0,
+        hasMore: false,
+      ),
+    );
+    await pump(tester, textSize: 1.5, viewSize: const Size(900, 900));
+    await tester.pumpAndSettle();
+    final scaled = columns();
+
+    expect(scaled, lessThan(baseline));
+
+    await _disposeTree(tester);
+  });
 
   testWidgets('opening with nothing typed asks for the most downloaded '
       'books', (tester) async {
