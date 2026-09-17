@@ -39,27 +39,47 @@ class RgbSliders extends StatelessWidget {
 
     return Column(
       children: [
-        _channel('Red', red, (v) => argbFrom(v, green, blue)),
-        _channel('Green', green, (v) => argbFrom(red, v, blue)),
-        _channel('Blue', blue, (v) => argbFrom(red, green, v)),
+        _channel(
+          'Red',
+          red,
+          'Controls the amount of red in the background tint (0–255).',
+          (v) => argbFrom(v, green, blue),
+        ),
+        _channel(
+          'Green',
+          green,
+          'Controls the amount of green in the background tint (0–255).',
+          (v) => argbFrom(red, v, blue),
+        ),
+        _channel(
+          'Blue',
+          blue,
+          'Controls the amount of blue in the background tint (0–255).',
+          (v) => argbFrom(red, green, v),
+        ),
       ],
     );
   }
 
-  Widget _channel(String label, int value, int Function(int) recombine) =>
-      SettingSlider(
-        label: label,
-        value: value.toDouble(),
-        valueLabel: '$value',
-        min: 0,
-        max: 255,
-        // One division per value, so a keyboard or a screen reader moves by
-        // one rather than by a fraction that rounds to the same number twice.
-        divisions: 255,
-        enabled: enabled,
-        onChanged: (v) => onChanged(recombine(v.round())),
-        onChangeEnd: onSettled == null
-            ? null
-            : (v) => onSettled!(recombine(v.round())),
-      );
+  Widget _channel(
+    String label,
+    int value,
+    String help,
+    int Function(int) recombine,
+  ) => SettingSlider(
+    label: label,
+    value: value.toDouble(),
+    valueLabel: '$value',
+    min: 0,
+    max: 255,
+    // One division per value, so a keyboard or a screen reader moves by
+    // one rather than by a fraction that rounds to the same number twice.
+    divisions: 255,
+    enabled: enabled,
+    help: help,
+    onChanged: (v) => onChanged(recombine(v.round())),
+    onChangeEnd: onSettled == null
+        ? null
+        : (v) => onSettled!(recombine(v.round())),
+  );
 }
