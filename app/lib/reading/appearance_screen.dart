@@ -190,10 +190,7 @@ class _TextSizeSlider extends StatefulWidget {
   final double value;
   final ValueChanged<double> onChangeEnd;
 
-  const _TextSizeSlider({
-    required this.value,
-    required this.onChangeEnd,
-  });
+  const _TextSizeSlider({required this.value, required this.onChangeEnd});
 
   @override
   State<_TextSizeSlider> createState() => _TextSizeSliderState();
