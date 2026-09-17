@@ -677,7 +677,17 @@ class _FilterChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: theme.textTheme.labelLarge),
+          // Safe under _FiltersRow's Wrap only because PopupMenuButton
+          // bounds this Row's incoming width before Wrap ever measures it;
+          // a Flexible child of a bare Wrap child would hit Flutter's
+          // unbounded-width RenderFlex assertion instead.
+          Flexible(
+            child: Text(
+              label,
+              style: theme.textTheme.labelLarge,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
           const Icon(AppIcons.openMenu, size: 20),
         ],
       ),

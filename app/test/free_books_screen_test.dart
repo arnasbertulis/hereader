@@ -767,4 +767,34 @@ void main() {
 
     await _disposeTree(tester);
   });
+
+  testWidgets(
+    'filter chips do not overflow at high text scale with narrow viewport',
+    (tester) async {
+      catalogue.categoryResponse = const [
+        CategoryCount(category: 'Fiction', count: 12),
+      ];
+      catalogue.languageResponse = const [
+        LanguageCount(language: 'en', count: 40),
+      ];
+      catalogue.searchResponses.add(
+        const CatalogueSearchResult(
+          catalogueReady: true,
+          results: [],
+          page: 0,
+          hasMore: false,
+        ),
+      );
+
+      await pump(tester, platformScale: 2.0, viewSize: const Size(400, 700));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('All categories'), findsOneWidget);
+      expect(find.text('All languages'), findsOneWidget);
+      expect(find.text('Most popular'), findsOneWidget);
+
+      await _disposeTree(tester);
+    },
+  );
 }
