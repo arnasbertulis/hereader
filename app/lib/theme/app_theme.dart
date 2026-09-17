@@ -86,7 +86,7 @@ class AppChromeSource extends ThemeExtension<AppChromeSource> {
 /// since it decides which of `theme` / `darkTheme` applies rather than
 /// anything about either theme's content.
 ///
-/// [textScale] is the reader's chrome text-size choice from Appearance
+/// [textSize] is the reader's chrome text-size choice from Appearance
 /// (#338), a multiple of `appTextTheme`'s base sizes. Defaults to 1.0 for
 /// the two call sites — `startup_failure.dart` and a build before
 /// `AppearanceController.restore()` completes — that have no settings to
@@ -95,7 +95,7 @@ ThemeData appTheme({
   required Brightness brightness,
   Color? accent,
   bool highContrast = false,
-  double textScale = 1.0,
+  double textSize = 1.0,
 }) {
   final resolvedAccent = accent ?? AppAccents.defaultAccent.color;
   final scheme = buildScheme(
@@ -106,7 +106,7 @@ ThemeData appTheme({
   final hairlineWidth = highContrast
       ? AppHairline.widthHighContrast
       : AppHairline.width;
-  final textTheme = appTextTheme(scheme, scale: textScale);
+  final textTheme = appTextTheme(scheme, scale: textSize);
 
   return ThemeData(
     useMaterial3: true,
@@ -143,7 +143,7 @@ ThemeData appTheme({
       // title that does not fit wraps and grows the app bar rather than
       // being ellipsised — truncating a screen name withholds it from
       // exactly the reader least able to guess the rest.
-      titleTextStyle: appTextTheme(scheme, scale: textScale).headlineSmall,
+      titleTextStyle: appTextTheme(scheme, scale: textSize).headlineSmall,
       shape: Border(
         bottom: BorderSide(color: scheme.outlineVariant, width: hairlineWidth),
       ),

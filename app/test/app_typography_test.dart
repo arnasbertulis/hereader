@@ -44,13 +44,13 @@ void main() {
     expect(theme.titleMedium!.fontSize, closeTo(13.6, 0.001));
   });
 
-  test('appTheme threads textScale through to its TextTheme', () {
-    final theme = appTheme(brightness: Brightness.light, textScale: 1.25);
+  test('appTheme threads textSize through to its TextTheme', () {
+    final theme = appTheme(brightness: Brightness.light, textSize: 1.25);
 
     expect(theme.textTheme.bodyLarge!.fontSize, 20);
   });
 
-  test('appTheme defaults textScale to 1.0', () {
+  test('appTheme defaults textSize to 1.0', () {
     final theme = appTheme(brightness: Brightness.light);
 
     expect(theme.textTheme.bodyLarge!.fontSize, 16);

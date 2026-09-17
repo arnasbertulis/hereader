@@ -70,7 +70,7 @@ void main() {
       late bool result;
       await tester.pumpWidget(
         MaterialApp(
-          theme: appTheme(brightness: Brightness.light, textScale: textSize),
+          theme: appTheme(brightness: Brightness.light, textSize: textSize),
           home: MediaQuery(
             data: MediaQueryData(textScaler: TextScaler.linear(platformScale)),
             child: Builder(
