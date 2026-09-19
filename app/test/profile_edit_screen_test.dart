@@ -1,6 +1,7 @@
 import 'package:app/data/database.dart';
 import 'package:app/data/library_repository.dart';
 import 'package:app/reading/profile_edit_screen.dart';
+import 'package:app/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
@@ -262,6 +263,89 @@ void main() {
             'One continuous drag should fork once, not once per '
             'intermediate value dragged across',
       );
+    },
+  );
+
+  const accentContrastWarningText =
+      'This accent colour does not reach 3:1 contrast against the reading '
+      'surface, so the progress bar and eye-point caret will render in ink '
+      'colour instead.';
+
+  testWidgets(
+    'warns when the app accent does not contrast with the background',
+    (tester) async {
+      final fork = Presets.standard.copyWith(
+        id: 'user-profile-1',
+        name: 'My reading profile',
+        presentation: Presets.standard.presentation.withTint(0xFFFFFFFF),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: appTheme(
+            brightness: Brightness.light,
+            accent: const Color(0xFFF5F5F5),
+          ),
+          home: ProfileEditScreen(
+            profile: fork,
+            repository: repository,
+            issueStamp: issueStamp,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The Background section sits well below the fold; `ListView(children:)`
+      // is lazy like `ListView.builder`, so it is not in the tree until the
+      // scrollable is brought to it.
+      await tester.scrollUntilVisible(
+        find.text('Background'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      // `scrollUntilVisible` stops as soon as the label is built, which can
+      // leave the warning just below it out of the cache extent;
+      // `ensureVisible` re-centres so the sibling below is built too.
+      await tester.ensureVisible(find.text('Background'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(accentContrastWarningText), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'does not warn when the app accent contrasts well with the background',
+    (tester) async {
+      final fork = Presets.standard.copyWith(
+        id: 'user-profile-1',
+        name: 'My reading profile',
+        presentation: Presets.standard.presentation.withTint(0xFFFFFFFF),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: appTheme(
+            brightness: Brightness.light,
+            accent: const Color(0xFF000000),
+          ),
+          home: ProfileEditScreen(
+            profile: fork,
+            repository: repository,
+            issueStamp: issueStamp,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.scrollUntilVisible(
+        find.text('Background'),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.ensureVisible(find.text('Background'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(accentContrastWarningText), findsNothing);
     },
   );
 }
