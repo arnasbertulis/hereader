@@ -901,9 +901,26 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
 
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-                child: Text(
-                  'Background',
-                  style: Theme.of(context).textTheme.titleSmall,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        'Background',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                    ),
+                    InfoDot(
+                      semanticLabel: 'About accent and background contrast',
+                      explanation:
+                          'The accent used on buttons and progress is set app-wide. '
+                          'If it does not reach 3:1 contrast against this background, '
+                          'the progress bar and eye-point caret render in a neutral '
+                          'colour instead. Check the readout below to see if adjusting '
+                          'the background would help.',
+                    ),
+                  ],
                 ),
               ),
 

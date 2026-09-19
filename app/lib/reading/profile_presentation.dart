@@ -627,6 +627,40 @@ String? reduceMotionWarning(ReadingProfile profile, {required bool disabled}) {
       'continuously and will keep doing so.';
 }
 
+/// Says that the app's accent colour does not clear 3:1 contrast against the
+/// reading profile's background or track colour.
+///
+/// The accent is app-wide and set on the Appearance screen. The profile's
+/// background is set in the profile editor. They live on different screens
+/// that share no state, so the accent might not contrast well against the
+/// background the reader picked. When that happens, the progress bar and
+/// eye-point caret render in ink colour rather than the chosen accent, silently
+/// — not by choice, but because nothing on the reading surface is legible
+/// otherwise.
+///
+/// Rather than hiding the accent, inform the reader. They keep their chosen
+/// accent, but are told it is not the colour actually rendering on their
+/// surface, and why. This follows the project's "warn, don't block" convention,
+/// and matches how this screen already warns on text/background contrast
+/// problems.
+String? accentLowContrastWarning(
+  ReadingProfile profile, {
+  required Color appAccent,
+  required ResolvedPresentation presentation,
+}) {
+  final accentArgb = appAccent.toARGB32();
+  final backgroundArgb = surfaceArgbFor(presentation);
+
+  final ratio = contrastRatio(accentArgb, backgroundArgb);
+  if (ratio >= readerMinControlContrast) {
+    return null;
+  }
+
+  return 'This accent colour does not reach 3:1 contrast against the reading '
+      'surface, so the progress bar and eye-point caret will render in a '
+      'neutral colour instead.';
+}
+
 /// Names a duration on a four-point scale instead of a millisecond count.
 ///
 /// [milliseconds] and [max] share a slider's own range, so "Long" means
