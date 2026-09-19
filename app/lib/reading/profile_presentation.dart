@@ -643,22 +643,31 @@ String? reduceMotionWarning(ReadingProfile profile, {required bool disabled}) {
 /// surface, and why. This follows the project's "warn, don't block" convention,
 /// and matches how this screen already warns on text/background contrast
 /// problems.
-String? accentLowContrastWarning(
-  ReadingProfile profile, {
+String? accentLowContrastWarning({
   required Color appAccent,
   required ResolvedPresentation presentation,
 }) {
   final accentArgb = appAccent.toARGB32();
-  final backgroundArgb = surfaceArgbFor(presentation);
 
-  final ratio = contrastRatio(accentArgb, backgroundArgb);
-  if (ratio >= readerMinControlContrast) {
+  // Two different pairs, because the progress fill and the caret sit on two
+  // different backgrounds ([readerProgressFillFor] measures against
+  // [readerTrackFor], [readerCaretFor] against the bare surface — see their
+  // doc comments). Checking only the surface would miss a track-only
+  // failure and could also warn when the caret's own pair is fine.
+  final tracksOk =
+      contrastRatio(accentArgb, readerTrackFor(presentation).toARGB32()) >=
+      readerMinControlContrast;
+  final surfaceOk =
+      contrastRatio(accentArgb, surfaceArgbFor(presentation)) >=
+      readerMinControlContrast;
+
+  if (tracksOk && surfaceOk) {
     return null;
   }
 
   return 'This accent colour does not reach 3:1 contrast against the reading '
-      'surface, so the progress bar and eye-point caret will render in a '
-      'neutral colour instead.';
+      'surface, so the progress bar and eye-point caret will render in ink '
+      'colour instead.';
 }
 
 /// Names a duration on a four-point scale instead of a millisecond count.

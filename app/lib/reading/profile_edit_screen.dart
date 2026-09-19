@@ -6,6 +6,7 @@ import 'package:rsvp_engine/rsvp_engine.dart';
 import '../data/library_repository.dart';
 import '../sync/auth_store.dart';
 import '../theme/app_icons.dart';
+import '../theme/app_theme.dart';
 import '../theme/content_width.dart';
 import 'control_row.dart';
 import 'info_dot.dart';
@@ -257,6 +258,14 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     final resolved = resolvePresentation(
       presentation,
       Theme.of(context).brightness,
+    );
+
+    // The accent is app-wide, set on the Appearance screen; this profile's
+    // background is set here. Checked against the resolved pair so the
+    // warning matches what the preview above is actually showing.
+    final accentWarning = accentLowContrastWarning(
+      appAccent: AppChromeSource.of(context).accent,
+      presentation: resolved,
     );
 
     // Under reader-elicited pacing the reader supplies their own timing, so
@@ -899,30 +908,23 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
                 ),
               ),
 
-              Padding(
+              SectionHeader(
+                'Background',
                 padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        'Background',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                    ),
-                    InfoDot(
-                      semanticLabel: 'About accent and background contrast',
-                      explanation:
-                          'The accent used on buttons and progress is set app-wide. '
-                          'If it does not reach 3:1 contrast against this background, '
-                          'the progress bar and eye-point caret render in a neutral '
-                          'colour instead. Check the readout below to see if adjusting '
-                          'the background would help.',
-                    ),
-                  ],
+                info: InfoDot(
+                  semanticLabel: 'About accent and background contrast',
+                  explanation:
+                      'The accent used on buttons and progress is set app-wide. '
+                      'If it does not reach 3:1 contrast against this background, '
+                      'the progress bar and eye-point caret render in ink '
+                      'colour instead.',
                 ),
               ),
+              if (accentWarning != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: SettingWarning(accentWarning),
+                ),
 
               _BackgroundField(
                 presentation: resolved,
