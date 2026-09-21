@@ -33,7 +33,7 @@ dependencies:
   rsvp_engine:
     path: ../packages/rsvp_engine
 
-  file_picker: ^12.2.0
+  file_picker: ^13.1.0
   epub_reader:
     path: ../packages/epub_reader
   drift: ^2.35.0
