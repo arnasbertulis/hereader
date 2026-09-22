@@ -109,9 +109,11 @@ const Key readerParagraphButtonKey = Key('reader-paragraph-button');
 const Key readerBackSentenceButtonKey = Key('reader-back-sentence-button');
 const Key readerBackParagraphButtonKey = Key('reader-back-paragraph-button');
 
-/// Opens the chapter list — present only when the book declares any. Keyed
-/// for the same reason as [readerPlayButtonKey]: assertable without relying
-/// on the tooltip string it also carries.
+/// Opens the chapter list. Always present when nav controls are shown;
+/// disabled with an explanatory tooltip when the book declares none (issue
+/// #510) rather than omitted, so its absence isn't mistaken for a feature
+/// that hasn't loaded. Keyed for the same reason as [readerPlayButtonKey]:
+/// assertable without relying on the tooltip string it also carries.
 const Key readerChaptersButtonKey = Key('reader-chapters-button');
 
 /// Leaves the reader for the library. Keyed for the same reason as
@@ -1562,7 +1564,7 @@ class _ReaderScreenState extends State<ReaderScreen>
                               ),
                             ),
                           ),
-                        if (showControls && _chapters.isNotEmpty)
+                        if (showControls)
                           Positioned(
                             top: 0,
                             left: 0,
@@ -1586,16 +1588,30 @@ class _ReaderScreenState extends State<ReaderScreen>
                             // pointer) and the `Semantics` label it carries
                             // (for assistive technology), and now also in
                             // the legend behind the InfoDot below.
+                            //
+                            // Disabled rather than absent when the book
+                            // declares no chapters (issue #510): an absent
+                            // button reads as a missing feature or a state
+                            // that has not finished loading, and a reader
+                            // relying on this corner of the screen has no
+                            // way to tell those apart from a book that
+                            // simply has none to list. `onPressed: null`
+                            // gets Material's own disabled treatment rather
+                            // than a bespoke dimmed colour here.
                             child: SafeArea(
                               child: Padding(
                                 padding: const EdgeInsets.all(AppSpacing.lg),
                                 child: IconButton(
                                   key: readerChaptersButtonKey,
-                                  onPressed: _openChapters,
+                                  onPressed: _chapters.isEmpty
+                                      ? null
+                                      : _openChapters,
                                   iconSize: _secondaryIconSize,
                                   color: ink,
                                   icon: const Icon(AppIcons.chapters),
-                                  tooltip: 'Chapters',
+                                  tooltip: _chapters.isEmpty
+                                      ? 'No chapters in this book'
+                                      : 'Chapters',
                                 ),
                               ),
                             ),
