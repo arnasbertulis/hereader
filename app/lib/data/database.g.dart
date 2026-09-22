@@ -101,6 +101,17 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _chapterCountMeta = const VerificationMeta(
+    'chapterCount',
+  );
+  @override
+  late final GeneratedColumn<int> chapterCount = GeneratedColumn<int>(
+    'chapter_count',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -112,6 +123,7 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
     importedAt,
     updatedAt,
     wordCount,
+    chapterCount,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -187,6 +199,15 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
         wordCount.isAcceptableOrUnknown(data['word_count']!, _wordCountMeta),
       );
     }
+    if (data.containsKey('chapter_count')) {
+      context.handle(
+        _chapterCountMeta,
+        chapterCount.isAcceptableOrUnknown(
+          data['chapter_count']!,
+          _chapterCountMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -232,6 +253,10 @@ class $BooksTable extends Books with TableInfo<$BooksTable, Book> {
         DriftSqlType.int,
         data['${effectivePrefix}word_count'],
       )!,
+      chapterCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}chapter_count'],
+      ),
     );
   }
 
@@ -274,6 +299,18 @@ class Book extends DataClass implements Insertable<Book> {
 
   /// Cached so the library list does not parse every book to draw itself.
   final int wordCount;
+
+  /// How many entries the book's own table of contents resolved to, cached
+  /// from the parse at import time.
+  ///
+  /// Nullable, not backfilled: a row written before this column existed has
+  /// never been re-parsed, and working the true count out for it here would
+  /// mean unzipping and tokenizing the whole library during the first frame
+  /// after an update. Null means "not yet known" and reads the same as it
+  /// did before this column existed; 0 is the honest result of a parse that
+  /// ran under this column and found none. The next import of the same book
+  /// fills it in the ordinary way, through `LibraryRepository.addBook`.
+  final int? chapterCount;
   const Book({
     required this.id,
     required this.title,
@@ -284,6 +321,7 @@ class Book extends DataClass implements Insertable<Book> {
     required this.importedAt,
     this.updatedAt,
     required this.wordCount,
+    this.chapterCount,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -303,6 +341,9 @@ class Book extends DataClass implements Insertable<Book> {
       map['updated_at'] = Variable<DateTime>(updatedAt);
     }
     map['word_count'] = Variable<int>(wordCount);
+    if (!nullToAbsent || chapterCount != null) {
+      map['chapter_count'] = Variable<int>(chapterCount);
+    }
     return map;
   }
 
@@ -323,6 +364,9 @@ class Book extends DataClass implements Insertable<Book> {
           ? const Value.absent()
           : Value(updatedAt),
       wordCount: Value(wordCount),
+      chapterCount: chapterCount == null && nullToAbsent
+          ? const Value.absent()
+          : Value(chapterCount),
     );
   }
 
@@ -341,6 +385,7 @@ class Book extends DataClass implements Insertable<Book> {
       importedAt: serializer.fromJson<DateTime>(json['importedAt']),
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
       wordCount: serializer.fromJson<int>(json['wordCount']),
+      chapterCount: serializer.fromJson<int?>(json['chapterCount']),
     );
   }
   @override
@@ -356,6 +401,7 @@ class Book extends DataClass implements Insertable<Book> {
       'importedAt': serializer.toJson<DateTime>(importedAt),
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
       'wordCount': serializer.toJson<int>(wordCount),
+      'chapterCount': serializer.toJson<int?>(chapterCount),
     };
   }
 
@@ -369,6 +415,7 @@ class Book extends DataClass implements Insertable<Book> {
     DateTime? importedAt,
     Value<DateTime?> updatedAt = const Value.absent(),
     int? wordCount,
+    Value<int?> chapterCount = const Value.absent(),
   }) => Book(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -379,6 +426,7 @@ class Book extends DataClass implements Insertable<Book> {
     importedAt: importedAt ?? this.importedAt,
     updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
     wordCount: wordCount ?? this.wordCount,
+    chapterCount: chapterCount.present ? chapterCount.value : this.chapterCount,
   );
   Book copyWithCompanion(BooksCompanion data) {
     return Book(
@@ -395,6 +443,9 @@ class Book extends DataClass implements Insertable<Book> {
           : this.importedAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       wordCount: data.wordCount.present ? data.wordCount.value : this.wordCount,
+      chapterCount: data.chapterCount.present
+          ? data.chapterCount.value
+          : this.chapterCount,
     );
   }
 
@@ -409,7 +460,8 @@ class Book extends DataClass implements Insertable<Book> {
           ..write('sourceFormat: $sourceFormat, ')
           ..write('importedAt: $importedAt, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('wordCount: $wordCount')
+          ..write('wordCount: $wordCount, ')
+          ..write('chapterCount: $chapterCount')
           ..write(')'))
         .toString();
   }
@@ -425,6 +477,7 @@ class Book extends DataClass implements Insertable<Book> {
     importedAt,
     updatedAt,
     wordCount,
+    chapterCount,
   );
   @override
   bool operator ==(Object other) =>
@@ -438,7 +491,8 @@ class Book extends DataClass implements Insertable<Book> {
           other.sourceFormat == this.sourceFormat &&
           other.importedAt == this.importedAt &&
           other.updatedAt == this.updatedAt &&
-          other.wordCount == this.wordCount);
+          other.wordCount == this.wordCount &&
+          other.chapterCount == this.chapterCount);
 }
 
 class BooksCompanion extends UpdateCompanion<Book> {
@@ -451,6 +505,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
   final Value<DateTime> importedAt;
   final Value<DateTime?> updatedAt;
   final Value<int> wordCount;
+  final Value<int?> chapterCount;
   final Value<int> rowid;
   const BooksCompanion({
     this.id = const Value.absent(),
@@ -462,6 +517,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
     this.importedAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.wordCount = const Value.absent(),
+    this.chapterCount = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   BooksCompanion.insert({
@@ -474,6 +530,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
     required DateTime importedAt,
     this.updatedAt = const Value.absent(),
     this.wordCount = const Value.absent(),
+    this.chapterCount = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        title = Value(title),
@@ -489,6 +546,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
     Expression<DateTime>? importedAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? wordCount,
+    Expression<int>? chapterCount,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -501,6 +559,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
       if (importedAt != null) 'imported_at': importedAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (wordCount != null) 'word_count': wordCount,
+      if (chapterCount != null) 'chapter_count': chapterCount,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -515,6 +574,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
     Value<DateTime>? importedAt,
     Value<DateTime?>? updatedAt,
     Value<int>? wordCount,
+    Value<int?>? chapterCount,
     Value<int>? rowid,
   }) {
     return BooksCompanion(
@@ -527,6 +587,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
       importedAt: importedAt ?? this.importedAt,
       updatedAt: updatedAt ?? this.updatedAt,
       wordCount: wordCount ?? this.wordCount,
+      chapterCount: chapterCount ?? this.chapterCount,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -561,6 +622,9 @@ class BooksCompanion extends UpdateCompanion<Book> {
     if (wordCount.present) {
       map['word_count'] = Variable<int>(wordCount.value);
     }
+    if (chapterCount.present) {
+      map['chapter_count'] = Variable<int>(chapterCount.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -579,6 +643,7 @@ class BooksCompanion extends UpdateCompanion<Book> {
           ..write('importedAt: $importedAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('wordCount: $wordCount, ')
+          ..write('chapterCount: $chapterCount, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2818,6 +2883,12 @@ class $SyncCursorTable extends SyncCursor
 class SyncCursorRow extends DataClass implements Insertable<SyncCursorRow> {
   /// Always `0`. A table rather than a wider row on some other table so a
   /// stream can watch reader preferences without watching this too.
+  ///
+  /// `withDefault` alone does not make an omitted insert land on `0`: a
+  /// lone `INTEGER PRIMARY KEY` column is a SQLite rowid alias, and an
+  /// insert that leaves it out gets the next free rowid (1, 2, ...) rather
+  /// than the column default. Every insert into this table passes
+  /// `id: const Value(0)` explicitly.
   final int id;
 
   /// How far this device has pulled. `0` before the first successful pull.
@@ -4050,6 +4121,7 @@ typedef $$BooksTableCreateCompanionBuilder =
       required DateTime importedAt,
       Value<DateTime?> updatedAt,
       Value<int> wordCount,
+      Value<int?> chapterCount,
       Value<int> rowid,
     });
 typedef $$BooksTableUpdateCompanionBuilder =
@@ -4063,6 +4135,7 @@ typedef $$BooksTableUpdateCompanionBuilder =
       Value<DateTime> importedAt,
       Value<DateTime?> updatedAt,
       Value<int> wordCount,
+      Value<int?> chapterCount,
       Value<int> rowid,
     });
 
@@ -4159,6 +4232,11 @@ class $$BooksTableFilterComposer extends Composer<_$AppDatabase, $BooksTable> {
 
   ColumnFilters<int> get wordCount => $composableBuilder(
     column: $table.wordCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get chapterCount => $composableBuilder(
+    column: $table.chapterCount,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4266,6 +4344,11 @@ class $$BooksTableOrderingComposer
     column: $table.wordCount,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get chapterCount => $composableBuilder(
+    column: $table.chapterCount,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$BooksTableAnnotationComposer
@@ -4307,6 +4390,11 @@ class $$BooksTableAnnotationComposer
 
   GeneratedColumn<int> get wordCount =>
       $composableBuilder(column: $table.wordCount, builder: (column) => column);
+
+  GeneratedColumn<int> get chapterCount => $composableBuilder(
+    column: $table.chapterCount,
+    builder: (column) => column,
+  );
 
   Expression<T> readingPositionsRefs<T extends Object>(
     Expression<T> Function($$ReadingPositionsTableAnnotationComposer a) f,
@@ -4399,6 +4487,7 @@ class $$BooksTableTableManager
                 Value<DateTime> importedAt = const Value.absent(),
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<int> wordCount = const Value.absent(),
+                Value<int?> chapterCount = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BooksCompanion(
                 id: id,
@@ -4410,6 +4499,7 @@ class $$BooksTableTableManager
                 importedAt: importedAt,
                 updatedAt: updatedAt,
                 wordCount: wordCount,
+                chapterCount: chapterCount,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -4423,6 +4513,7 @@ class $$BooksTableTableManager
                 required DateTime importedAt,
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<int> wordCount = const Value.absent(),
+                Value<int?> chapterCount = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => BooksCompanion.insert(
                 id: id,
@@ -4434,12 +4525,15 @@ class $$BooksTableTableManager
                 importedAt: importedAt,
                 updatedAt: updatedAt,
                 wordCount: wordCount,
+                chapterCount: chapterCount,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
               .map(
-                (e) =>
-                    (e.readTable(table), $$BooksTableReferences(db, table, e)),
+                (e) => (
+                  e.readTable<$BooksTable, Book>(table),
+                  $$BooksTableReferences(db, table, e),
+                ),
               )
               .toList(),
           prefetchHooksCallback:
@@ -4859,7 +4953,7 @@ class $$ReadingPositionsTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$ReadingPositionsTable, ReadingPosition>(table),
                   $$ReadingPositionsTableReferences(db, table, e),
                 ),
               )
@@ -5151,7 +5245,16 @@ class $$PendingPositionsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$PendingPositionsTable, PendingPosition>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $PendingPositionsTable,
+                    PendingPosition
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -5371,7 +5474,7 @@ class $$BookCoversTableTableManager
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
-                  e.readTable(table),
+                  e.readTable<$BookCoversTable, BookCover>(table),
                   $$BookCoversTableReferences(db, table, e),
                 ),
               )
@@ -5676,7 +5779,16 @@ class $$StoredProfilesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$StoredProfilesTable, StoredProfile>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $StoredProfilesTable,
+                    StoredProfile
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -5838,7 +5950,16 @@ class $$PreferencesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$PreferencesTable, Preference>(table),
+                  BaseReferences<_$AppDatabase, $PreferencesTable, Preference>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -6015,7 +6136,16 @@ class $$SyncCursorTableTableManager
                 lastSyncedAt: lastSyncedAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$SyncCursorTable, SyncCursorRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $SyncCursorTable,
+                    SyncCursorRow
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -6310,7 +6440,16 @@ class $$OutboxEventsTableTableManager
                 lastError: lastError,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$OutboxEventsTable, OutboxEvent>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $OutboxEventsTable,
+                    OutboxEvent
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -6515,7 +6654,16 @@ class $$PositionConflictsTableTableManager
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$PositionConflictsTable, PositionConflict>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $PositionConflictsTable,
+                    PositionConflict
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
