@@ -14,6 +14,7 @@ BookSummary _book({
   int? tokenIndex,
   String? chapterTitle,
   int? chapterEndIndex,
+  int? chapterCount,
 }) => BookSummary(
   id: 'book-1',
   title: 'Romeo and Juliet',
@@ -25,6 +26,7 @@ BookSummary _book({
   tokenIndex: tokenIndex,
   chapterTitle: chapterTitle,
   chapterEndIndex: chapterEndIndex,
+  chapterCount: chapterCount,
 );
 
 void main() {
@@ -144,6 +146,26 @@ void main() {
         chapter: null,
         figure: '36 min left',
       ));
+    });
+
+    test('a book that declares no chapters says so, not just a figure', () {
+      // chapterCount 0, not merely a null chapterTitle: the latter also
+      // covers front matter and an unsynced position, which are honestly
+      // silent rather than "no chapters" (issue #510).
+      final book = _book(tokenIndex: 999, chapterCount: 0);
+
+      expect(placeOf(book, _steady, TimeLeftScope.chapter), (
+        chapter: noChaptersLabel,
+        figure: '36 min left',
+      ));
+    });
+
+    test('an unknown chapter count stays silent, like before this column', () {
+      // chapterCount null: a row that predates the column and has not been
+      // re-imported. Treated as "not yet known", never as "zero".
+      final book = _book(tokenIndex: 999);
+
+      expect(placeOf(book, _steady, TimeLeftScope.chapter).chapter, isNull);
     });
   });
 

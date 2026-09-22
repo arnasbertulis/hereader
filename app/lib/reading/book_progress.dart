@@ -147,6 +147,16 @@ String remainingTimeLabel(int remainingTokens, PacingConfig pacing) {
   return rest == 0 ? '$hours h left' : '$hours h $rest min left';
 }
 
+/// Stands in for a chapter title when the book's own table of contents
+/// resolved to nothing (issue #510) — [BookSummary.chapterCount] zero,
+/// checked rather than [BookSummary.chapterTitle] being null, since that is
+/// also null for a book still in front matter, a position with no chapter
+/// synced, and a book nobody has opened yet. Without a distinct label those
+/// collapse into the same silent whole-book figure, and a reader relying on
+/// this line has no way to tell "this book has no chapters" apart from
+/// "this hasn't loaded yet".
+const noChaptersLabel = 'No chapters';
+
 /// The two halves of what a tile says about the reader's place.
 ///
 /// Returned apart rather than joined because they truncate differently. The
@@ -158,12 +168,19 @@ String remainingTimeLabel(int remainingTokens, PacingConfig pacing) {
 /// The chapter is present whenever this device recorded one, whichever scope
 /// the figure is in. It is the label on the figure as much as a fact of its
 /// own: with it, `4 min left` cannot be mistaken for the whole book, and
-/// without it there is no chapter for the reader to have meant.
+/// without it there is no chapter for the reader to have meant. [chapter] is
+/// also [noChaptersLabel] when the book declares none — a fact, not the
+/// absence of one, so it gets a slot here rather than staying indistinguishable
+/// from every other reason a stored position has no chapter on it.
 ({String? chapter, String? figure}) placeOf(
   BookSummary book,
   PacingConfig pacing,
   TimeLeftScope scope,
-) => (chapter: book.chapterTitle, figure: remainingLabel(book, pacing, scope));
+) => (
+  chapter:
+      book.chapterTitle ?? (book.chapterCount == 0 ? noChaptersLabel : null),
+  figure: remainingLabel(book, pacing, scope),
+);
 
 /// What a screen reader says for a book.
 ///
@@ -248,8 +265,16 @@ class BookPlaceLine extends StatelessWidget {
     final chapter = where.chapter;
     final figure = where.figure;
 
-    if (chapter == null) {
-      final only = figure ?? fallback;
+    // [noChaptersLabel] takes the single-Text path below rather than the
+    // Row one: it is a fixed, short literal that never needs a title's own
+    // truncation rule, and the Row's `Flexible` only behaves inside a
+    // bounded width — a tile measuring this line's intrinsic width (as the
+    // shelf's layout does) hands it an unbounded one, which is exactly the
+    // overflow this line existed to avoid, not cause.
+    if (chapter == null || chapter == noChaptersLabel) {
+      final only = chapter == null
+          ? (figure ?? fallback)
+          : (figure == null ? chapter : '$chapter$_placeSeparator$figure');
       if (only == null) return const SizedBox.shrink();
 
       return Text(
