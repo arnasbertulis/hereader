@@ -51,6 +51,18 @@ class Books extends Table {
   /// Cached so the library list does not parse every book to draw itself.
   IntColumn get wordCount => integer().withDefault(const Constant(0))();
 
+  /// How many entries the book's own table of contents resolved to, cached
+  /// from the parse at import time.
+  ///
+  /// Nullable, not backfilled: a row written before this column existed has
+  /// never been re-parsed, and working the true count out for it here would
+  /// mean unzipping and tokenizing the whole library during the first frame
+  /// after an update. Null means "not yet known" and reads the same as it
+  /// did before this column existed; 0 is the honest result of a parse that
+  /// ran under this column and found none. The next import of the same book
+  /// fills it in the ordinary way, through `LibraryRepository.addBook`.
+  IntColumn get chapterCount => integer().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -368,7 +380,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -515,6 +527,13 @@ class AppDatabase extends _$AppDatabase {
               ]),
             ))
             .go();
+      }
+      if (from < 12) {
+        // Nullable, not backfilled: see the column's own comment on [Books].
+        // A row already on disk keeps reading as "not yet known" until its
+        // book is imported again, the same way version 10's chapter columns
+        // stayed null until a fresh save.
+        await m.addColumn(books, books.chapterCount);
       }
     },
     beforeOpen: (details) async {

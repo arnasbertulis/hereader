@@ -37,6 +37,10 @@ Future<List<String>> _tableNames(AppDatabase db) async {
 /// a database built from the current schema already had what the step was
 /// about to add. A step that only takes something away hides that.
 Future<void> _revertTo(AppDatabase db, int version) async {
+  if (version < 12) {
+    await db.customStatement('alter table books drop column chapter_count');
+  }
+
   if (version < 11) {
     await db.customStatement('drop table sync_cursor');
 
@@ -470,5 +474,42 @@ void main() {
     expect(cursor.lastSeq, 0);
     expect(cursor.lastHlc, isNull);
     expect(cursor.lastSyncedAt, isNull);
+  });
+
+  test('upgrading from version 11 leaves an existing book\'s chapter count '
+      'unknown, and a re-import fills it in', () async {
+    final legacy = AppDatabase(NativeDatabase(file));
+    final legacyRepo = LibraryRepository(legacy);
+
+    await legacyRepo.addBook(
+      fixtureBook(id: 'book-1', title: 'Romeo and Juliet', wordCount: 25000),
+      Uint8List.fromList([1, 2, 3]),
+    );
+
+    await _revertTo(legacy, 11);
+    await legacy.close();
+
+    final upgraded = AppDatabase(NativeDatabase(file));
+    addTearDown(upgraded.close);
+
+    final before = await upgraded.select(upgraded.books).getSingle();
+
+    // No backfill is possible without re-parsing the stored EPUB, so a row
+    // that predates this column reads as "not yet known" rather than
+    // "declares none" — the two would otherwise be indistinguishable on
+    // the tile this column exists to fix.
+    expect(before.chapterCount, isNull);
+
+    // Re-importing the same book — the ordinary path, addBook — is what
+    // fills the column in. Without this, a migration that added the
+    // column to the wrong table would leave the assertion above true for
+    // the wrong reason.
+    await LibraryRepository(upgraded).addBook(
+      fixtureBook(id: 'book-1', title: 'Romeo and Juliet', wordCount: 25000),
+      Uint8List.fromList([1, 2, 3]),
+    );
+
+    final after = await upgraded.select(upgraded.books).getSingle();
+    expect(after.chapterCount, 0);
   });
 }

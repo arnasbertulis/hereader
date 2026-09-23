@@ -296,18 +296,28 @@ void main() {
       await disposeTree(tester);
     });
 
-    testWidgets('a book that declares no chapters offers no button', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        reader(LibraryBook(id: 'b', title: 'A Book', text: _text())),
-      );
-      await tester.pumpAndSettle();
+    testWidgets(
+      'a book that declares no chapters offers a disabled button explaining '
+      'why',
+      (tester) async {
+        await tester.pumpWidget(
+          reader(LibraryBook(id: 'b', title: 'A Book', text: _text())),
+        );
+        await tester.pumpAndSettle();
 
-      expect(find.byTooltip('Chapters'), findsNothing);
+        // Present rather than absent (issue #510): an absent button is
+        // indistinguishable from a state that has not finished loading, and
+        // a reader relying on this corner of the screen has no way to tell
+        // that apart from a book that simply has no chapters.
+        final button = tester.widget<IconButton>(
+          find.byKey(readerChaptersButtonKey),
+        );
+        expect(button.tooltip, 'No chapters in this book');
+        expect(button.onPressed, isNull);
 
-      await disposeTree(tester);
-    });
+        await disposeTree(tester);
+      },
+    );
 
     testWidgets(
       'resuming after a chapter jump does not rewind by rewindWords',

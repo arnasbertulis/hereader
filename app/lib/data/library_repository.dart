@@ -73,6 +73,17 @@ class BookSummary {
   /// to navigate by.
   final int? tokenIndex;
 
+  /// How many entries the book's own table of contents resolved to, cached
+  /// at import time.
+  ///
+  /// Zero means the book was parsed under this column and genuinely declares
+  /// none — a fact worth telling apart from [chapterTitle] being null, which
+  /// covers a book still in front matter or a position with no chapter
+  /// synced (see [chapterTitle]'s own comment). Null means the row predates
+  /// this column and has not been re-imported since; treated the same as
+  /// "unknown" rather than "zero" everywhere this is read.
+  final int? chapterCount;
+
   /// The chapter the stored position is in, as the book names it, or null
   /// when this device has not recorded one.
   ///
@@ -97,6 +108,7 @@ class BookSummary {
     this.tokenIndex,
     this.chapterTitle,
     this.chapterEndIndex,
+    this.chapterCount,
     this.lastReadAt,
   });
 
@@ -285,6 +297,7 @@ class LibraryRepository {
         table.importedAt,
         table.sourceFormat,
         table.updatedAt,
+        table.chapterCount,
         positions.blockId,
         positions.charOffset,
         positions.parserVersion,
@@ -307,6 +320,7 @@ class LibraryRepository {
           importedAt: row.read(table.importedAt)!,
           sourceFormat: row.read(table.sourceFormat)!,
           updatedAt: row.read(table.updatedAt),
+          chapterCount: row.read(table.chapterCount),
           position: blockId == null
               ? null
               : Locator(
@@ -398,10 +412,13 @@ class LibraryRepository {
   ///
   /// Takes the parsed [book] and the [bytes] it was parsed from, rather than
   /// each field unpacked by hand: `id`, `title`, `author` and `language` come
-  /// straight off [book], `wordCount` is `book.text.length`, and
-  /// `sourceFormat` is `book.sourceFormat.name`. A caller that wants a
-  /// different figure for one of these fixes the parse that produced [book]
-  /// rather than restating the derivation at every import site.
+  /// straight off [book], `wordCount` is `book.text.length`, `sourceFormat`
+  /// is `book.sourceFormat.name`, and `chapterCount` is `book.chapters.length`
+  /// — the table of contents the parse already resolved, cached here so the
+  /// library can tell "declares none" apart from "not yet resolved" without
+  /// re-parsing. A caller that wants a different figure for one of these
+  /// fixes the parse that produced [book] rather than restating the
+  /// derivation at every import site.
   ///
   /// One transaction with the pending-position drain: a book that reached
   /// disk while its waiting position stayed behind would open at the start
@@ -420,6 +437,7 @@ class LibraryRepository {
               sourceFormat: Value(book.sourceFormat.name),
               author: Value(book.author),
               language: Value(book.language),
+              chapterCount: Value(book.chapters.length),
             ),
           );
 
