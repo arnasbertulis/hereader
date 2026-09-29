@@ -40,7 +40,17 @@ jobs:
       dart: ${{ steps.filter.outputs.dart }}
 
     steps:
+      # Depth 2 rather than the default 1 so the commit a push follows is
+      # already on disk. On a push, dorny/paths-filter diffs the event's
+      # `before` commit against HEAD, and at depth 1 that commit is absent, so
+      # it makes a second network fetch — one that has failed a run on main
+      # with a certificate error while the checkout's own fetch, a moment
+      # earlier, succeeded. A squash merge is one commit, so its parent is the
+      # `before`; a push of several commits still falls back to that fetch,
+      # no worse than before.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 2
 
       # ADR 0001's path dependencies mean packages/rsvp_engine and
       # packages/epub_reader reach app with no publish and no version bump,

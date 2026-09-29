@@ -40,7 +40,12 @@ jobs:
       server: ${{ steps.filter.outputs.server }}
 
     steps:
+      # Depth 2 so a push's `before` commit is already on disk and
+      # dorny/paths-filter has nothing to fetch; ci-flutter.yml has the full
+      # account.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 2
 
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
