@@ -48,7 +48,7 @@ jobs:
       # Building here rather than on the VPS. The CX22 has 2 vCPU and 4GB of
       # RAM shared with a running JVM and Postgres, and `docker compose up
       # --build` ran a full Maven build against exactly that.
-      - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: server
           push: true
@@ -130,7 +130,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: app/build/web
           file: app/web.Dockerfile
