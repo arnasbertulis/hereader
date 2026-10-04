@@ -115,7 +115,8 @@ Anchors are collected in the same walk that emits blocks, held pending and
 attached to the next block emitted. One rule covers three shapes: an id on the
 block itself, on a container wrapping it — where Gutenberg's converter puts
 chapter fragments — or on an empty inline anchor inside it. An anchor on a
-block dropped for length carries forward to the next block kept, and the first
+block dropped for length carries forward to the next block kept, as does one on
+a skipped element such as a figure or table, or anywhere inside one. The first
 claim on an index wins.
 
 Reading it never throws. An entry pointing at a missing document, at one that

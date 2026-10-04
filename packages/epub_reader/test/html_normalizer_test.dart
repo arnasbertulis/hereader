@@ -283,6 +283,50 @@ void main() {
       expect(anchors['inner'], 0);
     });
 
+    test('an id on a dropped figure carries to the next block kept', () {
+      // The figure's content is dropped, but a contents entry naming it
+      // should land just past it rather than at the top of the document.
+      expect(
+        _anchors(
+          '<p>One.</p><p>Two.</p>'
+          '<figure id="f"><img src="a.png"/></figure><p>Three.</p>',
+        )['f'],
+        2,
+      );
+    });
+
+    test('an id on a dropped table carries to the next block kept', () {
+      expect(
+        _anchors(
+          '<p>One.</p>'
+          '<table id="t"><tr><td>x</td></tr></table><p>Two.</p>',
+        )['t'],
+        1,
+      );
+    });
+
+    test('an id inside a dropped table carries to the next block kept', () {
+      expect(
+        _anchors(
+          '<p>One.</p>'
+          '<table><tr><td id="cell">x</td></tr></table><p>Two.</p>',
+        )['cell'],
+        1,
+      );
+    });
+
+    test('a dropped figure does not move an id already resolved', () {
+      // The container claims its heading first; the figure below it adds its
+      // own id to the paragraph after, and must leave the container alone.
+      final anchors = _anchors(
+        '<div id="c"><h1>Title</h1>'
+        '<figure id="f"><img src="a.png"/></figure><p>Body.</p></div>',
+      );
+
+      expect(anchors['c'], 0);
+      expect(anchors['f'], 1);
+    });
+
     test('an anchor with no block after it is not recorded', () {
       expect(_anchors('<p>Real.</p><p id="m">x</p>'), isNot(contains('m')));
     });

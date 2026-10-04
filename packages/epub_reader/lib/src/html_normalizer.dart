@@ -20,7 +20,8 @@ const _blockTags = {
   'pre',
 };
 
-/// Elements dropped whole, including their text.
+/// Elements dropped whole, including their text. Their ids are still held, so
+/// a fragment naming one lands on the next block kept.
 ///
 /// Tables and images are excluded because a table cell read one word at a
 /// time loses the structure that made it a table. Recorded as a limitation
@@ -116,7 +117,16 @@ class _Walk {
       if (node is! dom.Element) continue;
 
       final tag = node.localName?.toLowerCase();
-      if (tag == null || _skipTags.contains(tag)) continue;
+      if (tag == null) continue;
+
+      if (_skipTags.contains(tag)) {
+        // The content goes, the ids stay pending. A contents entry naming a
+        // figure or table should land on the text just past it, not fall
+        // back to the top of the document.
+        _hold(node);
+        _holdDescendants(node);
+        continue;
+      }
 
       if (_isNavigation(node)) continue;
 
