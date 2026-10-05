@@ -181,6 +181,27 @@ void main() {
       expect(_landsOn(book, book.toc.single), 'Real text.');
     });
 
+    test('an id on a dropped figure lands on the block after it', () {
+      final book = parse(
+        '<p>Before.</p><p>Middle.</p>'
+            '<figure id="fig2"><img src="a.png"/></figure><p>After.</p>',
+        'ch1.xhtml#fig2',
+      );
+
+      expect(_landsOn(book, book.toc.single), 'After.');
+    });
+
+    test('an id on a dropped element with nothing after it lands on the '
+        'start of the document', () {
+      final book = parse(
+        '<p>First.</p><p>Second.</p>'
+            '<figure id="fig2"><img src="a.png"/></figure>',
+        'ch1.xhtml#fig2',
+      );
+
+      expect(_landsOn(book, book.toc.single), 'First.');
+    });
+
     test('no fragment lands on the start of the document', () {
       final book = parse('<p>First.</p><p>Second.</p>', 'ch1.xhtml');
 
