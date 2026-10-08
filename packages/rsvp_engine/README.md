@@ -177,6 +177,13 @@ includes the sub-token offset: under continuous scroll, zeroing it would snap
 the reader to the leading edge of the word they had stopped in, which is
 exactly what a rewind of none asks not to happen.
 
+A resume that does not move the reader holds the word only for what the pause
+interrupted: the remainder of its display, or of the gap after it. Any seek,
+step, `stopAt` or profile change while paused discards the remainder, as does a
+`rewindWords` that lands on an earlier word, so a remainder is never carried to
+a different word or measured against different pacing. Elapsed time is read from
+`package:clock`, because `fakeAsync` virtualises it and `DateTime.now()` is not.
+
 `stopAt(index)` is the move a reader made deliberately: it stops where it lands
 and suppresses exactly one resume rewind, because someone who has just stepped
 onto a word does not want to be moved off it when they start again. A `pause()`

@@ -35,7 +35,6 @@ gap that is meant to change gets a GitHub issue instead.
 - Length-scaled pacing normalises against a fixed reference word length, so the configured words-per-minute is only accurate on average. Text whose mean word length differs sharply from English will read faster or slower than the setting says.
 - The fade warning measures against that same reference hold, so under length-scaled pacing short words begin overlapping slightly before the warning appears.
 - The timer chain schedules each word when the previous one finishes rather than against an absolute schedule, so lateness compounds across a book. Probably under a percent and unmeasured — and not measurable by the current tests, which run under a virtual clock that fires every timer exactly on time by construction.
-- Pausing mid-word restarts that word's full duration on resume rather than preserving the remainder. The difference is a few hundred milliseconds and was not judged worth the bookkeeping.
 - The optimal recognition point highlight is offered as a preference with no evidence behind it. None of the studies in [`docs/research/rsvp-evidence.md`](research/rsvp-evidence.md) tested it.
 - iOS is untested. The codebase targets it, but building and signing requires macOS hardware.
 - Flutter web renders text to canvas rather than DOM, so screen reader support on the web target is weaker than a conventional website even where the semantics are correct. There is also no keystore there, so tokens fall back to local storage.
