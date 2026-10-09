@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
+
 import '../pacing/pacing_decision.dart';
 import '../pacing/pacing_model.dart';
 import '../profile/profile.dart';
@@ -58,9 +60,12 @@ class PlaybackUpdate {
 /// Owns no rendering and no persistence. Emits [PlaybackUpdate]s; the caller
 /// draws them and, separately, saves `token.charOffset` as a locator.
 ///
-/// Uses [Timer] directly rather than an injected clock. Tests wrap calls in
-/// `fakeAsync`, which replaces the Zone's timer factory, so a session at
-/// 250 wpm can be stepped through a whole paragraph in microseconds.
+/// Uses [Timer] and `package:clock`'s `clock` directly rather than an injected
+/// clock. Tests wrap calls in `fakeAsync`, which replaces the Zone's timer
+/// factory and the `clock`, so a session at 250 wpm can be stepped through a
+/// whole paragraph in microseconds. `clock` rather than `DateTime.now()` or a
+/// `Stopwatch`, because only it is virtual: [pause] needs to know how much of
+/// a hold had elapsed.
 class PlaybackSession {
   final List<Token> tokens;
 
@@ -71,6 +76,18 @@ class PlaybackSession {
   PlaybackState _state = PlaybackState.idle;
   bool _inGap = false;
   Timer? _timer;
+
+  /// The phase [_timer] is timing, so [pause] can tell how much of it is left.
+  _Phase? _phase;
+
+  /// What a [pause] left of the word it interrupted, spent by the next [play].
+  ///
+  /// Cleared by anything that moves to a different word or changes the pacing
+  /// the remainder was measured against: a seek, a step, a profile change.
+  /// [play] also drops it when [ReadingProfile.rewindWords] moves the reader
+  /// to an earlier word. Never set under scroll or elicited pacing, where no
+  /// timer is running to have a remainder.
+  _Phase? _left;
 
   /// Logical pixels into token [_index]'s own advance. Scroll mode only, and
   /// never persisted: the locator format is token-granular (ADR 0002), so a
@@ -176,6 +193,7 @@ class PlaybackSession {
     final wasScrolling = scrolling;
     _profile = next;
     _model = PacingModel.of(next.pacing.kind);
+    _left = null;
 
     // Leaving scroll mode: the fixed anchor has no sub-token position, and a
     // stale one would offset the first laid-out token if scroll came back.
@@ -202,6 +220,7 @@ class PlaybackSession {
     if (_state == PlaybackState.finished) {
       _index = 0;
       _offset = 0;
+      _left = null;
     }
 
     // A rewind of no words is not a move, so it must not zero [_offset]
@@ -211,13 +230,29 @@ class PlaybackSession {
     if (_state == PlaybackState.paused &&
         !_resumeHere &&
         _profile.rewindWords > 0) {
-      _index = (_index - _profile.rewindWords).clamp(0, tokens.length - 1);
+      final rewound = (_index - _profile.rewindWords).clamp(
+        0,
+        tokens.length - 1,
+      );
+      // Clamped at the first token the rewind may land where it started, and
+      // then the word is the same one and its remainder still applies.
+      if (rewound != _index) _left = null;
+      _index = rewound;
       _offset = 0;
     }
 
     // Spent whether or not it applied, so it describes the last thing the
     // reader did rather than accumulating across resumes.
     _resumeHere = false;
+
+    final left = _left;
+    _left = null;
+    if (left != null && !scrolling) {
+      _inGap = left.inGap;
+      _setState(PlaybackState.playing);
+      _startPhase(left);
+      return;
+    }
 
     _inGap = false;
     _scheduleCurrent();
@@ -228,8 +263,15 @@ class PlaybackSession {
         _state != PlaybackState.awaitingAdvance) {
       return;
     }
+    // Only a pause from `playing` has a running timer to take a remainder
+    // from; under scroll or elicited pacing [_timer] is null or spent.
+    final phase = _phase;
+    _left = _timer?.isActive == true && phase != null
+        ? phase.remainingAt(clock.now())
+        : null;
     _timer?.cancel();
     _timer = null;
+    _phase = null;
     _inGap = false;
 
     // [_offset] is deliberately kept. Under continuous scroll the reader's
@@ -252,6 +294,7 @@ class PlaybackSession {
 
     _timer?.cancel();
     _inGap = false;
+    _left = null;
 
     if (_index >= tokens.length - 1) {
       _finish();
@@ -275,6 +318,7 @@ class PlaybackSession {
 
     _timer?.cancel();
     _inGap = false;
+    _left = null;
 
     final wasFinished = _state == PlaybackState.finished;
     _index = (_index - count).clamp(0, tokens.length - 1);
@@ -293,6 +337,7 @@ class PlaybackSession {
 
     _timer?.cancel();
     _inGap = false;
+    _left = null;
     _index = target.clamp(0, tokens.length - 1);
     _offset = 0;
 
@@ -323,6 +368,7 @@ class PlaybackSession {
 
     _timer?.cancel();
     _inGap = false;
+    _left = null;
     _index = target.clamp(0, tokens.length - 1);
     _offset = 0;
     _resumeHere = true;
@@ -350,6 +396,7 @@ class PlaybackSession {
 
     _timer?.cancel();
     _inGap = false;
+    _left = null;
     _resumeHere = true;
 
     if (_state == PlaybackState.awaitingAdvance) {
@@ -490,16 +537,23 @@ class PlaybackSession {
 
       case Hold(:final display, :final pauseAfter):
         _setState(PlaybackState.playing);
-        _timer = Timer(display, () {
-          if (pauseAfter > Duration.zero) {
-            _inGap = true;
-            _emit();
-            _timer = Timer(pauseAfter, _step);
-          } else {
-            _step();
-          }
-        });
+        _startPhase(_Phase(display, pauseAfter: pauseAfter));
     }
+  }
+
+  /// Time one [_Phase] on [_timer]. A word's hold is a display phase, then a
+  /// gap phase if it has a pause after it, then [_step].
+  void _startPhase(_Phase phase) {
+    _phase = phase.startedAt(clock.now());
+    _timer = Timer(phase.length, () {
+      if (!phase.inGap && phase.pauseAfter > Duration.zero) {
+        _inGap = true;
+        _emit();
+        _startPhase(_Phase(phase.pauseAfter, inGap: true));
+      } else {
+        _step();
+      }
+    });
   }
 
   void _step() {
@@ -515,6 +569,7 @@ class PlaybackSession {
   void _finish() {
     _timer?.cancel();
     _timer = null;
+    _left = null;
     _inGap = false;
     _offset = 0;
     _setState(PlaybackState.finished);
@@ -537,6 +592,43 @@ class PlaybackSession {
         inGap: _inGap,
         tokenOffset: _offset,
       ),
+    );
+  }
+}
+
+/// One timed stretch of a word's hold: its display, or the gap after it.
+///
+/// [pauseAfter] is the gap still to come once a display phase ends, and zero
+/// for a gap phase, which has nothing after it but the next word.
+class _Phase {
+  final Duration length;
+  final bool inGap;
+  final Duration pauseAfter;
+  final DateTime? began;
+
+  const _Phase(
+    this.length, {
+    this.inGap = false,
+    this.pauseAfter = Duration.zero,
+    this.began,
+  });
+
+  _Phase startedAt(DateTime now) =>
+      _Phase(length, inGap: inGap, pauseAfter: pauseAfter, began: now);
+
+  /// What is left of this phase at [now], clamped to `[0, length]` so a
+  /// timer that is a microtask late cannot yield a negative [Timer] duration.
+  _Phase remainingAt(DateTime now) {
+    final elapsed = now.difference(began ?? now);
+    final left = length - elapsed;
+    return _Phase(
+      left < Duration.zero
+          ? Duration.zero
+          : left > length
+          ? length
+          : left,
+      inGap: inGap,
+      pauseAfter: pauseAfter,
     );
   }
 }

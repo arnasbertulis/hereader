@@ -74,12 +74,32 @@ Uint8List _entries(int count) {
 ///
 /// The central directory's declared size is what the guard reads, and
 /// `ZipEncoder` writes the declared value through rather than recomputing
-/// it from the content — which is the same gap the root README records as
-/// a known limitation.
+/// it from the content, so a zip can claim any size at all.
 Uint8List _declaringSize(int bytes) {
   final archive = Archive()..addFile(ArchiveFile('big.bin', bytes, [0]));
   return Uint8List.fromList(ZipEncoder().encode(archive));
 }
+
+/// A zip whose every entry declares one byte but inflates to its full
+/// [contents], so the declared-size guard sees nothing to reject.
+Uint8List _understating(Map<String, List<int>> contents) {
+  final archive = Archive();
+  contents.forEach((name, bytes) {
+    archive.addFile(ArchiveFile(name, 1, bytes));
+  });
+  return Uint8List.fromList(ZipEncoder().encode(archive));
+}
+
+/// [count] zero bytes: deflates to a handful, inflates to [count].
+List<int> _zeros(int count) => List.filled(count, 0);
+
+const _container = '''
+<?xml version="1.0"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>''';
 
 /// Every failure in this parser is an `EpubException`, so the type alone
 /// says nothing about which check fired.
@@ -409,6 +429,60 @@ void main() {
         () => const EpubParser().parse(_declaringSize(512 * 1024 * 1024)),
         _throwsEpubMessage('META-INF/container.xml'),
       );
+    });
+
+    group('an entry that understates its own size', () {
+      const cap = 1000;
+      const parser = EpubParser(maxUncompressedBytes: cap);
+
+      test('is rejected once it inflates past the cap', () {
+        expect(
+          () => parser.parse(
+            _understating({'META-INF/container.xml': _zeros(cap + 1)}),
+          ),
+          _throwsEpubMessage('too much uncompressed content'),
+        );
+      });
+
+      test('is accepted at exactly the cap', () {
+        // Read in full, then fails on its content rather than its size.
+        // Without this, the test above could not tell a cap enforced during
+        // inflation from one that rejects every entry.
+        expect(
+          () => parser.parse(
+            _understating({'META-INF/container.xml': _zeros(cap)}),
+          ),
+          _throwsEpubMessage('META-INF/container.xml is not valid XML'),
+        );
+      });
+
+      test('is charged against what earlier entries already used', () {
+        // Each entry is under the cap alone; together they are not.
+        final container = utf8.encode(_container);
+        const second = 500;
+        final shared = EpubParser(
+          maxUncompressedBytes: container.length + second,
+        );
+
+        expect(
+          () => shared.parse(
+            _understating({
+              'META-INF/container.xml': container,
+              'content.opf': _zeros(second + 1),
+            }),
+          ),
+          _throwsEpubMessage('too much uncompressed content'),
+        );
+        expect(
+          () => shared.parse(
+            _understating({
+              'META-INF/container.xml': container,
+              'content.opf': _zeros(second),
+            }),
+          ),
+          _throwsEpubMessage('content.opf is not valid XML'),
+        );
+      });
     });
 
     test('rejects a book with no readable documents', () {

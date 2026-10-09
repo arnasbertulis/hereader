@@ -15,11 +15,16 @@ ReadingProfile _profile({
   PacingModelKind kind = PacingModelKind.constant,
   int rewindWords = 2,
   Duration sentencePause = const Duration(milliseconds: 220),
+  double baseWpm = 300,
 }) => ReadingProfile(
   id: 'test',
   name: 'Test',
   rewindWords: rewindWords,
-  pacing: PacingConfig(kind: kind, baseWpm: 300, sentencePause: sentencePause),
+  pacing: PacingConfig(
+    kind: kind,
+    baseWpm: baseWpm,
+    sentencePause: sentencePause,
+  ),
 );
 
 void main() {
@@ -189,6 +194,196 @@ void main() {
 
         s.rewind();
         expect(s.index, 2, reason: 'one step back, not one plus rewindWords');
+
+        s.dispose();
+      });
+    });
+  });
+
+  group('resuming mid-word', () {
+    // "one" holds for 200ms at 300 wpm. Paused 150ms in, 50ms are left.
+    const hold = Duration(milliseconds: 200);
+    const elapsed = Duration(milliseconds: 150);
+    const left = Duration(milliseconds: 50);
+    const ms = Duration(milliseconds: 1);
+
+    test('holds the word only for the time it had left', () {
+      fakeAsync((async) {
+        final s = PlaybackSession(
+          tokens: _tokens(),
+          profile: _profile(rewindWords: 0),
+        );
+        s.play();
+        async.elapse(elapsed);
+        s.pause();
+        async.elapse(const Duration(seconds: 10));
+
+        s.play();
+        async.elapse(left - ms);
+        expect(s.index, 0, reason: 'still inside the remainder');
+        async.elapse(ms);
+        expect(s.index, 1, reason: 'advances after the remainder, not 200ms');
+
+        // The next word is a fresh hold, not a shortened one.
+        async.elapse(hold - ms);
+        expect(s.index, 1);
+        async.elapse(ms);
+        expect(s.index, 2);
+
+        s.dispose();
+      });
+    });
+
+    test('a second pause keeps only what is still left', () {
+      fakeAsync((async) {
+        final s = PlaybackSession(
+          tokens: _tokens(),
+          profile: _profile(rewindWords: 0),
+        );
+        s.play();
+        async.elapse(elapsed);
+        s.pause();
+        s.play();
+        async.elapse(const Duration(milliseconds: 20));
+        s.pause();
+        s.play();
+
+        async.elapse(const Duration(milliseconds: 29));
+        expect(s.index, 0);
+        async.elapse(ms);
+        expect(s.index, 1);
+
+        s.dispose();
+      });
+    });
+
+    test('a pause inside the sentence pause resumes inside it', () {
+      fakeAsync((async) {
+        final s = PlaybackSession(
+          tokens: _tokens(),
+          profile: _profile(rewindWords: 0),
+          startIndex: 4,
+        );
+        s.play();
+        // 200ms display, then 220ms gap; 100ms into the gap leaves 120ms.
+        async.elapse(const Duration(milliseconds: 300));
+        expect(s.current.inGap, isTrue);
+        s.pause();
+
+        s.play();
+        expect(s.current.inGap, isTrue, reason: 'resumes in the gap');
+        async.elapse(const Duration(milliseconds: 119));
+        expect(s.state, PlaybackState.playing);
+        async.elapse(ms);
+        expect(s.state, PlaybackState.finished);
+
+        s.dispose();
+      });
+    });
+
+    test('seeking while paused discards the remainder', () {
+      fakeAsync((async) {
+        final s = PlaybackSession(
+          tokens: _tokens(),
+          profile: _profile(rewindWords: 0),
+        );
+        s.play();
+        async.elapse(elapsed);
+        s.pause();
+        s.seekToIndex(2);
+
+        s.play();
+        async.elapse(hold - ms);
+        expect(s.index, 2, reason: 'a fresh word gets its full hold');
+        async.elapse(ms);
+        expect(s.index, 3);
+
+        s.dispose();
+      });
+    });
+
+    test('stepping while paused discards the remainder', () {
+      fakeAsync((async) {
+        final s = PlaybackSession(
+          tokens: _tokens(),
+          profile: _profile(rewindWords: 0),
+        );
+        s.play();
+        async.elapse(elapsed);
+        s.pause();
+        s.advance();
+        expect(s.index, 1);
+
+        s.play();
+        async.elapse(hold - ms);
+        expect(s.index, 1);
+        async.elapse(ms);
+        expect(s.index, 2);
+
+        s.dispose();
+      });
+    });
+
+    test('stopping at a word while paused discards the remainder', () {
+      fakeAsync((async) {
+        final s = PlaybackSession(
+          tokens: _tokens(),
+          profile: _profile(rewindWords: 0),
+        );
+        s.play();
+        async.elapse(elapsed);
+        s.pause();
+        s.stopAt(0);
+
+        s.play();
+        async.elapse(hold - ms);
+        expect(s.index, 0);
+        async.elapse(ms);
+        expect(s.index, 1);
+
+        s.dispose();
+      });
+    });
+
+    test('changing the profile while paused discards the remainder', () {
+      fakeAsync((async) {
+        final s = PlaybackSession(
+          tokens: _tokens(),
+          profile: _profile(rewindWords: 0),
+        );
+        s.play();
+        async.elapse(elapsed);
+        s.pause();
+        // 600 wpm is 100ms per token.
+        s.profile = _profile(rewindWords: 0, baseWpm: 600);
+
+        s.play();
+        async.elapse(const Duration(milliseconds: 99));
+        expect(s.index, 0, reason: 'the new pacing, not the old remainder');
+        async.elapse(ms);
+        expect(s.index, 1);
+
+        s.dispose();
+      });
+    });
+
+    test('a rewind on resume starts the earlier word fresh', () {
+      fakeAsync((async) {
+        final s = PlaybackSession(
+          tokens: _tokens(),
+          profile: _profile(rewindWords: 1),
+        );
+        s.play();
+        async.elapse(const Duration(milliseconds: 550));
+        expect(s.index, 2);
+        s.pause();
+
+        s.play();
+        expect(s.index, 1);
+        async.elapse(hold - ms);
+        expect(s.index, 1);
+        async.elapse(ms);
+        expect(s.index, 2);
 
         s.dispose();
       });

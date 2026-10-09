@@ -22,16 +22,20 @@ const _containerPath = 'META-INF/container.xml';
 /// of tiny entries.
 const _maxArchiveEntries = 10000;
 
-/// Maximum sum of declared uncompressed sizes across all entries, in bytes.
+/// Default for [EpubParser.maxUncompressedBytes]: the most uncompressed
+/// content a book may hold, in bytes.
 ///
-/// Declared, not measured: nothing has been decompressed yet at the point
-/// this is checked. `test/fixtures/romeo-and-juliet.epub` totals ~489 KiB
+/// Enforced twice. The sizes the central directory declares are summed
+/// before anything is inflated, which rejects an honest zip bomb cheaply.
+/// Those sizes are attacker-controlled, so inflation is also stopped once
+/// the bytes it actually produces, summed over every entry read, pass the
+/// same number. `test/fixtures/romeo-and-juliet.epub` totals ~489 KiB
 /// uncompressed; 512 MiB leaves three orders of magnitude of headroom for a
-/// heavily illustrated book while still bounding a zip bomb that declares
-/// its size honestly. This does not catch an entry whose declared size
-/// understates what it actually inflates to; see the root README's known
-/// limitations.
-const _maxTotalUncompressedBytes = 512 * 1024 * 1024;
+/// heavily illustrated book.
+const _defaultMaxUncompressedBytes = 512 * 1024 * 1024;
+
+const _tooMuchContent =
+    'The file contains too much uncompressed content to be a readable EPUB.';
 
 /// A table of contents entry before it has been matched to a document.
 ///
@@ -49,31 +53,38 @@ typedef _RawEntry = ({String title, String href, String fragment, int depth});
 class EpubParser {
   final HtmlNormalizer normalizer;
 
-  const EpubParser({this.normalizer = const HtmlNormalizer()});
+  /// The most uncompressed content a book may hold, in bytes, summed over
+  /// every entry read. A book past it fails with an [EpubException].
+  ///
+  /// The default is generous for any real book; lowering it is for tests.
+  final int maxUncompressedBytes;
+
+  const EpubParser({
+    this.normalizer = const HtmlNormalizer(),
+    this.maxUncompressedBytes = _defaultMaxUncompressedBytes,
+  });
 
   EpubBook parse(Uint8List bytes) {
-    final Archive archive;
+    final Archive zip;
     try {
-      archive = ZipDecoder().decodeBytes(bytes);
+      zip = ZipDecoder().decodeBytes(bytes);
     } catch (e) {
       throw const EpubException('The file is not a readable zip archive.');
     }
 
-    if (archive.length > _maxArchiveEntries) {
+    if (zip.length > _maxArchiveEntries) {
       throw const EpubException(
         'The file declares too many entries to be a readable EPUB.',
       );
     }
-    var totalUncompressedBytes = 0;
-    for (final file in archive.files) {
-      totalUncompressedBytes += file.size;
-      if (totalUncompressedBytes > _maxTotalUncompressedBytes) {
-        throw const EpubException(
-          'The file declares too much uncompressed content to be a '
-          'readable EPUB.',
-        );
+    var declaredBytes = 0;
+    for (final file in zip.files) {
+      declaredBytes += file.size;
+      if (declaredBytes > maxUncompressedBytes) {
+        throw const EpubException(_tooMuchContent);
       }
     }
+    final archive = _BoundedArchive(zip, maxUncompressedBytes);
 
     final opfPath = _findOpfPath(archive);
     final opf = _parseXml(_readString(archive, opfPath), opfPath);
@@ -110,7 +121,7 @@ class EpubParser {
     }
   }
 
-  String _findOpfPath(Archive archive) {
+  String _findOpfPath(_BoundedArchive archive) {
     final container = _parseXml(
       _readString(archive, _containerPath),
       _containerPath,
@@ -195,7 +206,7 @@ class EpubParser {
   }
 
   List<EpubDocument> _readSpine(
-    Archive archive,
+    _BoundedArchive archive,
     XmlDocument opf,
     Map<String, _ManifestItem> manifest,
     String opfDir,
@@ -260,7 +271,7 @@ class EpubParser {
   /// readable book, and losing chapter navigation is a smaller failure than
   /// refusing to open it.
   List<TocEntry> _readToc(
-    Archive archive,
+    _BoundedArchive archive,
     XmlDocument opf,
     Map<String, _ManifestItem> manifest,
     String opfDir,
@@ -287,7 +298,7 @@ class EpubParser {
   /// here, and a stray unescaped ampersand should not cost a reader their
   /// chapter list.
   List<_RawEntry> _readNav(
-    Archive archive,
+    _BoundedArchive archive,
     Map<String, _ManifestItem> manifest,
     String opfDir,
   ) {
@@ -369,7 +380,7 @@ class EpubParser {
 
   /// EPUB 2 NCX, used when there is no navigation document.
   List<_RawEntry> _readNcx(
-    Archive archive,
+    _BoundedArchive archive,
     XmlDocument opf,
     Map<String, _ManifestItem> manifest,
     String opfDir,
@@ -486,7 +497,7 @@ class EpubParser {
   /// Some writers store paths with a leading slash or in a different case
   /// from the one the OPF gives, so an exact match is tried first and a
   /// case-insensitive one after it.
-  ArchiveFile? _findFile(Archive archive, String path) =>
+  ArchiveFile? _findFile(_BoundedArchive archive, String path) =>
       archive.files.where((f) => f.name == path).firstOrNull ??
       archive.files
           .where((f) => f.name.toLowerCase() == path.toLowerCase())
@@ -497,23 +508,24 @@ class EpubParser {
   /// Returns null rather than throwing the way [_readString] does. A spine
   /// document the book cannot supply makes the book unreadable; a cover it
   /// cannot supply makes it a book without a picture.
-  Uint8List? _readCover(Archive archive, String? href) {
+  Uint8List? _readCover(_BoundedArchive archive, String? href) {
     if (href == null) return null;
 
-    final data = _findFile(archive, href)?.readBytes();
+    final file = _findFile(archive, href);
+    final data = file == null ? null : archive.read(file);
     if (data == null || data.isEmpty) return null;
 
     return Uint8List.fromList(data);
   }
 
-  String _readString(Archive archive, String path) {
+  String _readString(_BoundedArchive archive, String path) {
     final file = _findFile(archive, path);
 
     if (file == null) {
       throw EpubException('The archive is missing $path.');
     }
 
-    final data = file.readBytes();
+    final data = archive.read(file);
     if (data == null) {
       throw EpubException('Could not read $path from the archive.');
     }
@@ -521,6 +533,118 @@ class EpubParser {
     // Most EPUBs are UTF-8. allowMalformed keeps one bad byte from taking
     // down a whole chapter.
     return utf8.decode(data, allowMalformed: true);
+  }
+}
+
+/// A zip archive whose entries are read against one shared budget of
+/// uncompressed bytes.
+///
+/// The archive package sizes its decompression buffer from the size the
+/// central directory declares, and a crafted zip can declare anything. So
+/// [read] inflates through [Inflate] into a [_CappedOutput] instead of
+/// calling `ArchiveFile.readBytes`: the budget is charged from the bytes
+/// actually produced, and inflation stops the moment they exceed it. That
+/// also bypasses `dart:io`'s zlib on the VM, which would buffer an entire
+/// entry before handing back the first byte.
+class _BoundedArchive {
+  _BoundedArchive(this._zip, this._remaining);
+
+  final Archive _zip;
+  int _remaining;
+
+  Iterable<ArchiveFile> get files => _zip.files;
+
+  /// The uncompressed bytes of [file], or null when it cannot be read.
+  ///
+  /// Throws [EpubException] when the bytes it holds, added to those of the
+  /// entries read before it, would pass the budget. An entry compressed with
+  /// anything but deflate or store is unreadable: the EPUB container format
+  /// allows nothing else, and no other decoder here is bounded.
+  Uint8List? read(ArchiveFile file) {
+    final raw = file.rawContent;
+    if (raw == null) return null;
+
+    final Uint8List bytes;
+    switch (file.compression) {
+      case CompressionType.none:
+        if (raw.length > _remaining) throw const EpubException(_tooMuchContent);
+        bytes = raw.getStream(decompress: false).toUint8List();
+      case CompressionType.deflate:
+        final input = raw.getStream(decompress: false);
+        final start = input.position;
+        final output = _CappedOutput(_remaining);
+        try {
+          Inflate.stream(input, output: output);
+        } on _BudgetExceeded {
+          throw const EpubException(_tooMuchContent);
+        } catch (_) {
+          return null;
+        } finally {
+          input.setPosition(start);
+        }
+        bytes = output.getBytes();
+      case _:
+        return null;
+    }
+
+    _remaining -= bytes.length;
+    return bytes;
+  }
+}
+
+class _BudgetExceeded implements Exception {
+  const _BudgetExceeded();
+}
+
+/// An in-memory output that throws [_BudgetExceeded] instead of growing
+/// past [limit] bytes.
+///
+/// Every write is checked before it lands, so the buffer never holds more
+/// than [limit] bytes. `writeBackReference` is how archive 4.2 and later
+/// writes a deflate back-reference, and it is where a zip bomb spends nearly
+/// all of its output; 4.0.9, which the app's lockfile still pins, does not
+/// have it and writes a back-reference through `writeBytes` instead.
+class _CappedOutput extends OutputMemoryStream {
+  _CappedOutput(this.limit);
+
+  final int limit;
+
+  void _reserve(int count) {
+    if (length + count > limit) throw const _BudgetExceeded();
+  }
+
+  @override
+  void writeByte(int value) {
+    _reserve(1);
+    super.writeByte(value);
+  }
+
+  @override
+  void writeBytes(List<int> bytes, {int? length}) {
+    _reserve(length ?? bytes.length);
+    super.writeBytes(bytes, length: length);
+  }
+
+  @override
+  void writeStream(InputStream stream) {
+    _reserve(stream.length);
+    super.writeStream(stream);
+  }
+
+  // No `@override`: the method does not exist before archive 4.2, and a
+  // `super` call to it would not compile against 4.0.9. Copying through
+  // `writeBytes` works on both, and `n <= distance` keeps source and
+  // destination from overlapping within one copy.
+  // ignore: annotate_overrides
+  void writeBackReference(int distance, int count) {
+    _reserve(count);
+    var left = count;
+    while (left > 0) {
+      final n = left < distance ? left : distance;
+      final from = length - distance;
+      super.writeBytes(subset(from, from + n));
+      left -= n;
+    }
   }
 }
 
