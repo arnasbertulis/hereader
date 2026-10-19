@@ -14,13 +14,30 @@ const _containerPath = 'META-INF/container.xml';
 
 /// Maximum number of entries a zip archive may declare.
 ///
-/// `decodeBytes` only reads the central directory here (no entry is
-/// decompressed yet), so this is checked before any bytes are inflated.
+/// Bounded twice. Before `decodeBytes` runs, the central directory's
+/// declared byte size is held to this many entries times
+/// [_centralDirectoryBytesPerEntry], because `decodeBytes` builds one object
+/// per record it finds and that read is not free (about 370 bytes of heap per
+/// minimal entry). After it, the exact entry count is checked, before any
+/// entry is inflated.
 /// `test/fixtures/romeo-and-juliet.epub` — an ordinary novel — has 19
 /// entries; 10,000 leaves generous headroom for a large illustrated or
 /// multi-volume EPUB while still bounding a crafted archive with millions
 /// of tiny entries.
 const _maxArchiveEntries = 10000;
+
+/// Central directory bytes allowed per permitted entry.
+///
+/// A heuristic, not an exact bound: a record is 46 bytes plus its name,
+/// extra field and comment, which together can reach ~196 KB. A realistic
+/// EPUB path puts a record near 50 bytes (the at-the-cap test fixture's
+/// average is ~51), so 512 leaves about tenfold headroom. The entry count in
+/// the end-of-central-directory record is a 16-bit field the file controls
+/// and the decoder does not read it, so it cannot serve instead.
+const _centralDirectoryBytesPerEntry = 512;
+
+const _tooManyEntries =
+    'The file declares too many entries to be a readable EPUB.';
 
 /// Default for [EpubParser.maxUncompressedBytes]: the most uncompressed
 /// content a book may hold, in bytes.
@@ -65,6 +82,12 @@ class EpubParser {
   });
 
   EpubBook parse(Uint8List bytes) {
+    final directoryBytes = _declaredDirectoryBytes(bytes);
+    if (directoryBytes != null &&
+        directoryBytes > _maxArchiveEntries * _centralDirectoryBytesPerEntry) {
+      throw const EpubException(_tooManyEntries);
+    }
+
     final Archive zip;
     try {
       zip = ZipDecoder().decodeBytes(bytes);
@@ -73,9 +96,7 @@ class EpubParser {
     }
 
     if (zip.length > _maxArchiveEntries) {
-      throw const EpubException(
-        'The file declares too many entries to be a readable EPUB.',
-      );
+      throw const EpubException(_tooManyEntries);
     }
     var declaredBytes = 0;
     for (final file in zip.files) {
@@ -723,6 +744,30 @@ String _decode(String value) {
 String _dirname(String path) {
   final i = path.lastIndexOf('/');
   return i == -1 ? '' : path.substring(0, i);
+}
+
+const _endRecordSignature = 0x06054b50;
+const _endRecordLength = 22;
+const _maxZipCommentLength = 0xFFFF;
+const _zip64Saturated = 0xFFFFFFFF;
+
+/// The central directory size the end-of-central-directory record declares,
+/// or null when it cannot be trusted.
+///
+/// Null covers no record found, a size larger than the bytes before the
+/// record, and a saturated size field (Zip64). Each falls through to the
+/// decoder, which already reports a malformed zip.
+int? _declaredDirectoryBytes(Uint8List bytes) {
+  final view = ByteData.sublistView(bytes);
+  final last = bytes.length - _endRecordLength;
+  final first = last - _maxZipCommentLength;
+  for (var i = last; i >= 0 && i >= first; i--) {
+    if (view.getUint32(i, Endian.little) != _endRecordSignature) continue;
+    final size = view.getUint32(i + 12, Endian.little);
+    if (size == _zip64Saturated || size > i) return null;
+    return size;
+  }
+  return null;
 }
 
 /// Resolves an href against the OPF's directory, collapsing `.` and `..`.
