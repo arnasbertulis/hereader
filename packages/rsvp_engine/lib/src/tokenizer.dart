@@ -34,6 +34,23 @@ const _defaultNumericSuffixes = {
   'ha',
 };
 
+const _defaultHeadingWords = {
+  'chapter',
+  'part',
+  'book',
+  'section',
+  'volume',
+  'act',
+  'scene',
+  'appendix',
+  'article',
+  'skyrius',
+  'dalis',
+  'knyga',
+  'skirsnis',
+  'straipsnis',
+};
+
 const _sentenceEnders = {'.', '!', '?', '\u2026'};
 const _clauseEnders = {',', ';', ':'};
 
@@ -49,6 +66,14 @@ const _clauseEnders = {',', ';', ':'};
 final _alphanumeric = RegExp(r'[\p{L}\p{N}]', unicode: true);
 final _whitespaceRun = RegExp(r'\s+');
 final _endsInDigit = RegExp(r'[\p{N}]$', unicode: true);
+
+/// One to three digits and a single period, nothing else: `3.`, `42.`.
+/// Four digits is a year, and `1990.` ends a sentence.
+final _smallNumberWithPeriod = RegExp(r'^\p{Nd}{1,3}\.$', unicode: true);
+final _edgePunctuation = RegExp(
+  r'^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$',
+  unicode: true,
+);
 
 bool _isWhitespace(int c) =>
     c == 0x20 ||
@@ -66,9 +91,35 @@ class Tokenizer {
   final Set<String> abbreviations;
   final Set<String> numericSuffixes;
 
-  Tokenizer({Set<String>? abbreviations, Set<String>? numericSuffixes})
-    : abbreviations = abbreviations ?? _defaultAbbreviations,
-      numericSuffixes = numericSuffixes ?? _defaultNumericSuffixes;
+  /// Lower-case words that put a number after them in a heading, so that
+  /// `Chapter 3.` names a chapter rather than ending a sentence. An empty set
+  /// turns the rule off.
+  final Set<String> headingWords;
+
+  Tokenizer({
+    Set<String>? abbreviations,
+    Set<String>? numericSuffixes,
+    Set<String>? headingWords,
+  }) : abbreviations = abbreviations ?? _defaultAbbreviations,
+       numericSuffixes = numericSuffixes ?? _defaultNumericSuffixes,
+       headingWords = headingWords ?? _defaultHeadingWords;
+
+  /// Whether [text] is a heading number or list marker rather than a
+  /// sentence end: one to three digits and a period, either after a heading
+  /// word or opening a block. [previous] is the token before it, if any.
+  bool _isHeadingNumber(String text, Token? previous) {
+    if (!_smallNumberWithPeriod.hasMatch(text)) return false;
+    if (previous == null || previous.pauseAfter == PauseAfter.paragraph) {
+      return true;
+    }
+    final word = previous.text.replaceAll(_edgePunctuation, '').toLowerCase();
+    return headingWords.contains(word);
+  }
+
+  PauseAfter _pauseAfterToken(String text, Token? previous) =>
+      _isHeadingNumber(text, previous)
+      ? PauseAfter.none
+      : _fromPunctuation(text);
 
   PauseAfter _fromPunctuation(String text) {
     final lower = text.toLowerCase();
@@ -160,7 +211,7 @@ class Tokenizer {
             text: text,
             charOffset: start,
             pauseAfter: _longer(
-              _fromPunctuation(text),
+              _pauseAfterToken(text, tokens.isEmpty ? null : tokens.last),
               _fromFollowingWhitespace(source, i),
             ),
           ),
