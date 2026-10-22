@@ -70,6 +70,30 @@ Uint8List _entries(int count) {
   return Uint8List.fromList(ZipEncoder().encode(archive));
 }
 
+/// A zip made by hand: [directoryBytes] of garbage standing in for the
+/// central directory, then an end-of-central-directory record declaring
+/// [directoryBytes] as its size and [declaredCount] as its entry count.
+///
+/// Every 46 bytes carry a central-directory-record signature over otherwise
+/// meaningless bytes, which `ZipDecoder` throws on (without the signatures
+/// it stops reading and returns an empty archive). A "too many entries"
+/// message from `parse` therefore proves the size pre-check ran before the
+/// decoder did. [declaredCount] is a 16-bit field the file controls and
+/// `ZipDecoder` ignores, so it can lie freely.
+Uint8List _garbageDirectory(int directoryBytes, {int declaredCount = 5}) {
+  final bytes = Uint8List(directoryBytes + 22);
+  final view = ByteData.sublistView(bytes);
+  for (var i = 0; i + 4 <= directoryBytes; i += 46) {
+    view.setUint32(i, 0x02014b50, Endian.little);
+  }
+  view
+    ..setUint32(directoryBytes, 0x06054b50, Endian.little)
+    ..setUint16(directoryBytes + 8, declaredCount, Endian.little)
+    ..setUint16(directoryBytes + 10, declaredCount, Endian.little)
+    ..setUint32(directoryBytes + 12, directoryBytes, Endian.little);
+  return bytes;
+}
+
 /// A zip with one entry declaring [bytes] uncompressed, holding one byte.
 ///
 /// The central directory's declared size is what the guard reads, and
@@ -410,6 +434,57 @@ void main() {
       // missing-container error and no assertion could tell them apart.
       expect(
         () => const EpubParser().parse(_entries(10000)),
+        _throwsEpubMessage('META-INF/container.xml'),
+      );
+    });
+
+    // 512 bytes per entry at the 10,000-entry cap.
+    const directoryBound = 10000 * 512;
+
+    test('rejects a central directory too large for the entry cap before '
+        'decoding it', () {
+      expect(
+        () => const EpubParser().parse(_garbageDirectory(directoryBound + 1)),
+        _throwsEpubMessage('too many entries'),
+      );
+    });
+
+    test('rejects an oversized central directory whatever entry count the '
+        'end record claims', () {
+      expect(
+        () => const EpubParser().parse(
+          _garbageDirectory(directoryBound + 1, declaredCount: 65535),
+        ),
+        _throwsEpubMessage('too many entries'),
+      );
+    });
+
+    test('hands a central directory at the size bound to the decoder', () {
+      // Pins the bound's edge: exactly the bound is not rejected by size,
+      // so the garbage reaches the decoder and fails there.
+      expect(
+        () => const EpubParser().parse(_garbageDirectory(directoryBound)),
+        _throwsEpubMessage('not a readable zip archive'),
+      );
+    });
+
+    test('leaves a truncated archive to the decoder', () {
+      // `ZipDecoder` tolerates a missing end record and returns an empty
+      // archive, so the failure is the missing container, not the size
+      // pre-check.
+      final whole = _entries(20);
+      expect(
+        () => const EpubParser().parse(
+          Uint8List.sublistView(whole, 0, whole.length - 30),
+        ),
+        _throwsEpubMessage('META-INF/container.xml'),
+      );
+    });
+
+    test('leaves a file with no end-of-central-directory record to the '
+        'decoder', () {
+      expect(
+        () => const EpubParser().parse(Uint8List(200)),
         _throwsEpubMessage('META-INF/container.xml'),
       );
     });
