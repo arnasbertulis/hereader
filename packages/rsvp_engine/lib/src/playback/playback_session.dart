@@ -80,6 +80,18 @@ class PlaybackSession {
   /// The phase [_timer] is timing, so [pause] can tell how much of it is left.
   _Phase? _phase;
 
+  /// When the phase [_timer] is timing should end if nothing had run late.
+  ///
+  /// The next chained phase is timed against it, so a late timer is paid back
+  /// out of the hold after it. See [_startPhase]. A phase started by anything
+  /// but the chain advancing itself replaces it with now plus its own length.
+  DateTime? _due;
+
+  /// How far behind its deadline a chained timer may fire and still be paid
+  /// back. Later than this the app was suspended, not slow, and racing through
+  /// the words it missed would flash them; the chain re-anchors to now.
+  static const _stall = Duration(seconds: 1);
+
   /// What a [pause] left of the word it interrupted, spent by the next [play].
   ///
   /// Cleared by anything that moves to a different word or changes the pacing
@@ -514,7 +526,7 @@ class PlaybackSession {
     return false;
   }
 
-  void _scheduleCurrent() {
+  void _scheduleCurrent({bool chained = false}) {
     // Continuous scroll carries its own clock, so the timer chain must never
     // arm. Gated in the callee rather than at the six methods that call it,
     // because six call sites is six chances to miss one; here every caller is
@@ -537,19 +549,51 @@ class PlaybackSession {
 
       case Hold(:final display, :final pauseAfter):
         _setState(PlaybackState.playing);
-        _startPhase(_Phase(display, pauseAfter: pauseAfter));
+        _startPhase(_Phase(display, pauseAfter: pauseAfter), chained: chained);
     }
   }
 
   /// Time one [_Phase] on [_timer]. A word's hold is a display phase, then a
   /// gap phase if it has a pause after it, then [_step].
-  void _startPhase(_Phase phase) {
-    _phase = phase.startedAt(clock.now());
-    _timer = Timer(phase.length, () {
+  ///
+  /// [chained] is true only when the previous phase's timer has just fired and
+  /// this phase follows it directly: word to gap, gap to next word. Such a
+  /// phase is timed against [_due] rather than from now, so a timer that fired
+  /// late shortens the hold after it and lateness does not compound. Every
+  /// other entry (play, resume, seek, step, profile change) leaves [chained]
+  /// false and starts a full hold from now.
+  void _startPhase(_Phase phase, {bool chained = false}) {
+    final now = clock.now();
+    var due = now.add(phase.length);
+    var delay = phase.length;
+
+    final previous = _due;
+    if (chained && previous != null && now.difference(previous) <= _stall) {
+      // The deadline keeps the full schedule, so lateness the floor leaves
+      // unpaid is carried to the holds after this one.
+      due = previous.add(phase.length);
+      delay = due.difference(now);
+      final shortest = phase.length ~/ 2;
+      if (delay < shortest) delay = shortest;
+      // A wall clock stepped backwards makes [now] precede [previous]; never
+      // hold longer than the phase itself.
+      if (delay > phase.length) delay = phase.length;
+    }
+
+    _due = due;
+    // [_phase] records the delay actually armed, which is what [pause] needs
+    // to know the remainder of.
+    _phase = _Phase(
+      delay,
+      inGap: phase.inGap,
+      pauseAfter: phase.pauseAfter,
+      began: now,
+    );
+    _timer = Timer(delay, () {
       if (!phase.inGap && phase.pauseAfter > Duration.zero) {
         _inGap = true;
         _emit();
-        _startPhase(_Phase(phase.pauseAfter, inGap: true));
+        _startPhase(_Phase(phase.pauseAfter, inGap: true), chained: true);
       } else {
         _step();
       }
@@ -563,7 +607,7 @@ class PlaybackSession {
       return;
     }
     _index++;
-    _scheduleCurrent();
+    _scheduleCurrent(chained: true);
   }
 
   void _finish() {
@@ -612,9 +656,6 @@ class _Phase {
     this.pauseAfter = Duration.zero,
     this.began,
   });
-
-  _Phase startedAt(DateTime now) =>
-      _Phase(length, inGap: inGap, pauseAfter: pauseAfter, began: now);
 
   /// What is left of this phase at [now], clamped to `[0, length]` so a
   /// timer that is a microtask late cannot yield a negative [Timer] duration.

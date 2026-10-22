@@ -224,10 +224,15 @@ by up to a word at the moment of release.
 Timing chains `Timer` directly rather than driving from a `Ticker`, so
 `fake_async` can step a whole paragraph in microseconds. The side effect is
 that word onset does not quantise to frame delivery, which matters on the web,
-where the browser decides how many frames a page gets. The cost is that each
-timer is scheduled when the previous one fires rather than against an absolute
-schedule, so lateness compounds across a book — probably under a percent, and
-unmeasurable under a virtual clock that fires every timer exactly on time.
+where the browser decides how many frames a page gets. The cost is that a timer
+fires late: measured on Windows, 6 to 10 ms per timer, which added 3.5 percent
+at 300 wpm and 8.7 percent at 600 wpm if left to compound. So each phase is
+timed against a deadline, the time it should end if nothing ran late, and a
+late timer is paid back out of the next hold (never by more than half of it).
+A timer more than a second late is a suspended app, not a slow one, and the
+chain re-anchors to now. Resume, seek, step and a profile change start a full
+hold from now. `tool/measure_drift.dart` measures it on the real clock; a
+virtual clock fires every timer exactly on time and cannot.
 
 ### Continuous scroll
 
