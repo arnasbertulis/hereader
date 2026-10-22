@@ -71,6 +71,13 @@ token rather than a number followed by a bare `m.` that means nothing on
 screen. Both the abbreviation set and the suffix set are constructor
 parameters, because they are language-specific.
 
+A heading number or list marker is not a sentence end. A token of one to three
+digits and a period (`3.`) gets no sentence pause when the token before it is in
+the heading word set (`Chapter 3.`) or when it opens a block (`4. Buy milk`); a
+following blank line still gives the paragraph pause. `1990.` keeps its
+sentence pause. The heading word set is a third constructor parameter,
+`headingWords`, and an empty set turns the heading-word rule off.
+
 Line-break hyphenation (`co-\noperate`) is rejoined during the walk rather than
 by preprocessing the string, which keeps offsets pointing at the original text.
 

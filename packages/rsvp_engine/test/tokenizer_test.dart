@@ -183,4 +183,71 @@ void main() {
       ]);
     });
   });
+
+  group('numbered headings and list markers', () {
+    test('a heading word and a small number give no sentence pause', () {
+      final tokens = Tokenizer().tokenize('Chapter 3. The Beginning');
+      expect(tokens[1].text, '3.');
+      expect(tokens[1].pauseAfter, PauseAfter.none);
+    });
+
+    test('a number opening the text gives no sentence pause', () {
+      expect(pauses('4. Buy milk'), [
+        PauseAfter.none,
+        PauseAfter.none,
+        PauseAfter.none,
+      ]);
+    });
+
+    test('a number opening a block after a blank line gives no pause', () {
+      final tokens = Tokenizer().tokenize('Shopping list\n\n4. Buy milk');
+      expect(tokens[2].text, '4.');
+      expect(tokens[2].pauseAfter, PauseAfter.none);
+    });
+
+    test('a heading on its own line keeps its paragraph pause', () {
+      final tokens = Tokenizer().tokenize('Chapter 3.\n\nIt began.');
+      expect(tokens[1].text, '3.');
+      expect(tokens[1].pauseAfter, PauseAfter.paragraph);
+    });
+
+    test('a year still ends a sentence', () {
+      final tokens = Tokenizer().tokenize('It was in 1990. Then');
+      expect(tokens[3].text, '1990.');
+      expect(tokens[3].pauseAfter, PauseAfter.sentence);
+    });
+
+    test('a small number after an ordinary word still ends a sentence', () {
+      final tokens = Tokenizer().tokenize('I counted 3. Then');
+      expect(tokens[2].text, '3.');
+      expect(tokens[2].pauseAfter, PauseAfter.sentence);
+    });
+
+    test('a decimal and a merged unit behave as before', () {
+      expect(pauses('pi is 3.14 roughly'), everyElement(PauseAfter.none));
+      final merged = Tokenizer().tokenize('Buvo 2005 m. Viskas');
+      expect(merged[1].text, '2005 m.');
+      expect(merged[1].pauseAfter, PauseAfter.none);
+    });
+
+    test('accepts a custom heading word set', () {
+      final tokens = Tokenizer(
+        headingWords: {'kapitel'},
+      ).tokenize('Kapitel 3. Der Anfang');
+      expect(tokens[1].pauseAfter, PauseAfter.none);
+
+      final english = Tokenizer(
+        headingWords: {'kapitel'},
+      ).tokenize('Chapter 3. The Beginning');
+      expect(english[1].pauseAfter, PauseAfter.sentence);
+    });
+
+    test('an empty heading word set turns the heading rule off', () {
+      final tokens = Tokenizer(
+        headingWords: {},
+      ).tokenize('Intro text. Chapter 3. The Beginning');
+      expect(tokens[3].text, '3.');
+      expect(tokens[3].pauseAfter, PauseAfter.sentence);
+    });
+  });
 }
