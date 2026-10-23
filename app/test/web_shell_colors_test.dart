@@ -4,6 +4,8 @@ library;
 import 'dart:io';
 
 import 'package:app/theme/app_colors.dart';
+import 'package:app/theme/appearance.dart';
+import 'package:app/theme/theme_mirror_key.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
@@ -58,5 +60,50 @@ void main() {
     // a dark page, which is visible around the loader.
     expect(markup, contains('name="color-scheme"'));
     expect(markup, contains('prefers-color-scheme: dark'));
+  });
+
+  // The reader's own choice beats the browser's preference. The page reads it
+  // from a `localStorage` key the app mirrors on every change, so the key is
+  // written down in two places and this is what stops them drifting.
+  group('the reader\'s chosen theme', () {
+    late String markup;
+
+    setUp(() => markup = File('web/index.html').readAsStringSync());
+
+    test('is read from the key the app writes', () {
+      expect(
+        markup,
+        contains("localStorage.getItem('$themeMirrorStorageKey')"),
+      );
+    });
+
+    test('the script compares against what the app encodes', () {
+      expect(
+        markup,
+        contains(
+          "theme === '${encodeThemeMode(ThemeMode.light)}' || "
+          "theme === '${encodeThemeMode(ThemeMode.dark)}'",
+        ),
+      );
+    });
+
+    for (final (choice, brightness) in [
+      ('light', Brightness.light),
+      ('dark', Brightness.dark),
+    ]) {
+      test(
+        '$choice paints the $choice surface whatever the browser prefers',
+        () {
+          // A rule keyed on the attribute alone, outside the media query, so it
+          // applies under either browser preference.
+          final rule = RegExp(
+            'html\\[data-theme="$choice"\\][^{}]*\\{[^}]*'
+            'background-color: ${_hex(_surface(brightness))}',
+          );
+
+          expect(rule.hasMatch(markup), isTrue);
+        },
+      );
+    }
   });
 }

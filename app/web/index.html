@@ -58,19 +58,38 @@
     failure screen is what says something went wrong — but it stops a slow
     one from looking like a dead page.
 
-    Follows the browser's own preference rather than the reader's stored
-    theme: that setting lives in OPFS, behind the engine this markup is
-    waiting for. A reader who chose Light on a dark-preference device still
-    sees a dark loader for a moment.
+    The reader's stored theme lives in OPFS, behind the engine this markup is
+    waiting for, so it cannot be read here. The app mirrors just that choice
+    to `localStorage` (`app/lib/theme/theme_mirror.dart`), one-way, and the
+    script below turns it into `data-theme` on <html> before first paint.
+    Light or Dark beats the browser's preference; System, a missing key or
+    storage that throws leaves the `prefers-color-scheme` rule in charge.
 
-    Both values are `surface` from `app/lib/theme/app_colors.dart`.
-    `app/test/web_shell_colors_test.dart` fails if they drift apart.
+    Both colours are `surface` from `app/lib/theme/app_colors.dart`, and the
+    storage key is `themeMirrorStorageKey` there.
+    `app/test/web_shell_colors_test.dart` fails if either drifts.
   -->
   <meta name="color-scheme" content="light dark">
+  <script>
+    try {
+      var theme = localStorage.getItem('hereader.theme_mode');
+      if (theme === 'light' || theme === 'dark') {
+        document.documentElement.setAttribute('data-theme', theme);
+      }
+    } catch (e) {}
+  </script>
   <style>
     html, body { margin: 0; padding: 0; background-color: #FBFBFC; }
     @media (prefers-color-scheme: dark) {
       html, body { background-color: #121416; }
+    }
+    html[data-theme="light"], html[data-theme="light"] body {
+      background-color: #FBFBFC;
+      color-scheme: light;
+    }
+    html[data-theme="dark"], html[data-theme="dark"] body {
+      background-color: #121416;
+      color-scheme: dark;
     }
   </style>
 </head>

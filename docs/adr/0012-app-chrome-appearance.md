@@ -108,12 +108,14 @@ stateful: it held its navigator `GlobalKey` as a field of a `StatelessWidget`,
 which was safe only while nothing rebuilt it. A fresh key per rebuild would
 hand the `Navigator` a new identity and discard every route under it.
 
-`app/web/index.html` paints its background from `prefers-color-scheme`, so the
-loader is no longer white on a dark device. It follows the browser rather than
-the reader's stored choice, which lives in OPFS behind the engine the page is
-still loading. A reader who chose Light on a dark-preference device sees a
-dark background for the moment before the first frame. Recorded as a
-limitation rather than solved.
+`app/web/index.html` paints its background from the reader's chosen Light or
+Dark, so the loader is no longer white on a dark device. The stored choice
+lives in OPFS behind the engine the page is still loading, so
+`AppearanceController` mirrors it one way into `localStorage` (key
+`hereader.theme_mode`, written after the preferences row; see
+`app/lib/theme/theme_mirror.dart`) and the page reads that. For System, a
+missing key or unwritable storage the loader falls back to
+`prefers-color-scheme`, the browser's preference.
 
 Two hex values are now written down in both `app_colors.dart` and
 `index.html`. `app/test/web_shell_colors_test.dart` fails if they drift.
