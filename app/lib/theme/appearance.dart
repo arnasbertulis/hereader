@@ -3,6 +3,7 @@ import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
 import 'app_colors.dart';
+import 'theme_mirror.dart';
 
 /// The three appearance choices a reader makes about app chrome, and the
 /// controller that stores them.
@@ -199,9 +200,22 @@ class AppearanceController extends ChangeNotifier {
   /// Supplies a clock stamp for each write. Pass `syncEngine.issueStamp`.
   final Future<String> Function() issueStamp;
 
+  /// Copies the theme choice to where the web page can read it before the
+  /// engine is up. Defaults to the platform's own: a `localStorage` write on
+  /// web, nothing elsewhere.
+  ///
+  /// One-way. The `preferences` row stays the source of truth; this is called
+  /// with what that row holds, after it holds it, and nothing reads the copy
+  /// back into the app.
+  final void Function(String encodedThemeMode) mirrorThemeMode;
+
   AppearanceSettings _settings = AppearanceSettings.defaults;
 
-  AppearanceController({required this.repository, required this.issueStamp});
+  AppearanceController({
+    required this.repository,
+    required this.issueStamp,
+    this.mirrorThemeMode = writeThemeMirror,
+  });
 
   AppearanceSettings get settings => _settings;
 
@@ -228,13 +242,19 @@ class AppearanceController extends ChangeNotifier {
       textSize: decodeTextSize(textSize),
     );
 
+    // Every launch, so a reader who chose a theme before the mirror existed
+    // gets it on their next start without having to choose again.
+    mirrorThemeMode(encodeThemeMode(_settings.themeMode));
+
     notifyListeners();
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {
     if (mode == _settings.themeMode) return;
 
-    await _persist(AppearanceKeys.themeMode, encodeThemeMode(mode));
+    final encoded = encodeThemeMode(mode);
+    await _persist(AppearanceKeys.themeMode, encoded);
+    mirrorThemeMode(encoded);
     _settings = _settings.copyWith(themeMode: mode);
     notifyListeners();
   }
