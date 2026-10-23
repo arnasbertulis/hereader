@@ -211,4 +211,90 @@ void main() {
       expect(await repo.pendingEvents(), isEmpty);
     });
   });
+
+  // The web page paints its loading background before the engine that can
+  // read the database is up, so the theme choice is copied somewhere the
+  // page can read. The database stays the source of truth: these tests pin
+  // that the copy follows it and never the other way round.
+  group('theme mirror', () {
+    late List<String> mirrored;
+
+    AppearanceController mirroring() => AppearanceController(
+      repository: repo,
+      issueStamp: issueStamp,
+      mirrorThemeMode: mirrored.add,
+    );
+
+    setUp(() => mirrored = []);
+
+    test('a choice is mirrored as the word that is stored', () async {
+      final appearance = mirroring();
+      addTearDown(appearance.dispose);
+
+      await appearance.setThemeMode(ThemeMode.light);
+      await appearance.setThemeMode(ThemeMode.dark);
+      await appearance.setThemeMode(ThemeMode.system);
+
+      expect(mirrored, ['light', 'dark', 'system']);
+    });
+
+    test('restoring mirrors the stored choice', () async {
+      await repo.setPreference(
+        AppearanceKeys.themeMode,
+        'light',
+        hlc: await issueStamp(),
+        sync: false,
+      );
+
+      final appearance = mirroring();
+      addTearDown(appearance.dispose);
+      await appearance.restore();
+
+      expect(mirrored, ['light']);
+    });
+
+    test('restoring with nothing stored mirrors system', () async {
+      final appearance = mirroring();
+      addTearDown(appearance.dispose);
+      await appearance.restore();
+
+      expect(mirrored, ['system']);
+    });
+
+    test('setting the mode already in force mirrors nothing', () async {
+      final appearance = mirroring();
+      addTearDown(appearance.dispose);
+
+      await appearance.setThemeMode(ThemeMode.system);
+
+      expect(mirrored, isEmpty);
+    });
+
+    test('the other appearance settings do not touch the mirror', () async {
+      final appearance = mirroring();
+      addTearDown(appearance.dispose);
+
+      await appearance.setAccent(AppAccents.rust.color);
+      await appearance.setHighContrast(true);
+      await appearance.setTextSize(1.25);
+
+      expect(mirrored, isEmpty);
+    });
+
+    test('a write that fails is not mirrored', () async {
+      final appearance = AppearanceController(
+        repository: repo,
+        issueStamp: () => throw StateError('no stamp'),
+        mirrorThemeMode: mirrored.add,
+      );
+      addTearDown(appearance.dispose);
+
+      await expectLater(
+        appearance.setThemeMode(ThemeMode.dark),
+        throwsStateError,
+      );
+
+      expect(mirrored, isEmpty);
+    });
+  });
 }
