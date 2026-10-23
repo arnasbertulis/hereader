@@ -260,3 +260,31 @@ fails on the pull rather than on anything that explains itself.
 budget above, and a cold-cache image build. Both are properties of a first
 start rather than of a release, and neither can be staged without either
 faking it or taking the service down.
+
+## Amendment: reporting the gap between `main` and the last tag
+
+Deploying from a tag means the site can sit behind `main` without anyone
+noticing: a fix merges, nobody tags it, and the reader keeps hitting the old
+behaviour. `.github/workflows/deploy-drift.yml` now runs daily (and on
+`workflow_dispatch`) and compares the latest `v*` tag reachable from
+`origin/main` with `origin/main` itself. It warns and does nothing else; it
+never deploys and no merge waits on it.
+
+**The report is one open issue, found by its exact title and edited in
+place.** A gap that lasts a week is one issue with an updated list of
+undeployed commits, not seven. When a tag catches up the workflow closes the
+issue itself. The issue is looked up from the open-issue list rather than by
+search, because search is eventually consistent and a second run straight
+after the first could open a duplicate.
+
+Rejected: **a failing run.** It is simpler, but it turns the Actions tab red
+for a state that is deliberate, and it trains the reader to ignore red.
+Rejected: **reading the `org.opencontainers.image.revision` label or the sha
+passed to `deploy.sh`.** Both are set from the tagged commit, so comparing
+against the tag is equivalent and needs no registry or server access.
+
+Verified by running the workflow's script against this repository with `gh`
+stubbed: a gap with no issue creates one, a second run edits it rather than
+creating another, and a tag at `main`'s head closes it (and does nothing when
+none is open). The `gh issue list --jq` filter was run for real against this
+repository. The scheduled run itself has not happened yet.
