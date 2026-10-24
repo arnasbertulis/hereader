@@ -1,10 +1,55 @@
 import 'dart:async';
+import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
+import 'mode_fork.dart';
 import 'profile_edit_screen.dart';
+import 'profile_file.dart';
+
+/// Picks a profile file off the reader's device, or returns null if they
+/// backed out of the dialog. Overridable so a test can hand back bytes, or
+/// nothing, without a real file dialog.
+typedef PickProfileBytes = Future<Uint8List?> Function();
+
+/// Hands a profile file to the platform to save: a browser download on web, a
+/// document on Android, a save dialog on Windows. Overridable so a test can
+/// see what would have been written without a real file dialog.
+typedef SaveProfileBytes =
+    Future<void> Function(String fileName, Uint8List bytes);
+
+/// The real picker. Same shape as the EPUB picker in `book_importer.dart`.
+Future<Uint8List?> pickProfileFile() async {
+  final picked = await FilePicker.pickFile(
+    type: FileType.custom,
+    allowedExtensions: const ['json'],
+  );
+
+  if (picked == null) return null;
+  return picked.readAsBytes();
+}
+
+/// The real saver. A null result from the plugin is either a cancel or the
+/// browser having handled the download itself, and the two cannot be told
+/// apart, so it is never announced as a failure.
+Future<void> saveProfileFile(String fileName, Uint8List bytes) async {
+  await FilePicker.saveFile(
+    fileName: fileName,
+    bytes: bytes,
+    mimeType: 'application/json',
+  );
+}
+
+/// The snackbar announcing an imported profile. Keyed so a test finds it
+/// without matching its wording.
+const profileImportedKey = ValueKey('profileImported');
+
+/// The text explaining why [reason] was refused, keyed per reason.
+Key profileRejectionKey(ProfileFileRejection reason) =>
+    ValueKey('profileRejection.${reason.name}');
 
 /// Duplicates and deletes a reading profile, including the confirmation
 /// copy, so `ReaderScreen` and `ProfilesScreen` enact one policy instead of
@@ -21,7 +66,95 @@ class ProfileActions {
   final LibraryRepository repository;
   final Future<String> Function() issueStamp;
 
-  const ProfileActions({required this.repository, required this.issueStamp});
+  final PickProfileBytes pickBytes;
+  final SaveProfileBytes saveBytes;
+
+  const ProfileActions({
+    required this.repository,
+    required this.issueStamp,
+    this.pickBytes = pickProfileFile,
+    this.saveBytes = saveProfileFile,
+  });
+
+  /// Saves [profile] as a profile file. Cancelling the dialog is not an
+  /// error and says nothing.
+  Future<void> exportToFile(ReadingProfile profile) =>
+      saveBytes(profileFileName(profile), encodeProfileFile(profile));
+
+  /// Asks the reader for a profile file and stores it as a new profile.
+  ///
+  /// Always a new stored profile with a fresh id, never an overwrite. The
+  /// import becomes the active profile and is announced the way [duplicate]
+  /// announces a fork, with an Undo that restores whichever profile was
+  /// active before; the imported profile stays stored. A cancelled pick does
+  /// nothing. A refused file stores nothing and says why.
+  Future<void> importFromFile(BuildContext context) async {
+    final bytes = await pickBytes();
+    if (bytes == null || !context.mounted) return;
+
+    final result = decodeProfileFile(bytes, id: ReadingProfile.newId());
+    switch (result) {
+      case ProfileFileRejected(:final reason):
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              _rejectionCopy(reason),
+              key: profileRejectionKey(reason),
+            ),
+          ),
+        );
+      case ProfileFileDecoded(:final profile):
+        await _storeImported(context, profile);
+    }
+  }
+
+  Future<void> _storeImported(
+    BuildContext context,
+    ReadingProfile decoded,
+  ) async {
+    final outgoingId = (await repository.activeProfile()).id;
+    final taken = {
+      for (final p in await repository.allProfiles()) p.name,
+      // The sliding switch removes a fork still carrying its generated name,
+      // so an import must never arrive under one.
+      for (final preset in Presets.all)
+        for (final mode in PresentationMode.values)
+          generatedForkName(preset, mode),
+    };
+    final profile = taken.contains(decoded.name)
+        ? decoded.copyWith(name: '${decoded.name} (imported)')
+        : decoded;
+
+    await repository.saveProfile(profile, hlc: await issueStamp());
+    if (!context.mounted) return;
+
+    await repository.setActiveProfile(profile.id, hlc: await issueStamp());
+    if (!context.mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Now reading with ${profile.name}',
+          key: profileImportedKey,
+        ),
+        duration: const Duration(seconds: 10),
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () => unawaited(_restoreActive(outgoingId)),
+        ),
+      ),
+    );
+  }
+
+  String _rejectionCopy(ProfileFileRejection reason) => switch (reason) {
+    ProfileFileRejection.tooLarge =>
+      'That file is too large to be a reading profile.',
+    ProfileFileRejection.notAProfile =>
+      'That file is not a hereader reading profile.',
+    ProfileFileRejection.newerVersion =>
+      'That profile was saved by a newer version of hereader. Update the '
+          'app to open it.',
+  };
 
   /// Forks [source], makes the fork active, and opens it for editing.
   ///

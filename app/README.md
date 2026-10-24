@@ -160,12 +160,20 @@ lib/
    │                             configured. What is ruled out here is a
    │                             setting whose wrong value costs the reader
    │                             their place, not a preference as such
-   ├─ profile_actions.dart      Duplicate and delete a profile, including
-   │                             the delete confirmation copy, in
-   │                             BookOpener's stateless shape — called by
-   │                             both ReaderScreen and ProfilesScreen instead
-   │                             of each carrying its own copy
-   ├─ profiles_screen.dart      Profile list, presets separated from forks
+   ├─ profile_actions.dart      Duplicate, delete, save as a file and import
+   │                             from a file, including the delete
+   │                             confirmation copy, in BookOpener's
+   │                             stateless shape — called by both
+   │                             ReaderScreen and ProfilesScreen instead of
+   │                             each carrying its own copy. The file picker
+   │                             and saver are injected typedefs
+   ├─ profile_file.dart         The profile file: encode, decode and the
+   │                             filename. Pure; decoding returns a sealed
+   │                             result naming why a file was refused
+   │                             (ADR 0040)
+   ├─ profiles_screen.dart      Profile list, presets separated from forks.
+   │                             Each row's menu has Save as file; the app
+   │                             bar imports one
    ├─ profile_edit_screen.dart  One profile, with a live preview
    ├─ appearance_screen.dart    Theme, accent and contrast for app chrome.
    │                             Its own preview, since every control here

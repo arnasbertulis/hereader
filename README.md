@@ -116,14 +116,13 @@ each pure-Dart package, `flutter test` in `app/`, `./mvnw verify` in
 ## Roadmap
 
 1. Bookmarks and highlights over the same sync event log
-2. Exporting and importing a profile as a file, for sharing without an account
-3. Book transfer between devices, over the local network or a share sheet — never relayed through the service, to avoid transmitting copyrighted content
-4. A second Catalogue source alongside Project Gutenberg (Standard Ebooks is the candidate, gated by its feed requiring an account)
-5. Google sign-in as an additional identity source
-6. PDF support: column detection, header/footer stripping, reading-order reconstruction
-7. A frame measurement of sliding text on a physical Android phone, and a screen-reader pass over its step actions
-8. Right-to-left text on the sliding surface
-9. An off-site copy of the nightly database dumps
+2. Book transfer between devices, over the local network or a share sheet — never relayed through the service, to avoid transmitting copyrighted content
+3. A second Catalogue source alongside Project Gutenberg (Standard Ebooks is the candidate, gated by its feed requiring an account)
+4. Google sign-in as an additional identity source
+5. PDF support: column detection, header/footer stripping, reading-order reconstruction
+6. A frame measurement of sliding text on a physical Android phone, and a screen-reader pass over its step actions
+7. Right-to-left text on the sliding surface
+8. An off-site copy of the nightly database dumps
 
 ## Known limitations
 

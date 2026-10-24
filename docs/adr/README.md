@@ -46,3 +46,4 @@ walks through the ones that shape the most code.
 | [0037](0037-transport-controls-are-named-in-a-legend.md) | Transport controls are named in a legend behind one (i), and the first Play teaches the tap that pauses |
 | [0038](0038-changing-a-preset-forks-it.md) | Changing a Preset forks it, and the Settings row opens the active profile's editor |
 | [0039](0039-cloudflare-authenticated-origin-pulls.md) | Cloudflare's proxy is verified at the origin with Authenticated Origin Pulls, so the origin can't be reached around it and the rate limiter can trust its visitor-IP header |
+| [0040](0040-a-profile-file-carries-settings-and-never-an-id.md) | A profile file carries settings and a version, never an id, and an import never overwrites
