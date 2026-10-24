@@ -5,6 +5,12 @@ import '../theme/app_icons.dart';
 import 'control_row.dart';
 import 'profile_presentation.dart';
 
+/// The overflow menu button of the row for the profile with [id].
+Key profileRowMenuKey(String id) => ValueKey('profileRowMenu.$id');
+
+/// The `Save as file` item in a row's overflow menu.
+const profileExportItemKey = ValueKey('profileExportItem');
+
 /// One profile in a list: selection state, a description, and an overflow
 /// menu for what else can be done with it.
 ///
@@ -19,6 +25,11 @@ class ProfileRow extends StatelessWidget {
   final VoidCallback onDuplicate;
   final VoidCallback? onDelete;
 
+  /// Saves the profile as a file. Null leaves `Save as file` off the menu,
+  /// the same optional-callback pattern as [onDelete]; the reader's switcher
+  /// passes none.
+  final VoidCallback? onExport;
+
   const ProfileRow({
     super.key,
     required this.profile,
@@ -27,6 +38,7 @@ class ProfileRow extends StatelessWidget {
     required this.onEdit,
     required this.onDuplicate,
     this.onDelete,
+    this.onExport,
   });
 
   @override
@@ -38,6 +50,7 @@ class ProfileRow extends StatelessWidget {
       supportingText: describeProfile(profile),
       onTap: onSelect,
       trailing: PopupMenuButton<String>(
+        key: profileRowMenuKey(profile.id),
         // Named rather than an icon row: a reader who needs 48pt type is not
         // well served by three small targets crammed into a list row.
         tooltip: 'Options for ${profile.name}',
@@ -45,12 +58,19 @@ class ProfileRow extends StatelessWidget {
         onSelected: (value) => switch (value) {
           'edit' => onEdit(),
           'duplicate' => onDuplicate(),
+          'export' => onExport?.call(),
           'delete' => onDelete?.call(),
           _ => null,
         },
         itemBuilder: (context) => [
           const PopupMenuItem(value: 'edit', child: Text('Edit')),
           const PopupMenuItem(value: 'duplicate', child: Text('Make a copy')),
+          if (onExport != null)
+            const PopupMenuItem(
+              key: profileExportItemKey,
+              value: 'export',
+              child: Text('Save as file'),
+            ),
           if (onDelete != null)
             PopupMenuItem(
               value: 'delete',

@@ -1,14 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:rsvp_engine/rsvp_engine.dart';
 
 import '../data/library_repository.dart';
 import '../sync/auth_store.dart';
+import '../theme/app_icons.dart';
 import '../theme/content_width.dart';
 import 'info_dot.dart';
 import 'profile_actions.dart';
 import 'profile_edit_screen.dart';
 import 'profile_row.dart';
 import 'section_header.dart';
+
+/// The app-bar action that imports a profile from a file.
+const profileImportButtonKey = ValueKey('profileImportButton');
 
 /// Reading profiles: which one is in use, and editing the reader's own.
 ///
@@ -42,11 +48,21 @@ class ProfilesScreen extends StatefulWidget {
   /// passes it.
   final AuthStore? auth;
 
+  /// Where `Import a profile from a file` gets its bytes. Defaults to the
+  /// platform file chooser; a test passes its own.
+  final PickProfileBytes pickProfileBytes;
+
+  /// Where `Save as file` sends its bytes. Defaults to the platform's save
+  /// dialog or download; a test passes its own.
+  final SaveProfileBytes saveProfileBytes;
+
   const ProfilesScreen({
     super.key,
     required this.repository,
     required this.issueStamp,
     this.auth,
+    this.pickProfileBytes = pickProfileFile,
+    this.saveProfileBytes = saveProfileFile,
   });
 
   @override
@@ -62,6 +78,8 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     _profileActions = ProfileActions(
       repository: widget.repository,
       issueStamp: widget.issueStamp,
+      pickBytes: widget.pickProfileBytes,
+      saveBytes: widget.saveProfileBytes,
     );
   }
 
@@ -97,6 +115,9 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
     );
   }
 
+  Future<void> _export(ReadingProfile profile) =>
+      _profileActions.exportToFile(profile);
+
   Future<void> _delete(ReadingProfile profile) async {
     // Deleting the active profile clears the pointer in the repository, and
     // `watchActiveProfile` resolves that back to Standard; no reload needed.
@@ -110,7 +131,17 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Reading profiles')),
+      appBar: AppBar(
+        title: const Text('Reading profiles'),
+        actions: [
+          IconButton(
+            key: profileImportButtonKey,
+            tooltip: 'Import a profile from a file',
+            icon: const Icon(AppIcons.importFile),
+            onPressed: () => unawaited(_profileActions.importFromFile(context)),
+          ),
+        ],
+      ),
       body: StreamBuilder<ReadingProfile>(
         // The same subscription Home and Library hold: a pointer in
         // `preferences` naming a row in `stored_profiles`, so a change
@@ -158,6 +189,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                         onEdit: () => _edit(profile),
                         onDuplicate: () => _duplicate(profile),
                         onDelete: () => _delete(profile),
+                        onExport: () => _export(profile),
                       ),
 
                     const SectionHeader(
@@ -171,6 +203,7 @@ class _ProfilesScreenState extends State<ProfilesScreen> {
                         onSelect: () => _select(profile),
                         onEdit: () => _edit(profile),
                         onDuplicate: () => _duplicate(profile),
+                        onExport: () => _export(profile),
                       ),
                   ],
                 ),
