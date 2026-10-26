@@ -11,8 +11,10 @@ import 'profile_edit_screen.dart';
 import 'profile_file.dart';
 
 /// Picks a profile file off the reader's device, or returns null if they
-/// backed out of the dialog. Overridable so a test can hand back bytes, or
-/// nothing, without a real file dialog.
+/// backed out of the dialog. The real one returns at most
+/// [profileFileMaxBytes] + 1 bytes; a file that long is refused as too large.
+/// Overridable so a test can hand back bytes, or nothing, without a real file
+/// dialog.
 typedef PickProfileBytes = Future<Uint8List?> Function();
 
 /// Hands a profile file to the platform to save: a browser download on web, a
@@ -21,7 +23,8 @@ typedef PickProfileBytes = Future<Uint8List?> Function();
 typedef SaveProfileBytes =
     Future<void> Function(String fileName, Uint8List bytes);
 
-/// The real picker. Same shape as the EPUB picker in `book_importer.dart`.
+/// The real picker. Reads at most [profileFileMaxBytes] + 1 bytes of the file
+/// ([readProfileFileBytes]), so a huge file is never buffered whole.
 Future<Uint8List?> pickProfileFile() async {
   final picked = await FilePicker.pickFile(
     type: FileType.custom,
@@ -29,7 +32,7 @@ Future<Uint8List?> pickProfileFile() async {
   );
 
   if (picked == null) return null;
-  return picked.readAsBytes();
+  return readProfileFileBytes(picked.readAsByteStream());
 }
 
 /// The real saver. A null result from the plugin is either a cancel or the
