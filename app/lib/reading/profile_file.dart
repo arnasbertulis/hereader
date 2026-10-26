@@ -13,7 +13,8 @@ const profileFileVersion = 1;
 
 /// Larger than this is refused before it is decoded. A real profile is about
 /// 1 KiB, so this is a ceiling on what a mis-picked file can cost, not a
-/// limit a reader will meet.
+/// limit a reader will meet. The real picker honours that: it reads at most
+/// one byte past this ([readProfileFileBytes]) however large the file is.
 const profileFileMaxBytes = 64 * 1024;
 
 /// Why a file was not taken as a profile.
@@ -74,6 +75,26 @@ String profileFileName(ReadingProfile profile) {
       .replaceAll(RegExp(r'[\x00-\x1f<>:"/\\|?*]'), '-')
       .trim();
   return '${cleaned.isEmpty ? 'profile' : cleaned}.hereader-profile.json';
+}
+
+/// Reads [source] until it ends or holds more than [profileFileMaxBytes], then
+/// stops listening, so a mis-picked file costs at most `profileFileMaxBytes + 1`
+/// bytes whatever its size.
+///
+/// It does not decide what is too large: an oversized file always comes back
+/// one byte over the cap, and [decodeProfileFile] is the one place that refuses
+/// it.
+Future<Uint8List> readProfileFileBytes(Stream<List<int>> source) async {
+  final bytes = BytesBuilder(copy: false);
+  await for (final chunk in source) {
+    final room = profileFileMaxBytes + 1 - bytes.length;
+    if (chunk.length >= room) {
+      bytes.add(chunk.sublist(0, room));
+      break;
+    }
+    bytes.add(chunk);
+  }
+  return bytes.takeBytes();
 }
 
 /// Reads a profile file into a profile carrying [id].

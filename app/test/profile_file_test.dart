@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:app/reading/profile_file.dart';
@@ -175,6 +177,84 @@ void main() {
 
     test('takes a file of exactly 64 KiB to the format check', () {
       expect(rejection(Uint8List(64 * 1024)), ProfileFileRejection.notAProfile);
+    });
+  });
+
+  group('readProfileFileBytes', () {
+    Stream<List<int>> chunks(int total, {int size = 10000}) async* {
+      for (var sent = 0; sent < total; sent += size) {
+        yield List<int>.filled(min(size, total - sent), 0x20);
+      }
+    }
+
+    test('stops one byte over the cap, and decoding refuses it', () async {
+      final bytes = await readProfileFileBytes(chunks(5 * 1024 * 1024));
+
+      expect(bytes.length, profileFileMaxBytes + 1);
+      final result = decodeProfileFile(bytes, id: 'p.1.aaaaaaaa');
+      expect(
+        (result as ProfileFileRejected).reason,
+        ProfileFileRejection.tooLarge,
+      );
+    });
+
+    test('cancels the source once over the cap', () async {
+      var cancelled = false;
+      late final StreamController<List<int>> source;
+      source = StreamController<List<int>>(
+        onListen: () {
+          source.add(List<int>.filled(profileFileMaxBytes, 1));
+          source.add(const [2]);
+        },
+        onCancel: () => cancelled = true,
+      );
+      addTearDown(source.close);
+
+      final bytes = await readProfileFileBytes(source.stream);
+
+      expect(bytes.length, profileFileMaxBytes + 1);
+      expect(cancelled, isTrue);
+    });
+
+    test('stops an endless source', () async {
+      Stream<List<int>> endless() async* {
+        while (true) {
+          yield const [7];
+        }
+      }
+
+      final bytes = await readProfileFileBytes(endless());
+
+      expect(bytes.length, profileFileMaxBytes + 1);
+    });
+
+    test('returns a file of exactly the cap whole', () async {
+      final bytes = await readProfileFileBytes(chunks(profileFileMaxBytes));
+
+      expect(bytes.length, profileFileMaxBytes);
+    });
+
+    test('round-trips a profile split across several chunks', () async {
+      final whole = encodeProfileFile(_custom);
+      final pieces = <List<int>>[
+        for (var i = 0; i < whole.length; i += 7)
+          whole.sublist(i, min(i + 7, whole.length)),
+      ];
+
+      final bytes = await readProfileFileBytes(Stream.fromIterable(pieces));
+
+      expect(bytes, whole);
+    });
+
+    test('reads an empty stream as empty bytes', () async {
+      final bytes = await readProfileFileBytes(const Stream.empty());
+
+      expect(bytes, isEmpty);
+      final result = decodeProfileFile(bytes, id: 'p.1.aaaaaaaa');
+      expect(
+        (result as ProfileFileRejected).reason,
+        ProfileFileRejection.notAProfile,
+      );
     });
   });
 }
