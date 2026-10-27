@@ -288,3 +288,97 @@ stubbed: a gap with no issue creates one, a second run edits it rather than
 creating another, and a tag at `main`'s head closes it (and does nothing when
 none is open). The `gh issue list --jq` filter was run for real against this
 repository. The scheduled run itself has not happened yet.
+
+## Amendment: rolling back a deploy that fails its health check
+
+The first version of this pipeline checked health and then stopped: a release
+that failed stayed up, and putting the previous one back was a hand-edited
+line in `server/.env`. The workflow now does that itself, and still fails the
+run.
+
+**The server reports the previous release; the workflow redeploys it through
+the existing forced command.** Before it fetches or checks out anything,
+`deploy.sh` reads `HEREADER_TAG` from `.env` and, if it is a full 40-character
+sha, prints `deploy: previous release <sha>`. A missing line, `local` or
+anything else prints nothing. The `Deploy` step keeps that line as a step
+output, and a `Roll back to the previous release` step runs when either
+`Deploy` or the health poll failed: it sends the previous sha down the same
+ssh command, then polls health on the same 150-second budget. A healthy
+rollback is reported as an error naming both shas, and an unhealthy one as
+"the service is down and needs a manual fix". Either way the run fails, and
+there is no retry: a second failure says the cause is not in the release, and
+repeating it against a live server only makes that harder to read. The deploy
+check and the rollback check are one script (`.github/scripts/wait-healthy.sh`)
+so they cannot drift apart. If the server reports no previous release, or
+reports the one being deployed, the run warns and carries on; it does not
+block a deploy for lack of a rollback.
+
+Redeploying a sha, rather than editing `.env` and running `docker compose up
+-d`, matters because `deploy.sh` also checks out that sha, so the previous
+release's `compose.yaml` and Caddyfile come back with its images. The deploy
+job now checks out `.github/scripts` alone (no stored token) so the scripts
+exist on the runner, and its timeout went from 10 to 15 minutes to cover two
+health budgets.
+
+**Migrations must leave the schema usable by the previous release.**
+Additive changes only: new tables, new nullable or defaulted columns, new
+indexes. A drop, rename, type change or new `NOT NULL` without a default ships
+in the release after the one that stopped reading the column (expand, then
+contract). For the older image to start against the newer schema, Flyway must
+tolerate an applied migration the image does not contain, so
+`spring.flyway.ignore-migration-patterns=*:future` is now set explicitly in
+`application.properties`.
+
+Rejected: **rolling back only when no migration ran.** It needs the workflow
+to compare Flyway history across releases, and it leaves exactly the
+bad-migration case with no rollback. Rejected: **down-migrations.** Flyway
+Community has no undo.
+
+**What the Flyway setting rests on.** The server resolves Flyway 12.4.0 (`mvn
+dependency:tree`, through Spring Boot 4.1.0). In that version's sources the
+default of `ignoreMigrationPatterns` is `*:future`
+(`FlywayModel.java:72`), and Spring Boot's `FlywayProperties` also defaults
+`ignoreMigrationPatterns` to `Collections.singletonList("*:future")`
+(`FlywayProperties.java:335`) and passes it to Flyway
+(`FlywayAutoConfiguration.java:309`). So the setting changes no behaviour
+today; it exists so the rollback does not depend on two defaults staying put.
+There is no JPA or Hibernate in `server/pom.xml`, so `ddl-auto` does not
+exist here and nothing validates entities against the schema: an additive
+schema cannot fail the older image's startup on that account. The caveat is
+the one the pattern implies: `:future` covers applied migrations newer than
+the newest the image knows, which is the linear rollback this describes.
+
+**One gap cannot be closed.** The forced command runs the working-tree
+`deploy.sh` before it checks anything out, so the release that first ships
+the reporting `deploy.sh` is deployed by the old one. That first run prints no
+previous release and has no rollback; the run after it does.
+
+Verified locally:
+
+- `deploy.sh` under bash with `git` and `docker` stubbed on `PATH`: it
+  prints the previous-release line for a sha `.env` (also with CRLF line
+  endings) and nothing for `local`, for an `.env` without the line, or for no
+  `.env`, and the line precedes the stubbed `git fetch`. A malformed sha still
+  exits 64. `bash -n` and `shellcheck` are clean.
+- The workflow's scripts with `ssh` and `curl` stubbed and the poll budget
+  shrunk through `HEALTH_ATTEMPTS`/`HEALTH_INTERVAL`: a healthy deploy rolls
+  nothing back (one ssh call); an unhealthy deploy with a healthy rollback
+  sends the previous sha on the second ssh call and ends with the
+  rolled-back message; both unhealthy ends with the service-down message after
+  exactly two ssh calls; no previous line warns and makes one ssh call; a
+  deploy whose ssh fails after printing the line is rolled back; a previous
+  release equal to the one deployed warns and does not roll back. `actionlint`
+  is clean on `cd.yml`.
+- `./mvnw verify` in `server/` passes (150 tests) with the new property, run
+  against Postgres. With a fabricated applied migration `9999` in
+  `flyway_schema_history`, the context loads with the property set and fails
+  with "Detected applied migration not resolved locally: 9999" when the
+  pattern is overridden to `*:missing`. That is the failure the setting
+  prevents, observed, though by a stand-in migration rather than an older
+  image.
+
+Still unverified: the whole rollback against the real server. The workflow
+has not yet run with a failing deploy, the `Deploy` step's output parsing has
+only seen stubbed `ssh`, and nobody has started an older release's image
+against a schema a newer release migrated. The shortest way to find out is a
+deliberate exercise with a release that fails its health check.

@@ -306,6 +306,12 @@ from an empty database and reviewable in a diff.
 Never edit an applied migration: Flyway stores a checksum and startup fails
 if one changes. Schema changes go in a new file.
 
+A migration must leave the schema usable by the previous release, because a
+failed deploy is rolled back to it: additive changes only, and a drop, rename
+or new `NOT NULL` without a default waits for the release after the one that
+stopped reading the column. See the second amendment to
+[ADR 0023](../docs/adr/0023-continuous-deployment.md).
+
 ```
 users                 accounts, including token_version for logout revocation
 user_sync_state       the sequence counter, one row per user
