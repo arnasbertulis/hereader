@@ -225,9 +225,20 @@ jobs:
     needs: [server-image, web-image, browser-test]
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 10
+    # A deploy that fails its health check waits 150 s, then the rollback
+    # pulls images and waits another 150 s.
+    timeout-minutes: 15
+    permissions:
+      contents: read
 
     steps:
+      # Only the scripts this job runs, so the job holding the server
+      # credential does not also hold the whole tree or a stored token.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
       # Written by hand rather than through an ssh-agent action. This is the
       # one step of the pipeline holding a credential that reaches the
       # server, and four lines of shell are a smaller thing to trust than a
@@ -262,25 +273,36 @@ jobs:
       # The key is restricted to server/deploy.sh by a forced command in
       # authorized_keys, so this whole string arrives there as
       # SSH_ORIGINAL_COMMAND and is pattern-checked before it reaches git.
+      #
+      # The server prints the release it is replacing, and the script keeps
+      # it as the `previous` output for the rollback below. If it prints none
+      # the run warns and carries on; there is just nothing to roll back to.
       - name: Deploy
+        id: deploy
         env:
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-        run: ssh -i ~/.ssh/id_ed25519 -o IdentitiesOnly=yes "$DEPLOY_USER@$DEPLOY_HOST" "${{ github.sha }}"
+          RELEASE_SHA: ${{ github.sha }}
+        run: bash .github/scripts/deploy-release.sh
 
-      # /health reports whether the service can reach Postgres rather than
-      # whether the process is up, so this fails on a bad migration as well
-      # as on a container that never started. Compose returns as soon as the
-      # containers are created, which is before Flyway has finished.
+      # See wait-healthy.sh for what the check means and why the rollback
+      # shares it.
       - name: Wait for the service to answer
-        run: |
-          for attempt in $(seq 1 30); do
-            if curl --fail --silent --show-error "$HEREADER_API/health"; then
-              echo
-              echo "healthy after ${attempt} attempt(s)"
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "no healthy response in 150s" >&2
-          exit 1
+        id: health
+        run: bash .github/scripts/wait-healthy.sh
+
+      # Runs when either step above failed, and exits 1 whatever it finds: a
+      # release that fails its health check is a failed run even when the
+      # service is back up on the one before it. The previous release is
+      # redeployed through the same forced command rather than by editing
+      # .env on the box, which would leave the new compose.yaml and Caddyfile
+      # in place. It only works while the older image can start against the
+      # newer schema (ADR 0023, second amendment).
+      - name: Roll back to the previous release
+        if: failure() && steps.deploy.outputs.previous != ''
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          RELEASE_SHA: ${{ github.sha }}
+          PREVIOUS_SHA: ${{ steps.deploy.outputs.previous }}
+        run: bash .github/scripts/rollback-release.sh

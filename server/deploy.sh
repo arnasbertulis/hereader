@@ -26,6 +26,17 @@ main() {
 
   cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 
+  # Report the release this one replaces, so the CD workflow can redeploy it
+  # through this same script if the new one fails its health check. It is
+  # printed before anything below can fail, and only when .env holds a full
+  # sha: a missing line or `local` means there is nothing to go back to, and
+  # the workflow treats silence as "rollback unavailable".
+  local previous
+  previous=$(sed -n 's/^HEREADER_TAG=//p' .env 2>/dev/null | tail -n 1 | tr -d '\r') || true
+  if [[ $previous =~ ^[0-9a-f]{40}$ ]]; then
+    echo "deploy: previous release ${previous}"
+  fi
+
   # compose.yaml and the Caddyfile are read from the working tree rather than
   # from an image, so the checkout has to land before compose runs. The
   # application code is not read from here at all — it is inside the images.
@@ -34,8 +45,8 @@ main() {
 
   # Compose substitutes ${HEREADER_TAG} from .env, so writing it to the file
   # rather than exporting it for this one command means the running release
-  # is recorded on the box. Rolling back is editing this line to an earlier
-  # sha and running `docker compose up -d`.
+  # is recorded on the box. Rolling back is deploying an earlier sha through
+  # this script, which restores its compose.yaml and Caddyfile as well.
   if grep -q '^HEREADER_TAG=' .env 2>/dev/null; then
     sed -i "s|^HEREADER_TAG=.*|HEREADER_TAG=${tag}|" .env
   else
